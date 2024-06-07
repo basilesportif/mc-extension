@@ -1,0 +1,8 @@
+*/target
+*/*/target
+*/wit
+*/*/wit
+*/*/wasi*
+*swp
+*wasm
+mc-driver/pkg/*.wasm
