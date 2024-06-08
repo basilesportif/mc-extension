@@ -10,6 +10,7 @@ pub struct Position {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MCRequest {
     CheckPlayerMove { mc_player_id: String, pos: Position },
+    SanityCheck,
 }
 
 // python Responses encode the `output` in the `lazy_load_blob`
@@ -17,5 +18,7 @@ pub enum MCRequest {
 pub enum MCResponse {
     PlayerMoveValid { mc_player_id: String, pos: Position },
     PlayerMoveInvalid { mc_player_id: String, pos: Position },
+    SanityCheckOk,
+    SanityCheckErr(String),
     Err(String),
 }
