@@ -48,6 +48,7 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
             }
             *connection = None;
         }
+        /* if we get a push message, process Binary and Text versions of it */
         http::HttpServerRequest::WebSocketPush {
             ref channel_id,
             ref message_type,
@@ -107,7 +108,7 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
             println!("wrong channel: {:?}", connection);
             panic!("wrong channel");
         };
-
+        /* TODO: clean this all up and make CheckPlayerMove go the other direction */
         Request::new()
             .target("our@http_server:distro:sys".parse::<Address>()?)
             .body(serde_json::to_vec(
@@ -120,12 +121,6 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
             .expects_response(15)
             .blob_bytes(message.body())
             //.inherit(true)
-            .send()?;
-    } else if let Ok(MCRequest::SanityCheck) = rmp_serde::from_slice(message.body()) {
-        println!("SanityCheck");
-        Response::new()
-            .body(serde_json::to_vec(&MCResponse::SanityCheckOk)?)
-            .inherit(true)
             .send()?;
     } else {
         handle_ws_message(connection, message)?;
