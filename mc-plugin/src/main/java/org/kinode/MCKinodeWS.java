@@ -1,6 +1,6 @@
 package org.kinode;
 
-import org.kinode.PluginInstance;
+import org.kinode.MCKinodePlugin;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -38,7 +38,7 @@ public class MCKinodeWS extends WebSocketClient {
 
   @Override
   public void onClose(int code, String reason, boolean remote) {
-    PluginInstance.getInstance().getLogger()
+    MCKinodePlugin.getInstance().getLogger()
         .info("MC-Kinode WS closed with exit code " + code + " additional info: " + reason);
   }
 

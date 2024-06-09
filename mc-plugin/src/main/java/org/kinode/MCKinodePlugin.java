@@ -13,10 +13,10 @@ import org.kinode.MCKinodeWS;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-public final class PluginInstance extends JavaPlugin implements Listener {
+public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
     private static final String kinodeUri = "ws://localhost:8080/mcdriver:mcdriver:basilesex.os";
-    private static PluginInstance instance;
+    private static MCKinodePlugin instance;
     private Location prevLocation;
     private static final int ALLOWED_BOUNDS = 50000;
     private boolean positionDisplayToggle = false;
@@ -85,7 +85,7 @@ public final class PluginInstance extends JavaPlugin implements Listener {
     /**
      * @return The Minecraft Plugin Instance
      */
-    public static PluginInstance getInstance() {
+    public static MCKinodePlugin getInstance() {
         return instance;
     }
 }
