@@ -1,6 +1,6 @@
 package org.kinode;
 
-import org.bukkit.plugin.java.JavaPlugin;
+import org.kinode.PluginInstance;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -11,16 +11,16 @@ import org.java_websocket.drafts.Draft;
 import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.handshake.ServerHandshake;
 
-public class EmptyClient extends WebSocketClient {
+public class MCKinodeWS extends WebSocketClient {
 
   private boolean isConnected = false;
 
-  public EmptyClient(URI serverUri, Draft draft) {
+  public MCKinodeWS(URI serverUri, Draft draft) {
     super(serverUri, draft);
   }
 
-  public EmptyClient(URI serverURI) {
-    super(serverURI);
+  public MCKinodeWS(URI serverURI) {
+    super(serverURI, new Draft_6455());
   }
 
   public boolean isConnected() {
@@ -33,15 +33,18 @@ public class EmptyClient extends WebSocketClient {
     send("Hello, it is me. Mario :)");
     send("\"SanityCheck\"");
     System.out.println("new connection opened");
+
   }
 
   @Override
   public void onClose(int code, String reason, boolean remote) {
-    System.out.println("closed with exit code " + code + " additional info: " + reason);
+    PluginInstance.getInstance().getLogger()
+        .info("MC-Kinode WS closed with exit code " + code + " additional info: " + reason);
   }
 
   @Override
   public void onMessage(String message) {
+    // TODO: use singleton pattern to send messages to the PluginInstance
     System.out.println("received message: " + message);
   }
 

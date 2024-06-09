@@ -1,6 +1,5 @@
 package org.kinode;
 
-import org.kinode.managers.PluginMgr;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -10,32 +9,32 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
-import org.kinode.EmptyClient;
+import org.kinode.MCKinodeWS;
 import java.net.URI;
 import java.net.URISyntaxException;
 
 public final class PluginInstance extends JavaPlugin implements Listener {
 
+    private static final String kinodeUri = "ws://localhost:8080/mcdriver:mcdriver:basilesex.os";
     private static PluginInstance instance;
-    private PluginMgr manager;
     private Location prevLocation;
     private static final int ALLOWED_BOUNDS = 50000;
     private boolean positionDisplayToggle = false;
-    private EmptyClient client;
+    private MCKinodeWS client;
 
     @Override
     public void onEnable() {
-        getLogger().info("Movement logging enabled. TIMTIME.");
+        Bukkit.getPluginManager().registerEvents(this, this);
+        instance = this;
+        getLogger().info("STARTING KINODE <-> MC INTERFACE PLUGIN");
         try {
-            client = new EmptyClient(new URI("ws://localhost:8080/mcdriver:mcdriver:basilesex.os"));
+            client = new MCKinodeWS(new URI(kinodeUri));
             client.connect();
             // client.send("\"SanityCheck\"");
         } catch (URISyntaxException e) {
             e.printStackTrace();
         }
-        Bukkit.getPluginManager().registerEvents(this, this);
-        instance = this;
-        this.manager = new PluginMgr();
+        // this.manager = new PluginMgr();
         if (client.isConnected()) {
             getLogger().info("Connected to Kinode WS process");
         } else {
@@ -88,30 +87,5 @@ public final class PluginInstance extends JavaPlugin implements Listener {
      */
     public static PluginInstance getInstance() {
         return instance;
-    }
-
-    /**
-     * @return The Main Manager (PluginMgr by default)
-     */
-    public PluginMgr getMgr() {
-        return manager;
-    }
-
-    /**
-     * Returns true or false depending on the value of the debug config option in
-     * config.yml if it exists.
-     * By default, it returns false.
-     * 
-     * @return true or false
-     */
-    public boolean isDebugMode() {
-        boolean isMgrReady = manager != null && manager.isInitialized();
-        boolean isConfigMgrReady = isMgrReady && manager.getConfigMgr() != null
-                && manager.getConfigMgr().isInitialized();
-
-        if (isConfigMgrReady && manager.getConfigMgr().get("debug") != null
-                && manager.getConfigMgr().get("debug") instanceof Boolean)
-            return (boolean) manager.getConfigMgr().get("debug");
-        return false;
     }
 }
