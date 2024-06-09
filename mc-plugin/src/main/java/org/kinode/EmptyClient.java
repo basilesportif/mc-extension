@@ -13,6 +13,8 @@ import org.java_websocket.handshake.ServerHandshake;
 
 public class EmptyClient extends WebSocketClient {
 
+  private boolean isConnected = false;
+
   public EmptyClient(URI serverUri, Draft draft) {
     super(serverUri, draft);
   }
@@ -21,9 +23,15 @@ public class EmptyClient extends WebSocketClient {
     super(serverURI);
   }
 
+  public boolean isConnected() {
+    return isConnected;
+  }
+
   @Override
   public void onOpen(ServerHandshake handshakedata) {
+    isConnected = true;
     send("Hello, it is me. Mario :)");
+    send("\"SanityCheck\"");
     System.out.println("new connection opened");
   }
 

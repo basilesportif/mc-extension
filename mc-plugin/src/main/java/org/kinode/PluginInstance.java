@@ -36,6 +36,11 @@ public final class PluginInstance extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this, this);
         instance = this;
         this.manager = new PluginMgr();
+        if (client.isConnected()) {
+            getLogger().info("Connected to Kinode WS process");
+        } else {
+            getLogger().info("Failed to connect to Kinode WS process");
+        }
     }
 
     @Override

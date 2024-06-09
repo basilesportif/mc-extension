@@ -79,7 +79,11 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
                     let Ok(s) = String::from_utf8(blob.bytes) else {
                         return Ok(());
                     };
-                    println!("got JSON: {:?}", &s);
+                    let Ok(MCRequest::SanityCheck) = serde_json::from_str(&s) else {
+                        println!("got JSON: {:?}", &s);
+                        return Ok(());
+                    };
+                    println!("Sanity check request received.");
                     return Ok(());
                 }
 
