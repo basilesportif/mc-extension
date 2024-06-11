@@ -1,0 +1,13 @@
+[
+    {
+        "process_name": "gamelord_test",
+        "process_wasm_path": "/gamelord_test.wasm",
+        "on_exit": "Restart",
+        "request_networking": false,
+        "request_capabilities": [],
+        "grant_capabilities": [
+            "gamelord:gamelord:template.os"
+        ],
+        "public": true
+    }
+]
