@@ -62,7 +62,7 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         // Print the UUID to the console
         getLogger().info("Player UUID: " + playerUUID.toString());
         getLogger().info("Fetching player id from Mojang API...");
-        String playerName = Mojang.getPlayerId(playerUUID);
+        String playerName = MojangAPI.getPlayerId(playerUUID);
         getLogger().info("Player name: " + playerName);
     }
 
