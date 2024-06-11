@@ -36,3 +36,16 @@ pub enum KinodeToMC {
     SanityCheckOk,
     SanityCheckErr(String),
 }
+
+/*
+Brainstorm types:
+- from Minecraft
+ * new player id joined
+ * should this player be allowed?
+ * can this player move to this spot (request id and spot)
+ * can this player take ownership of this spot?
+- to Minecraft
+ * player join allowed/disallowed (request uuid)
+ * player move allowed/disallowed (request uuid)
+ * player take ownership allowed/disallowed (request uuid)
+*/
