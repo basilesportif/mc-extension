@@ -3,15 +3,18 @@ package org.kinode;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 import org.kinode.MCKinodeWS;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.UUID;
 
 public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
@@ -46,6 +49,21 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         // Plugin shutdown logic
         // here
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        // Get the player who joined
+        Player player = event.getPlayer();
+
+        // Get the player's UUID
+        UUID playerUUID = player.getUniqueId();
+
+        // Print the UUID to the console
+        getLogger().info("Player UUID: " + playerUUID.toString());
+        getLogger().info("Fetching player id from Mojang API...");
+        String playerName = Mojang.getPlayerId(playerUUID);
+        getLogger().info("Player name: " + playerName);
     }
 
     @EventHandler
