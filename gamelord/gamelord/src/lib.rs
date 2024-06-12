@@ -1,90 +1,107 @@
+use kinode_process_lib::{await_message, call_init, println, Address, Response};
 use std::collections::HashMap;
-use std::str::FromStr;
 
-use crate::kinode::process::gamelord::{ChatMessage, Request as ChatRequest, Response as ChatResponse, SendRequest};
-use kinode_process_lib::{await_message, call_init, println, Address, ProcessId, Request, Response};
+mod gamelord_types;
+use gamelord_types::{Cube, Player, Region};
 
 wit_bindgen::generate!({
     path: "target/wit",
-    world: "gamelord-template-dot-os-v0",
-    generate_unused_types: true,
-    additional_derives: [serde::Deserialize, serde::Serialize],
+    world: "process-v0",
 });
 
-type MessageArchive = HashMap<String, Vec<ChatMessage>>;
+//spawn is 986,84,778
+// 9 cubes of fake2.dev are surrounding the spawn point
+let region_json = serde_json::json!({
+    "regions": [
+        {
+            "cubes": [
+                {
+                    "center": [950, 100, 750],
+                    "radius": 50
+                },
+            ],
+            "owner": "fake.dev"
+        },
+        {
+            "cubes": [
+                {
+                    "center": [850, 100, 650],
+                    "radius": 50
+                },
+                {
+                    "center": [850, 100, 750],
+                    "radius": 50
+                },
+                {
+                    "center": [850, 100, 850],
+                    "radius": 50
+                },
+                {
+                    "center": [950, 100, 650],
+                    "radius": 50
+                },
+                {
+                    "center": [950, 100, 750],
+                    "radius": 50
+                },
+                {
+                    "center": [950, 100, 850],
+                    "radius": 50
+                },
+                {
+                    "center": [1050, 100, 650],
+                    "radius": 50
+                },
+                {
+                    "center": [1050, 100, 750],
+                    "radius": 50
+                },
+                {
+                    "center": [1050, 100, 850],
+                    "radius": 50
+                }
+            ],
+            "owner": "fake2.dev"
+        }
+    ]
+        }
+    ]
+});
+println!("Region JSON: {region_json}");
 
-fn handle_message(our: &Address, message_archive: &mut MessageArchive) -> anyhow::Result<()> {
+
+
+fn handle_message(_our: &Address) -> anyhow::Result<()> {
     let message = await_message()?;
 
     if !message.is_request() {
         return Err(anyhow::anyhow!("unexpected Response: {:?}", message));
     }
 
-    let body = message.body();
-    let source = message.source();
-    match serde_json::from_slice(body)? {
-        ChatRequest::Send(SendRequest {
-            ref target,
-            ref message,
-        }) => {
-            if target == &our.node {
-                println!("{}: {}", source.node, message);
-                let message = ChatMessage {
-                    author: source.node.clone(),
-                    content: message.into(),
-                };
-                message_archive
-                    .entry(source.node.clone())
-                    .and_modify(|e| e.push(message.clone()))
-                    .or_insert(vec![message]);
-            } else {
-                let _ = Request::new()
-                    .target(Address {
-                        node: target.clone(),
-                        process: ProcessId::from_str(
-                            "gamelord:gamelord:template.os",
-                        )?,
-                    })
-                    .body(body)
-                    .send_and_await_response(5)?
-                    .unwrap();
-                let message = ChatMessage {
-                    author: our.node.clone(),
-                    content: message.into(),
-                };
-                message_archive
-                    .entry(target.clone())
-                    .and_modify(|e| e.push(message.clone()))
-                    .or_insert(vec![message]);
-            }
-            Response::new()
-                .body(serde_json::to_vec(&ChatResponse::Send).unwrap())
-                .send()
-                .unwrap();
-        }
-        ChatRequest::History(ref node) => {
-            Response::new()
-                .body(serde_json::to_vec(&ChatResponse::History(
-                    message_archive
-                        .get(node)
-                        .map(|msgs| msgs.clone())
-                        .unwrap_or_default()
-                )).unwrap())
-                .send()
-                .unwrap();
-        }
-    }
+    let body: serde_json::Value = serde_json::from_slice(message.body())?;
+    println!("got {body:?}");
+    Response::new()
+        .body(serde_json::to_vec(&serde_json::json!("Ack")).unwrap())
+        .send()
+        .unwrap();
     Ok(())
 }
 
 call_init!(init);
 fn init(our: Address) {
+    let mut cube_to_region_map: HashMap<Cube, Region> = HashMap::new();
+    // Assuming regions are predefined or loaded from some source
+    let regions: Vec<Region> = vec![]; // This should be populated appropriately in real use
+
+    for region in regions {
+        for cube in &region.cubes {
+            cube_to_region_map.insert(cube.clone(), region.clone());
+        }
+    }
     println!("begin");
 
-    let mut message_archive = HashMap::new();
-
     loop {
-        match handle_message(&our, &mut message_archive) {
+        match handle_message(&our) {
             Ok(()) => {}
             Err(e) => {
                 println!("error: {:?}", e);

@@ -1,11 +1,11 @@
 {
     "name": "gamelord",
-    "description": "",
+    "description": "Manages the Kinode side of a multiplayer game with outside assets/metadata",
     "image": "",
     "properties": {
         "package_name": "gamelord",
         "current_version": "0.1.0",
-        "publisher": "template.os",
+        "publisher": "basilesex.os",
         "mirrors": [],
         "code_hashes": {
             "0.1.0": ""

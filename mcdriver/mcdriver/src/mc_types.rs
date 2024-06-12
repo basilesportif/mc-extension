@@ -9,19 +9,15 @@ pub struct Position {
 
 //TODO delete all this
 #[derive(Debug, Serialize, Deserialize)]
-pub enum MCRequest {
-    CheckPlayerMove { mc_player_id: String, pos: Position },
-    SanityCheck,
+pub enum MCDriverRequest {
+    AddPlayer { mc_player_id: String },
 }
 
 // TODO: delete all this
 // python Responses encode the `output` in the `lazy_load_blob`
 #[derive(Debug, Serialize, Deserialize)]
-pub enum MCResponse {
-    PlayerMoveValid { mc_player_id: String, pos: Position },
-    PlayerMoveInvalid { mc_player_id: String, pos: Position },
-    SanityCheckOk,
-    SanityCheckErr(String),
+pub enum MCDriverResponse {
+    Ok,
     Err(String),
 }
 

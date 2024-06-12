@@ -1707,17 +1707,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "send"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "kinode_process_lib",
- "serde",
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
 name = "serde"
 version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"

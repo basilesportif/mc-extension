@@ -1,5 +1,0 @@
-world gamelord-test-template-dot-os-v0 {
-    import gamelord;
-    import tester;
-    include process-v0;
-}

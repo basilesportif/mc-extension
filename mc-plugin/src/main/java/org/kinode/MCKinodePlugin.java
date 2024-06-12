@@ -12,6 +12,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 
 import org.kinode.MCKinodeWS;
+import org.kinode.WorldInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.UUID;
@@ -33,11 +34,14 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         try {
             client = new MCKinodeWS(new URI(kinodeUri));
             client.connect();
-            // client.send("\"SanityCheck\"");
         } catch (URISyntaxException e) {
             e.printStackTrace();
         }
-        // this.manager = new PluginMgr();
+
+        /* diagnostic prints */
+        // WorldInfo.printWorldInfo();
+        // WorldInfo.printMapInfo();
+
         if (client.isConnected()) {
             getLogger().info("Connected to Kinode WS process");
         } else {
@@ -83,8 +87,11 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
             return;
         }
         prevLocation = toLocation;
-        getLogger().info(event.getPlayer().getName() + " moved to X: " + toLocation.getX() + " Y: " + toLocation.getY()
-                + " Z: " + toLocation.getZ());
+        /*
+         * getLogger().info(event.getPlayer().getName() + " moved to X: " +
+         * toLocation.getX() + " Y: " + toLocation.getY()
+         * + " Z: " + toLocation.getZ());
+         */
 
         if (positionDisplayToggle) {
             event.getPlayer()

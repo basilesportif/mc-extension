@@ -1,11 +1,12 @@
 use kinode_process_lib::http;
 use kinode_process_lib::kernel_types::MessageType;
 use kinode_process_lib::{
-    await_message, call_init, get_blob, println, Address, LazyLoadBlob, Message, Request, Response,
+    await_message, call_init, get_blob, http::send_ws_push, println, Address, LazyLoadBlob,
+    Message, Request, Response,
 };
 
 mod mc_types;
-use mc_types::{MCRequest, MCResponse, Position};
+use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode};
 
 wit_bindgen::generate!({
     path: "wit",
@@ -58,20 +59,6 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
                 return Err(anyhow::anyhow!("d"));
             }
             match message_type {
-                http::WsMessageType::Binary => {
-                    Response::new()
-                        .body(serde_json::to_vec(&MCResponse::PlayerMoveValid {
-                            mc_player_id: "".to_string(),
-                            pos: Position {
-                                x: 0.0,
-                                y: 0.0,
-                                z: 0.0,
-                            },
-                        })?)
-                        .inherit(true)
-                        .send()?;
-                }
-
                 http::WsMessageType::Text => {
                     let Some(blob) = get_blob() else {
                         return Ok(());
@@ -79,10 +66,18 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
                     let Ok(s) = String::from_utf8(blob.bytes) else {
                         return Ok(());
                     };
-                    let Ok(MCRequest::SanityCheck) = serde_json::from_str(&s) else {
-                        println!("got JSON: {:?}", &s);
+                    let Ok(MCToKinode::SanityCheck) = serde_json::from_str(&s) else {
+                        println!("got other JSON: {:?}", &s);
                         return Ok(());
                     };
+                    send_ws_push(
+                        *channel_id,
+                        http::WsMessageType::Text,
+                        LazyLoadBlob {
+                            mime: Some("application/json".to_string()),
+                            bytes: serde_json::to_vec(&KinodeToMC::SanityCheckOk).unwrap(),
+                        },
+                    );
                     println!("Sanity check request received.");
                     return Ok(());
                 }
@@ -107,25 +102,8 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
         String::from_utf8_lossy(message.body())
     );
 
-    if let Ok(MCRequest::CheckPlayerMove { .. }) = rmp_serde::from_slice(message.body()) {
-        let Some(Connection { channel_id }) = connection else {
-            println!("wrong channel: {:?}", connection);
-            panic!("wrong channel");
-        };
-        /* TODO: clean this all up and make CheckPlayerMove go the other direction */
-        Request::new()
-            .target("our@http_server:distro:sys".parse::<Address>()?)
-            .body(serde_json::to_vec(
-                &http::HttpServerAction::WebSocketExtPushOutgoing {
-                    channel_id: *channel_id,
-                    message_type: http::WsMessageType::Binary,
-                    desired_reply_type: MessageType::Response,
-                },
-            )?)
-            .expects_response(15)
-            .blob_bytes(message.body())
-            //.inherit(true)
-            .send()?;
+    if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
+        println!("AddPlayer request received.");
     } else {
         handle_ws_message(connection, message)?;
     }
