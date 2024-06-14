@@ -10,6 +10,13 @@ kinode_process_lib = { git = "https://github.com/kinode-dao/process_lib", tag = 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 wit-bindgen = "0.24.0"
+alloy-sol-types = "0.7.0"
+alloy-primitives = "0.7.0"
+alloy-rlp = "0.3.4"
+alloy-signer-wallet = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
+alloy-network = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
+alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
 
 [lib]
 crate-type = ["cdylib"]

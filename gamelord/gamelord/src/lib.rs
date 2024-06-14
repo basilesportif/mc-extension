@@ -11,7 +11,8 @@ wit_bindgen::generate!({
 
 //spawn is 986,84,778
 // 9 cubes of fake2.dev are surrounding the spawn point
-let region_json = serde_json::json!({
+/*
+const REGION_JSON: serde_json::Value = serde_json::json!({
     "regions": [
         {
             "cubes": [
@@ -64,12 +65,9 @@ let region_json = serde_json::json!({
             "owner": "fake2.dev"
         }
     ]
-        }
-    ]
 });
 println!("Region JSON: {region_json}");
-
-
+*/
 
 fn handle_message(_our: &Address) -> anyhow::Result<()> {
     let message = await_message()?;
@@ -93,11 +91,13 @@ fn init(our: Address) {
     // Assuming regions are predefined or loaded from some source
     let regions: Vec<Region> = vec![]; // This should be populated appropriately in real use
 
+    /*
     for region in regions {
         for cube in &region.cubes {
             cube_to_region_map.insert(cube.clone(), region.clone());
         }
     }
+    */
     println!("begin");
 
     loop {

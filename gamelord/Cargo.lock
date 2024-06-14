@@ -20,7 +20,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 [[package]]
 name = "alloy-consensus"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -34,7 +34,7 @@ dependencies = [
 [[package]]
 name = "alloy-eips"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -47,7 +47,7 @@ dependencies = [
 [[package]]
 name = "alloy-genesis"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-primitives",
  "alloy-serde",
@@ -57,13 +57,29 @@ dependencies = [
 [[package]]
 name = "alloy-json-rpc"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-primitives",
  "serde",
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "alloy-network"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-json-rpc",
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "alloy-signer",
+ "async-trait",
+ "futures-utils-wasm",
+ "thiserror",
 ]
 
 [[package]]
@@ -113,7 +129,7 @@ dependencies = [
 [[package]]
 name = "alloy-rpc-types"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -131,11 +147,39 @@ dependencies = [
 [[package]]
 name = "alloy-serde"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-primitives",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "alloy-signer"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+dependencies = [
+ "alloy-primitives",
+ "async-trait",
+ "auto_impl",
+ "elliptic-curve",
+ "k256",
+ "thiserror",
+]
+
+[[package]]
+name = "alloy-signer-wallet"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+dependencies = [
+ "alloy-consensus",
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-signer",
+ "async-trait",
+ "k256",
+ "rand",
+ "thiserror",
 ]
 
 [[package]]
@@ -194,12 +238,13 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-macro",
  "const-hex",
+ "serde",
 ]
 
 [[package]]
 name = "alloy-transport"
 version = "0.1.0"
-source = "git+https://github.com/alloy-rs/alloy.git?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
+source = "git+https://github.com/alloy-rs/alloy?rev=cad7935#cad7935d69f433e45d190902e58b1c996b35adfa"
 dependencies = [
  "alloy-json-rpc",
  "base64",
@@ -349,6 +394,17 @@ name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
+
+[[package]]
+name = "async-trait"
+version = "0.1.80"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6fa2087f2753a7da8cc1c0dbfcf89579dd57458e36769de5ac750b4671737ca"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
+]
 
 [[package]]
 name = "auto_impl"
@@ -812,6 +868,13 @@ checksum = "42012b0f064e01aa58b545fe3727f90f7dd4020f4a3ea735b50344965f5a57e9"
 name = "gamelord"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus",
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-rpc-types",
+ "alloy-signer-wallet",
+ "alloy-sol-types",
  "anyhow",
  "bincode",
  "kinode_process_lib",
