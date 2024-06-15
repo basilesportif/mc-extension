@@ -3,71 +3,13 @@ use std::collections::HashMap;
 
 mod gamelord_types;
 use gamelord_types::{Cube, Player, Region};
+mod fixtures;
+use fixtures::get_region_json;
 
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
-
-//spawn is 986,84,778
-// 9 cubes of fake2.dev are surrounding the spawn point
-/*
-const REGION_JSON: serde_json::Value = serde_json::json!({
-    "regions": [
-        {
-            "cubes": [
-                {
-                    "center": [950, 100, 750],
-                    "radius": 50
-                },
-            ],
-            "owner": "fake.dev"
-        },
-        {
-            "cubes": [
-                {
-                    "center": [850, 100, 650],
-                    "radius": 50
-                },
-                {
-                    "center": [850, 100, 750],
-                    "radius": 50
-                },
-                {
-                    "center": [850, 100, 850],
-                    "radius": 50
-                },
-                {
-                    "center": [950, 100, 650],
-                    "radius": 50
-                },
-                {
-                    "center": [950, 100, 750],
-                    "radius": 50
-                },
-                {
-                    "center": [950, 100, 850],
-                    "radius": 50
-                },
-                {
-                    "center": [1050, 100, 650],
-                    "radius": 50
-                },
-                {
-                    "center": [1050, 100, 750],
-                    "radius": 50
-                },
-                {
-                    "center": [1050, 100, 850],
-                    "radius": 50
-                }
-            ],
-            "owner": "fake2.dev"
-        }
-    ]
-});
-println!("Region JSON: {region_json}");
-*/
 
 fn handle_message(_our: &Address) -> anyhow::Result<()> {
     let message = await_message()?;
