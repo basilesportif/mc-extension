@@ -7,3 +7,4 @@
 *swp
 *wasm
 mc-driver/pkg/*.wasm
+*/node_modules
