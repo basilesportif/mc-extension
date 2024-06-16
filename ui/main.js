@@ -5,6 +5,12 @@ let scene, camera, renderer, controls;
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
 let INTERSECTED;
+let selectedCube = null;
+// Grid of cubes
+const gridSize = 10;
+const height = 4;
+const cubeSize = 10;
+const cubes = [];
 
 init();
 animate();
@@ -33,12 +39,6 @@ function init() {
   directionalLight.position.set(1, 1, 1).normalize();
   scene.add(directionalLight);
 
-  // Grid of cubes
-  const gridSize = 10;
-  const height = 4;
-  const cubeSize = 10;
-  const cubes = [];
-
   for (let i = 0; i < gridSize; i++) {
     for (let j = 0; j < gridSize; j++) {
       for (let k = 0; k < height; k++) {
@@ -66,6 +66,7 @@ function init() {
   window.addEventListener('resize', onWindowResize, false);
   window.addEventListener('mousemove', onMouseMove, false);
   window.addEventListener('click', onMouseClick, false);
+  window.addEventListener('keydown', onKeyDown, false);
 }
 
 function onWindowResize() {
@@ -88,13 +89,56 @@ function onMouseClick(event) {
     if (!clickedObject.userData.clicked) {
       clickedObject.material.color.set(0xff0000);
       clickedObject.material.opacity = 0.7;
-      clickedObject.userData.clicked = true;  // Mark the cube as clicked
+      clickedObject.userData.clicked = true;
+      console.log('Selected & clicked cube position:', clickedObject.position);
+      setSelectedCube(clickedObject);
     }
     else {
       clickedObject.material.color.set(0x000000);
       clickedObject.material.opacity = 0.1;
       clickedObject.userData.clicked = false;  // Mark the cube as clicked
     }
+  }
+}
+
+function onKeyDown(event) {
+  if (selectedCube) {
+    let x = selectedCube.userData.gridX;
+    let z = selectedCube.userData.gridZ;
+
+    switch (event.key) {
+      case 'ArrowUp':
+        if (z > 0) z--;
+        break;
+      case 'ArrowDown':
+        if (z < gridSize - 1) z++;
+        break;
+      case 'ArrowLeft':
+        if (x > 0) x--;
+        break;
+      case 'ArrowRight':
+        if (x < gridSize - 1) x++;
+        break;
+      default:
+        return;
+    }
+    const nextCube = cubes.find(cube => cube.userData.gridX === x && cube.userData.gridZ === z);
+    console.log(nextCube)
+    if (nextCube) {
+      setSelectedCube(nextCube);
+    }
+  }
+}
+
+function setSelectedCube(cube) {
+  if (selectedCube) {
+    if (!selectedCube.userData.clicked) {
+      selectedCube.material.color.set(0x00ff00);  // Reset color if not clicked
+    }
+  }
+  selectedCube = cube;
+  if (!selectedCube.userData.clicked) {
+    selectedCube.material.color.set(0xff0000);  // Set color to red
   }
 }
 
