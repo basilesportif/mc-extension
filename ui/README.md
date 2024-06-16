@@ -7,7 +7,7 @@ Currently, this is a simple UI for Gamelord. It allows you to select cubes in th
 npm i
 npx vite
 ```
-Go to the URL indicated in the CLI.
+Go to the URL indicated in the CLI, probably [http://localhost:5173](http://localhost:5173).
 
 ## To Use
 * Click anywhere to set currently selected cube
