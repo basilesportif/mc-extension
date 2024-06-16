@@ -12,7 +12,7 @@ animate();
 function init() {
   // Scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new THREE.Color(0xffffff);
 
   // Camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -43,7 +43,11 @@ function init() {
     for (let j = 0; j < gridSize; j++) {
       for (let k = 0; k < height; k++) {
         const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
-        const material = new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.5 });
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.1
+        });
         const cube = new THREE.Mesh(geometry, material);
         cube.position.set(i * (cubeSize + 1) - (gridSize * (cubeSize + 1)) / 2, k * (cubeSize + 1), j * (cubeSize + 1) - (gridSize * (cubeSize + 1)) / 2);
         cube.userData.clicked = false;  // Track if the cube has been clicked
@@ -83,10 +87,12 @@ function onMouseClick(event) {
     const clickedObject = intersects[0].object;
     if (!clickedObject.userData.clicked) {
       clickedObject.material.color.set(0xff0000);
+      clickedObject.material.opacity = 0.7;
       clickedObject.userData.clicked = true;  // Mark the cube as clicked
     }
     else {
       clickedObject.material.color.set(0x000000);
+      clickedObject.material.opacity = 0.1;
       clickedObject.userData.clicked = false;  // Mark the cube as clicked
     }
   }
