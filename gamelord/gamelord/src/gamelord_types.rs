@@ -3,19 +3,24 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Player {
-    kinode_id: Address,
-    minecraft_player_name: String,
+    pub kinode_id: Address,
+    pub minecraft_player_name: String,
 }
-
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Cube {
-    center: (i32, i32, i32),
-    radius: i32,
+    pub center: (i32, i32, i32),
+    pub radius: i32,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Region {
+    pub cubes: Vec<Cube>,
+    pub owner: Address,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Regions {
+    pub regions: Vec<Region>,
 }
 
-pub struct Region {
-    cubes: Vec<Cube>,
-    owner: Address,
-}
 /*
     data:
 - players in the game

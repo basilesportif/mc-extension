@@ -2,7 +2,7 @@ use kinode_process_lib::{await_message, call_init, println, Address, Response};
 use std::collections::HashMap;
 
 mod gamelord_types;
-use gamelord_types::{Cube, Player, Region};
+use gamelord_types::{Cube, Player, Region, Regions};
 mod fixtures;
 use fixtures::get_region_json;
 
@@ -29,10 +29,15 @@ fn handle_message(_our: &Address) -> anyhow::Result<()> {
 
 call_init!(init);
 fn init(our: Address) {
+    print!("Process began");
     let mut cube_to_region_map: HashMap<Cube, Region> = HashMap::new();
     // Assuming regions are predefined or loaded from some source
-    let regions: Vec<Region> = vec![]; // This should be populated appropriately in real use
+    let config = get_region_json();
+    let map_regions: Regions = serde_json::from_value(config).unwrap();
 
+    println!("Data from regions: {:?}", map_regions);
+     
+     // This should be populated appropriately in real use
     /*
     for region in regions {
         for cube in &region.cubes {
@@ -41,13 +46,16 @@ fn init(our: Address) {
     }
     */
     println!("begin");
-
+    
     loop {
         match handle_message(&our) {
-            Ok(()) => {}
+            Ok(()) => {
+                break
+            }
             Err(e) => {
                 println!("error: {:?}", e);
             }
         };
     }
+    
 }
