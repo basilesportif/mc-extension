@@ -7,7 +7,7 @@ pub struct Player {
     pub kinode_id: String,
     pub minecraft_player_name: String,
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Cube {
     pub center: (i32, i32, i32),
     pub radius: i32,
@@ -21,12 +21,6 @@ pub struct Region {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Regions {
     pub regions: Vec<Region>,
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CurrentPosition {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
 }
 
 /*

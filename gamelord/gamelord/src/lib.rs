@@ -6,17 +6,18 @@ use kinode_process_lib::{
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, Regions, CurrentPosition};
+use gamelord_types::{Player, Regions, Region, Cube};
 mod fixtures;
 use fixtures::get_region_json;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 
 
 #[derive(Deserialize, Debug)]
 struct Body {
     player: Player,
-    position: CurrentPosition,
+    cube: Cube,
 }
 
 #[derive(Deserialize, Debug)]
@@ -34,14 +35,22 @@ struct Connection {
     channel_id: u32,
 }
 
-fn load_regions() -> anyhow::Result<Regions> {
+fn load_regions() -> anyhow::Result<HashMap<Cube, Region>> {
     let config = get_region_json();
+    let mut map_config = HashMap::<Cube, Region>::new();
     let map_regions: Regions = serde_json::from_value(config)
         .map_err(|e| {
             println!("Failed to deserialize regions: {:?}", e);
             e
         })?;
-    Ok(map_regions)
+
+    for region in &map_regions.regions {
+        for cube in &region.cubes {
+            map_config.insert(cube.clone(), region.clone());
+        }
+    }
+    Ok(map_config)
+    
 }
 
 fn is_expected_channel_id(
@@ -58,7 +67,11 @@ fn is_expected_channel_id(
     Ok(channel_id == current_channel_id)
 }
 
-fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> anyhow::Result<()> {
+fn handle_ws_message(
+    connection: &mut Option<Connection>,
+     message: Message,
+      regions: &HashMap<Cube, Region>)
+       -> anyhow::Result<()> {
     match serde_json::from_slice::<http::HttpServerRequest>(message.body())? {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             println!("WSOPEN channel open: {}", channel_id);
@@ -88,15 +101,9 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
                     // probably not good
                     let body = outer_body.body;
                     let player = body.player;
-                    let position = body.position;
+                    let cube = body.cube;
 
-                    let regions = load_regions().unwrap(); // Assume this function fetches the current regions
-                    let is_valid = valid_position(&regions, &player, &position);
-                    let response_message = if is_valid {
-                        "Player is allowed in this position"
-                    } else {
-                        "Player is not allowed in this position"
-                    };
+                    let (response_message, is_valid) = valid_position(regions, &player, &cube);
 
                     let response = serde_json::to_string(&(is_valid, response_message)).unwrap();
 
@@ -139,7 +146,8 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
         "handle_message: {:?}",
         String::from_utf8_lossy(message.body())
     );
-    handle_ws_message(connection, message)?;
+    let regions: HashMap<Cube, Region> = load_regions().unwrap(); 
+    handle_ws_message(connection, message, &regions)?;
     Ok(())
 }
 
@@ -147,24 +155,6 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
-    // Assuming regions are predefined or loaded from some source
-    let config = get_region_json();
-    let map_regions: Regions = match serde_json::from_value(config) {
-        Ok(regions) => regions,
-        Err(e) => {
-            println!("Failed to deserialize regions: {:?}", e);
-            return;
-        }
-    };
-    //need to encode this info into 
-    let player = Player {
-        kinode_id: "fake.dev".to_string(),
-        minecraft_player_name: "player2".to_string(),
-    };
-    let position = CurrentPosition { x: 1050, y: 100, z: 750 };
-
-    let output = valid_position(&map_regions, &player, &position);
-    println!("The action is allowed?: {output}");
     http::bind_ext_path("/").unwrap();
     println!("begin");
     let mut connection: Option<Connection> = None;
