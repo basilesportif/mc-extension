@@ -17,6 +17,7 @@ alloy-signer-wallet = { git = "https://github.com/alloy-rs/alloy", rev = "cad793
 alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
 alloy-network = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
 alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", rev = "cad7935" }
+lazy_static = "1.4"
 
 [lib]
 crate-type = ["cdylib"]
