@@ -1,6 +1,5 @@
 use kinode_process_lib::{
-    await_message, call_init, get_blob,
-    println, Address, LazyLoadBlob, Message, http, http::send_ws_push,
+    await_message, call_init, get_blob, http::{self, send_ws_push}, println, Address, LazyLoadBlob, Message, Response
 };
 
 use lazy_static::lazy_static;
@@ -10,14 +9,19 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, Regions, Region, Cube};
+use gamelord_types::{Player, Regions, Cube};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 //Here is where we store the CURRENT world config
 lazy_static! {
-    static ref WORLD_CONFIG: RwLock<HashMap<Cube, Region>> = RwLock::new(HashMap::new());
+    static ref WORLD_CONFIG: RwLock<HashMap<String, HashMap<u64, Cube>>> = RwLock::new(HashMap::new());
 }
+
+lazy_static! {
+    static ref WORLD_SHARABLE_CONFIG: RwLock<Regions> = RwLock::new(Regions { regions: Vec::new() });
+}
+
 
 
 #[derive(Deserialize, Debug)]
@@ -148,8 +152,52 @@ fn handle_ws_message(
             }
             *connection = None;
         }
-        http::HttpServerRequest::Http(_) => {
-            return Err(anyhow::anyhow!("Unexpected HTTP request"));
+        http::HttpServerRequest::Http(http_request) => {
+            match http_request.method().unwrap() {
+                http::Method::GET => match http_request.path(){
+                    Ok(path) => {
+                        match path.as_str() {
+                            "/world_config" => {
+                                let read_guard = WORLD_SHARABLE_CONFIG.read().unwrap();
+                                let sharable_world_config: &Regions = &*read_guard;
+                                let serialized_world_config = serde_json::to_string(sharable_world_config).expect("error serializing");
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    serialized_world_config.into_bytes(),
+                                );
+                            }
+                            _ => {
+                                println!("Error handling path");
+                                http::send_response(
+                                    http::StatusCode::NOT_FOUND,
+                                    None,
+                                    b"Not Found".to_vec(),
+                                );
+                            }
+
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error retrieving path: {:?}", e);
+                        http::send_response(
+                            http::StatusCode::INTERNAL_SERVER_ERROR,
+                            None,
+                            b"Internal Server Error".to_vec(),
+                        );
+                    }
+                    
+                }
+                _ => {
+                    http::send_response(
+                        http::StatusCode::METHOD_NOT_ALLOWED,
+                        None,
+                        b"Method Not Allowed".to_vec(),
+                    );
+                }
+
+            }
+            
         }
     }
     Ok(())
@@ -160,18 +208,36 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
         WorldConfig::GenerateWorld(regions) => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
+        
             for region in &regions.regions {
+                let owner_cubes = world_config.entry(region.owner.clone()).or_insert_with(HashMap::new);
                 for cube in &region.cubes {
-                    world_config.insert(cube.clone(), region.clone());
+                    owner_cubes.insert(cube.identifier(), cube.clone());
                 }
             }
+            let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
+            *sharable_config = regions.clone();            
+
             println!("World generated with regions: {:?}", regions);
+            Response::new()
+            .body(b"World created")
+            .send()
+            .unwrap();
             Ok(())
         }
         WorldConfig::DeleteWorld => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
+
+            // Also clear the sharable world config
+            let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
+            sharable_config.regions.clear();
+
             println!("World deleted");
+            Response::new()
+            .body(b"Deleted")
+            .send()
+            .unwrap();
             Ok(())
         }
     }
@@ -183,6 +249,7 @@ fn is_websocket_message(message: &Message) -> bool {
         Ok(http::HttpServerRequest::WebSocketOpen { .. }) => true,
         Ok(http::HttpServerRequest::WebSocketPush { .. }) => true,
         Ok(http::HttpServerRequest::WebSocketClose { .. }) => true,
+        Ok(http::HttpServerRequest::Http{ .. }) => true,
         _ => false,
     }
 }
@@ -206,6 +273,7 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
+    http::bind_http_path("/world_config", false, false).expect("failed to bind http path");
     http::bind_ext_path("/").unwrap();
     println!("begin");
     let mut connection: Option<Connection> = None;
