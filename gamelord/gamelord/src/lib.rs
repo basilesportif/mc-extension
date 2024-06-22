@@ -44,16 +44,15 @@ impl WorldConfig {
         serde_json::from_slice::<WorldConfig>(bytes)
     }
 }
+#[derive(Debug)]
+struct Connection {
+    channel_id: u32,
+}
 
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
-
-#[derive(Debug)]
-struct Connection {
-    channel_id: u32,
-}
 
 
 fn is_expected_channel_id(
