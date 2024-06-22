@@ -878,6 +878,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "kinode_process_lib",
+ "lazy_static",
  "serde",
  "serde_json",
  "wit-bindgen",
