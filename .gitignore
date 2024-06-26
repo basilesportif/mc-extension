@@ -8,3 +8,5 @@
 *wasm
 mc-driver/pkg/*.wasm
 */node_modules
+/.vscode/settings.json
+/package-lock.json

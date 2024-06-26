@@ -5,7 +5,6 @@ use kinode_process_lib::{
 use lazy_static::lazy_static;
 use std::sync::RwLock;
 
-
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
@@ -22,8 +21,6 @@ lazy_static! {
     static ref WORLD_SHARABLE_CONFIG: RwLock<Regions> = RwLock::new(Regions { regions: Vec::new() });
 }
 
-
-
 #[derive(Deserialize, Debug)]
 struct Body {
     player: Player,
@@ -35,15 +32,28 @@ struct OuterBody {
     body: Body,
 }
 #[derive(Serialize, Deserialize, Debug)]
-enum WorldConfig{
+enum GamelordRequest {
+    ValidateMove(Player, Cube),
+    AddPlayer(Player),
+    RemovePlayer(Player),
     GenerateWorld(Regions),
     DeleteWorld
 }
-impl WorldConfig {
-    fn parse(bytes: &[u8]) -> Result<WorldConfig, serde_json::Error> {
-        serde_json::from_slice::<WorldConfig>(bytes)
+impl GamelordRequest {
+    fn parse(bytes: &[u8]) -> Result<GamelordRequest, serde_json::Error> {
+        serde_json::from_slice::<GamelordRequest>(bytes)
     }
 }
+// The boolean might not be needed
+#[derive(Serialize, Deserialize, Debug)]
+enum GamelordResponse {
+    ValidateMove(bool, String),
+    AddPlayer(bool),
+    RemovePlayer(bool),
+    WorldGenerated,
+    WorldDeleted,
+}
+
 #[derive(Debug)]
 struct Connection {
     channel_id: u32,
@@ -202,9 +212,11 @@ fn handle_ws_message(
     Ok(())
 }
 
+
+//have everything handled here
 fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
-    match WorldConfig::parse(message.body())? {
-        WorldConfig::GenerateWorld(regions) => {
+    match GamelordRequest::parse(message.body())? {
+        GamelordRequest::GenerateWorld(regions) => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
         
@@ -219,26 +231,37 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
 
             println!("World generated with regions: {:?}", regions);
             Response::new()
-            .body(b"World created")
+            .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
             .send()
             .unwrap();
             Ok(())
-        }
-        WorldConfig::DeleteWorld => {
+        },
+        GamelordRequest::DeleteWorld => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
-
-            // Also clear the sharable world config
             let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
             sharable_config.regions.clear();
 
             println!("World deleted");
             Response::new()
-            .body(b"Deleted")
+            .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
             .send()
             .unwrap();
             Ok(())
-        }
+        },
+        GamelordRequest::ValidateMove(player, cube) => {
+            // Placeholder for ValidateMove logic
+            Ok(())
+        },
+        GamelordRequest::AddPlayer(player) => {
+            // Placeholder for AddPlayer logic
+            Ok(())
+        },
+        GamelordRequest::RemovePlayer(player) => {
+            // Placeholder for RemovePlayer logic
+            Ok(())
+        },
+        
     }
 }
     
@@ -262,8 +285,11 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
 
     if is_websocket_message(&message) {
         handle_ws_message(connection, message)?;
-    } else {
+    } else if message.is_local(&message.source()) {
+        println!("Local message received from: {:?}", message.source());
         handle_kinode_message(&message)?;
+    } else{
+        println!("Message not handled: {:?}", message);
     }
     Ok(())
 }

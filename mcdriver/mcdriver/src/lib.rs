@@ -9,8 +9,8 @@ mod mc_types;
 use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode};
 
 wit_bindgen::generate!({
-    path: "wit",
-    world: "process"
+    path: "target/wit",
+    world: "process-v0"
 });
 
 #[derive(Debug)]
@@ -92,20 +92,29 @@ fn handle_ws_message(connection: &mut Option<Connection>, message: Message) -> a
     Ok(())
 }
 
+fn handle_local_message(message: &Message) -> anyhow::Result<()> {
+    Ok(())
+}
+
+
+
 fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
-    let Ok(message) = await_message() else {
-        return Ok(());
-    };
+    let message = await_message()?;
 
     println!(
         "handle_message: {:?}",
         String::from_utf8_lossy(message.body())
     );
-
-    if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
-        println!("AddPlayer request received.");
+    // just for now, we'll probably have a different method for authentication
+    if message.is_local(&message.source()) {
+        handle_local_message(&message);
     } else {
-        handle_ws_message(connection, message)?;
+        // Will handle this better, wanted to keep your code
+        if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
+            println!("AddPlayer request received.");
+        } else {
+            handle_ws_message(connection, message)?;
+        }
     }
 
     Ok(())
@@ -116,7 +125,6 @@ fn init(our: Address) {
     println!("{our}: begin");
 
     let mut connection: Option<Connection> = None;
-
     http::bind_ext_path("/").unwrap();
 
     loop {
