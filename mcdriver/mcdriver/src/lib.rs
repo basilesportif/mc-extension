@@ -162,10 +162,6 @@ fn handle_ws_message(
     Ok(())
 }
 
-fn handle_local_message(message: &Message) -> anyhow::Result<()> {
-    print!("In progress");
-    Ok(())
-}
 
 fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
     let message = await_message()?;
