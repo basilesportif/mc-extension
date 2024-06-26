@@ -219,7 +219,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
         GamelordRequest::GenerateWorld(regions) => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
-        
+            
             for region in &regions.regions {
                 let owner_cubes = world_config.entry(region.owner.clone()).or_insert_with(HashMap::new);
                 for cube in &region.cubes {
@@ -250,7 +250,14 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             Ok(())
         },
         GamelordRequest::ValidateMove(player, cube) => {
-            // Placeholder for ValidateMove logic
+            let world_config = WORLD_CONFIG.read().unwrap();
+            println!("Json matched 000");
+            let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
+            let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
+            Response::new()
+            .body(response)
+            .send()
+            .unwrap();
             Ok(())
         },
         GamelordRequest::AddPlayer(player) => {
@@ -276,6 +283,66 @@ fn is_websocket_message(message: &Message) -> bool {
     }
 }
 
+fn is_http_request(message: &Message) -> bool {
+    match serde_json::from_slice::<http::HttpServerRequest>(message.body()) {
+        Ok(http::HttpServerRequest::Http { .. }) => true,
+        _ => false,
+    }
+}
+fn handle_http_request(message: &Message) -> anyhow::Result<()> {
+    let our_http_request = serde_json::from_slice::<http::HttpServerRequest>(message.body()).unwrap();
+    match our_http_request {
+        http::HttpServerRequest::Http(http_request) => {
+            match http_request.method().unwrap() {
+                http::Method::GET => match http_request.path() {
+                    Ok(path) => {
+                        match path.as_str() {
+                            "/world_config" => {
+                                let read_guard = WORLD_SHARABLE_CONFIG.read().unwrap();
+                                let sharable_world_config: &Regions = &*read_guard;
+                                let serialized_world_config = serde_json::to_string(sharable_world_config).expect("error serializing");
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    serialized_world_config.into_bytes(),
+                                );
+                            }
+                            _ => {
+                                println!("Error handling path");
+                                http::send_response(
+                                    http::StatusCode::NOT_FOUND,
+                                    None,
+                                    b"Not Found".to_vec(),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error retrieving path: {:?}", e);
+                        http::send_response(
+                            http::StatusCode::INTERNAL_SERVER_ERROR,
+                            None,
+                            b"Internal Server Error".to_vec(),
+                        );
+                    }
+                },
+                _ => {
+                    http::send_response(
+                        http::StatusCode::METHOD_NOT_ALLOWED,
+                        None,
+                        b"Method Not Allowed".to_vec(),
+                    );
+                }
+            }
+        }
+        _ => {
+            // Handle other cases or errors
+        }
+    }
+    Ok(())
+}
+
+
 fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
     let message = await_message()?;
     println!(
@@ -283,13 +350,14 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
         String::from_utf8_lossy(message.body())
     );
 
-    if is_websocket_message(&message) {
-        handle_ws_message(connection, message)?;
+    if is_http_request(&message) { // Check if it's an HTTP request
+        println!("HTTP request received");
+        handle_http_request(&message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
         handle_kinode_message(&message)?;
     } else{
-        println!("Message not handled: {:?}", message);
+        println!("Message from invalid source: {:?}", message.source());
     }
     Ok(())
 }
@@ -312,3 +380,4 @@ fn init(our: Address) {
     }
     
 }
+

@@ -2,7 +2,7 @@
     {
         "process_name": "mcdriver",
         "process_wasm_path": "/mcdriver.wasm",
-        "on_exit": "Restart",
+        "on_exit": "None",
         "request_networking": true,
         "request_capabilities": [
             "http_server:distro:sys",
@@ -10,7 +10,8 @@
         ],
         "grant_capabilities": [
             "http_server:distro:sys",
-            "vfs:distro:sys"
+            "vfs:distro:sys",
+            "gamelord:gamelord:basilesex.os"
         ],
         "public": false
     }
