@@ -3,17 +3,57 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 #[derive(Serialize, Deserialize, Debug, Clone)]
+// Note that the name might need to be changed
 pub struct Player {
-    //note to change kinode_id to Address
     pub kinode_id: String,
     pub minecraft_player_name: String,
 }
+
+impl Player {
+    pub fn kinode_id(&self) -> &String {
+        &self.kinode_id
+    }
+
+    pub fn minecraft_player_name(&self) -> &String {
+        &self.minecraft_player_name
+    }
+}
+
+pub struct ActivePlayer {
+    pub kinode_id: String,
+    pub minecraft_player_name: String,
+    pub current_cube: Cube,
+}
+
+impl ActivePlayer {
+    pub fn kinode_id(&self) -> &String {
+        &self.kinode_id
+    }
+
+    pub fn minecraft_player_name(&self) -> &String {
+        &self.minecraft_player_name
+    }
+
+    pub fn current_cube(&self) -> &Cube {
+        &self.current_cube
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {
     pub center: (i32, i32, i32),
     pub side_length: i32,
 }
+
 impl Cube {
+    pub fn center(&self) -> &(i32, i32, i32) {
+        &self.center
+    }
+
+    pub fn side_length(&self) -> i32 {
+        self.side_length
+    }
+
     pub fn identifier(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
@@ -37,9 +77,19 @@ impl Hash for Cube {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
     pub cubes: Vec<Cube>,
-    //note to change owner to Address
     pub owner: String,
 }
+
+impl Region {
+    pub fn cubes(&self) -> &Vec<Cube> {
+        &self.cubes
+    }
+
+    pub fn owner(&self) -> &String {
+        &self.owner
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Regions {
     pub regions: Vec<Region>,

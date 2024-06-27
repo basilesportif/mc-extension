@@ -8,7 +8,7 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, Regions, Cube};
+use gamelord_types::{Player, Regions, Cube, ActivePlayer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -20,13 +20,17 @@ lazy_static! {
 lazy_static! {
     static ref WORLD_SHARABLE_CONFIG: RwLock<Regions> = RwLock::new(Regions { regions: Vec::new() });
 }
+// Remember to change the type key type here to Address.
+lazy_static! {
+    static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
+}
 
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequest {
     ValidateMove(Player, Cube),
-    AddPlayer(Player),
-    RemovePlayer(Player),
+    PlayerSpawnRequest(Player),
+    PlayerLeaveRequest(Player),
     GenerateWorld(Regions),
     DeleteWorld
 }
@@ -59,8 +63,8 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             world_config.clear();
             
             for region in &regions.regions {
-                let owner_cubes = world_config.entry(region.owner.clone()).or_insert_with(HashMap::new);
-                for cube in &region.cubes {
+                let owner_cubes = world_config.entry(region.owner().clone()).or_insert_with(HashMap::new);
+                for cube in region.cubes() {
                     owner_cubes.insert(cube.identifier(), cube.clone());
                 }
             }
@@ -89,7 +93,6 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
         },
         GamelordRequest::ValidateMove(player, cube) => {
             let world_config = WORLD_CONFIG.read().unwrap();
-            println!("Json matched 000");
             let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
             let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
             Response::new()
@@ -98,18 +101,32 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             .unwrap();
             Ok(())
         },
-        GamelordRequest::AddPlayer(player) => {
-            // Placeholder for AddPlayer logic
+        GamelordRequest::PlayerSpawnRequest(player) => {
+            let mut active_players = ACTIVE_PLAYERS.write().unwrap();
+            if !active_players.contains_key(player.kinode_id()) {
+                // to spawn a player, we first want to see whether the player can spawn (if there are any available regions)
+                //active_players.insert(player.kinode_id().clone(), player);
+                //To do - send response
+            } else {
+                println!("Player with kinode_id {} already exists.", player.kinode_id());
+                //To do - send response
+            }
             Ok(())
         },
-        GamelordRequest::RemovePlayer(player) => {
-            // Placeholder for RemovePlayer logic
+        GamelordRequest::PlayerLeaveRequest(player) => {
+            let mut active_players = ACTIVE_PLAYERS.write().unwrap();
+            if active_players.contains_key(player.kinode_id()) {
+                active_players.remove(player.kinode_id());
+                println!("Player with kinode_id {} has left the game.", player.kinode_id());
+            } else {
+                println!("Player with kinode_id {} is not in the active players list.", player.kinode_id());
+            }
             Ok(())
         },
         
     }
 }
-    
+
 fn is_http_request(message: &Message) -> bool {
     match serde_json::from_slice::<http::HttpServerRequest>(message.body()) {
         Ok(http::HttpServerRequest::Http { .. }) => true,
@@ -205,4 +222,3 @@ fn init(our: Address) {
     }
     
 }
-

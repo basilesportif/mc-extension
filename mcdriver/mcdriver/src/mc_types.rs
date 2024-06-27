@@ -33,6 +33,37 @@ pub enum KinodeToMC {
     SanityCheckErr(String),
 }
 
+// would probaly want to reconfigure this to be more optimal at some point
+// actually just the body and outerbody need to be reconfigured
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct Player {
+    pub kinode_id: String,
+    pub minecraft_player_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct Cube {
+    pub center: (i32, i32, i32),
+    pub side_length: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Body {
+    #[serde(rename = "ValidateMove")]
+    pub validate_move: ValidateMove,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OuterBody {
+    pub body: Body,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ValidateMove {
+    pub player: Player,
+    pub cube: Cube,
+}
+
 /*
 Brainstorm types:
 - from Minecraft

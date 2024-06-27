@@ -8,36 +8,8 @@ use kinode_process_lib::{
 };
 
 mod mc_types;
-use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode};
+use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode, Player, Cube, Body, OuterBody };
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Body {
-    #[serde(rename = "ValidateMove")]
-    validate_move: ValidateMove,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct OuterBody {
-    body: Body,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct ValidateMove {
-    player: Player,
-    cube: Cube,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub struct Player {
-    pub kinode_id: String,
-    pub minecraft_player_name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub struct Cube {
-    pub center: (i32, i32, i32),
-    pub side_length: i32,
-}
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -68,8 +40,8 @@ fn process_request(player: &Player, cube: &Cube) -> anyhow::Result<serde_json::V
     println!("Processing request for player: {:?}", player);
     let action = serde_json::json!({
         "ValidateMove": [
-            player,  // First element of the tuple
-            cube     // Second element of the tuple
+            player,  
+            cube     
         ]
     });
     let response = Request::new()
@@ -167,21 +139,21 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
     let message = await_message()?;
 
     println!(
-        "handle_message: {:?}",
-        String::from_utf8_lossy(message.body())
+        "handle_message: {:?}, {:?}",
+        String::from_utf8_lossy(message.body()),
+        message.source()
     );
     // just for now, we'll probably have a different method for authentication
     if message.is_local(&message.source()) {
         println!("Local message received.");
         handle_ws_message(connection, message)?;
-        //handle_local_message(&message);
     } else {
         // Will handle this better, wanted to keep your code
         if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
             println!("AddPlayer request received.");
         } else {
-            println!("WS message received.");
-            handle_ws_message(connection, message)?;
+            println!("Invalid message");
+            
         }
     }
 
