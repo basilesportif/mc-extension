@@ -8,7 +8,7 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, Regions, Cube, ActivePlayer};
+use gamelord_types::{Player, World, Cube, ActivePlayer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -18,7 +18,7 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref WORLD_SHARABLE_CONFIG: RwLock<Regions> = RwLock::new(Regions { regions: Vec::new() });
+    static ref WORLD_SHARABLE_CONFIG: RwLock<World> = RwLock::new(World { regions: Vec::new() });
 }
 // Remember to change the type key type here to Address.
 lazy_static! {
@@ -31,7 +31,7 @@ enum GamelordRequest {
     ValidateMove(Player, Cube),
     PlayerSpawnRequest(Player),
     PlayerLeaveRequest(Player),
-    GenerateWorld(Regions),
+    GenerateWorld(World),
     DeleteWorld
 }
 impl GamelordRequest {
@@ -143,7 +143,7 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                         match path.as_str() {
                             "/world_config" => {
                                 let read_guard = WORLD_SHARABLE_CONFIG.read().unwrap();
-                                let sharable_world_config: &Regions = &*read_guard;
+                                let sharable_world_config: &World = &*read_guard;
                                 let serialized_world_config = serde_json::to_string(sharable_world_config).expect("error serializing");
                                 http::send_response(
                                     http::StatusCode::OK,

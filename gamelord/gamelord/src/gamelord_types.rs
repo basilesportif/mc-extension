@@ -91,7 +91,7 @@ impl Region {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Regions {
+pub struct World {
     pub regions: Vec<Region>,
 }
 
