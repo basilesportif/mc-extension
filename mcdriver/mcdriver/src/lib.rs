@@ -39,13 +39,13 @@ fn is_expected_channel_id(
 fn process_request(player: &Player, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
     println!("Processing request for player: {:?}", player);
     let action = match method {
-        Method::ValidateMove { ValidateMove } => serde_json::json!({
+        Method::ValidateMove { ValidateMove: _ } => serde_json::json!({
             "ValidateMove": {
                 "player": player,
                 "cube": cube.unwrap()  // probably a bad place to unwrap
             }
         }),
-        Method::PlayerJoinRequest { PlayerJoinRequest } => serde_json::json!({
+        Method::PlayerJoinRequest { PlayerJoinRequest: _ } => serde_json::json!({
             "PlayerSpawnRequest": {
                 "player": player,
             }
@@ -140,7 +140,7 @@ fn handle_ws_message(
                             let outcome = process_request(PlayerJoinRequest.player(),
                               None,
                               &Method::PlayerJoinRequest { PlayerJoinRequest: (*PlayerJoinRequest).clone() })?;
-let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
+                            let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
 
                             send_ws_push(
                                 *channel_id,
