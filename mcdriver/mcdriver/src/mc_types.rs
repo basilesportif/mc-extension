@@ -46,22 +46,72 @@ pub struct Cube {
     pub center: (i32, i32, i32),
     pub side_length: i32,
 }
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Body {
-    #[serde(rename = "ValidateMove")]
-    pub validate_move: ValidateMove,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OuterBody {
-    pub body: Body,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValidateMove {
-    pub player: Player,
-    pub cube: Cube,
+    player: Player,
+    cube: Cube,
+}
+
+impl ValidateMove {
+    pub fn player(&self) -> &Player {
+        &self.player
+    }
+    pub fn cube(&self) -> &Cube {
+        &self.cube
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlayerJoinRequest {
+    player: Player,
+}
+
+impl PlayerJoinRequest {
+    pub fn player(&self) -> &Player {
+        &self.player
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Method {
+    ValidateMove { ValidateMove: ValidateMove },
+    PlayerJoinRequest { PlayerJoinRequest: PlayerJoinRequest },
+    // Add other message types here
+}
+
+impl Method {
+    pub fn as_validate_move(&self) -> Option<&ValidateMove> {
+        if let Method::ValidateMove { ValidateMove } = self {
+            Some(ValidateMove)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_player_join(&self) -> Option<&PlayerJoinRequest> {
+        if let Method::PlayerJoinRequest { PlayerJoinRequest } = self {
+            Some(PlayerJoinRequest)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WebSocketMessage {
+    message_type: String,
+    body: Method,
+}
+
+impl WebSocketMessage {
+    pub fn message_type(&self) -> &String {
+        &self.message_type
+    }
+
+    pub fn method(&self) -> &Method {
+        &self.body
+    }
 }
 
 /*

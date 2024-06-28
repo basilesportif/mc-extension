@@ -8,7 +8,7 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, World, Cube, ActivePlayer};
+use gamelord_types::{Player, World, Cube, ActivePlayer, Region};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -28,22 +28,39 @@ lazy_static! {
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequest {
-    ValidateMove(Player, Cube),
-    PlayerSpawnRequest(Player),
-    PlayerLeaveRequest(Player),
-    GenerateWorld(World),
-    DeleteWorld
+    ValidateMove { player: Player, cube: Cube },
+    PlayerSpawnRequest { player: Player },
+    PlayerLeaveRequest { player: Player },
+    GenerateWorld { regions: Vec<Region> },
+    DeleteWorld,
 }
 impl GamelordRequest {
     fn parse(bytes: &[u8]) -> Result<GamelordRequest, serde_json::Error> {
-        serde_json::from_slice::<GamelordRequest>(bytes)
+        let json_str = String::from_utf8_lossy(bytes);
+        println!("Attempting to parse JSON: {}", json_str);
+
+        match serde_json::from_str::<GamelordRequest>(&json_str) {
+            Ok(request) => {
+                println!("Successfully parsed GamelordRequest: {:?}", request);
+                Ok(request)
+            },
+            Err(e) => {
+                println!("Error parsing GamelordRequest: {:?}", e);
+                println!("Error occurred at position: {}", e.column());
+                if let Some(line) = json_str.lines().nth(e.line() - 1) {
+                    println!("Problematic line: {}", line);
+                    println!("                  {}^", " ".repeat(e.column() - 1));
+                }
+                Err(e)
+            }
+        }
     }
 }
 // The boolean might not be needed
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordResponse {
     ValidateMove(bool, String),
-    AddPlayer(bool),
+    AddPlayer(bool, String),
     RemovePlayer(bool),
     WorldGenerated,
     WorldDeleted,
@@ -57,21 +74,22 @@ wit_bindgen::generate!({
 
 //have everything handled here
 fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
+    println!("handle kinode message entered");
     match GamelordRequest::parse(message.body())? {
-        GamelordRequest::GenerateWorld(regions) => {
+        GamelordRequest::GenerateWorld { regions } => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
             
-            for region in &regions.regions {
+            for region in &regions {
                 let owner_cubes = world_config.entry(region.owner().clone()).or_insert_with(HashMap::new);
                 for cube in region.cubes() {
                     owner_cubes.insert(cube.identifier(), cube.clone());
                 }
             }
             let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
-            *sharable_config = regions.clone();            
+            *sharable_config = World { regions: regions.clone() };            
 
-            println!("World generated with regions: {:?}", regions);
+            println!("World generated with regions: {:?}", &regions);
             Response::new()
             .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
             .send()
@@ -91,29 +109,69 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             .unwrap();
             Ok(())
         },
-        GamelordRequest::ValidateMove(player, cube) => {
-            let world_config = WORLD_CONFIG.read().unwrap();
-            let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
-            let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
-            Response::new()
-            .body(response)
-            .send()
-            .unwrap();
-            Ok(())
-        },
-        GamelordRequest::PlayerSpawnRequest(player) => {
-            let mut active_players = ACTIVE_PLAYERS.write().unwrap();
-            if !active_players.contains_key(player.kinode_id()) {
-                // to spawn a player, we first want to see whether the player can spawn (if there are any available regions)
-                //active_players.insert(player.kinode_id().clone(), player);
-                //To do - send response
+        GamelordRequest::ValidateMove{player, cube} => {
+            let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
+            if let Some(active_player) = active_players.get_mut(player.kinode_id()) {
+                let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
+                let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
+                if is_valid {
+                    active_player.current_cube = cube.clone();
+                    println!("Active player {} moved to cube: {:?}", player.kinode_id(), cube);
+                }
+
+                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
+                Response::new()
+                    .body(response)
+                    .send()
+                    .unwrap();
+
             } else {
-                println!("Player with kinode_id {} already exists.", player.kinode_id());
-                //To do - send response
+                println!("Player {} is not active in the game.", player.kinode_id());
+                Response::new()
+                    .body(b"Player not in game.")
+                    .send()
+                    .unwrap();
+                // To do - send response for inactive player
             }
             Ok(())
         },
-        GamelordRequest::PlayerLeaveRequest(player) => {
+        GamelordRequest::PlayerSpawnRequest{player} => {
+            println!("Gamelord request matched");
+            println!("Player spawn request received for player: {:?}", player);
+            let world_config = WORLD_CONFIG.read().unwrap();
+            if world_config.contains_key(player.kinode_id()) {
+                let available_cubes = world_config.get(player.kinode_id()).map_or_else(|| Vec::new(), |cubes| cubes.values().cloned().collect());
+                // for now its the first one, let's set the first available cube as the players 'spawn' point
+                let spawn_cube = available_cubes.get(0).expect("No available cubes");
+                let active_player = ActivePlayer {
+                    kinode_id: player.kinode_id().clone(),
+                    minecraft_player_name: player.minecraft_player_name().clone(),
+                    current_cube: spawn_cube.clone(),
+                };
+                let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
+                active_players.insert(player.kinode_id().clone(), active_player);
+                println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
+                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(true, "Player added.".to_string())).unwrap();
+                Response::new()
+                    .body(response)
+                    .send()
+                    .unwrap();
+            } else {
+                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(false, "Player not added.".to_string())).unwrap();
+                Response::new()
+                    .body(response)
+                    .send()
+                    .unwrap();
+                
+                println!("Player {} is not allowed on the server", player.kinode_id());
+                Response::new()
+                    .body(b"Player not added.")
+                    .send()
+                    .unwrap();
+            }
+            Ok(())
+        },
+        GamelordRequest::PlayerLeaveRequest{player} => {
             let mut active_players = ACTIVE_PLAYERS.write().unwrap();
             if active_players.contains_key(player.kinode_id()) {
                 active_players.remove(player.kinode_id());
@@ -121,6 +179,10 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             } else {
                 println!("Player with kinode_id {} is not in the active players list.", player.kinode_id());
             }
+            Ok(())
+        },
+        _ => {
+            println!("Invalid request received");
             Ok(())
         },
         
@@ -216,7 +278,7 @@ fn init(our: Address) {
         match handle_message() {
             Ok(()) => {}
             Err(e) => {
-                println!("error: {:?}", e);
+                println!("error from somewhere: {:?}", e);
             }
         };
     }

@@ -8,7 +8,7 @@ use kinode_process_lib::{
 };
 
 mod mc_types;
-use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode, Player, Cube, Body, OuterBody };
+use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode, Player, Cube, WebSocketMessage, Method, PlayerJoinRequest, ValidateMove };
 
 
 wit_bindgen::generate!({
@@ -36,23 +36,35 @@ fn is_expected_channel_id(
 }
 
 
-fn process_request(player: &Player, cube: &Cube) -> anyhow::Result<serde_json::Value> {
+fn process_request(player: &Player, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
     println!("Processing request for player: {:?}", player);
-    let action = serde_json::json!({
-        "ValidateMove": [
-            player,  
-            cube     
-        ]
-    });
+    let action = match method {
+        Method::ValidateMove { ValidateMove } => serde_json::json!({
+            "ValidateMove": {
+                "player": player,
+                "cube": cube.unwrap()  // probably a bad place to unwrap
+            }
+        }),
+        Method::PlayerJoinRequest { PlayerJoinRequest } => serde_json::json!({
+            "PlayerSpawnRequest": {
+                "player": player,
+            }
+        }),
+        _ => return Err(anyhow::anyhow!("Unsupported request type")),
+    };
+
     let response = Request::new()
         .target(Address::new("fake.dev", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
         .body(serde_json::to_vec(&action)?)
-        .send_and_await_response(1);
+        .send_and_await_response(5);
 
     match response {
         Ok(message) => {
-            let body = serde_json::from_slice::<serde_json::Value>(&message.unwrap().body())
-                .expect("Failed to parse response body as JSON");
+            let body = match message {
+                Ok(msg) => serde_json::from_slice::<serde_json::Value>(msg.body())
+                    .map_err(|e| anyhow::anyhow!("Failed to parse response body: {}", e))?,
+                Err(e) => return Err(anyhow::anyhow!("Failed to receive response: {}", e)),
+            };
             return Ok(body);
         },
         Err(e) => {
@@ -99,29 +111,49 @@ fn handle_ws_message(
                     };
                     println!("Received blob: {:?}", String::from_utf8_lossy(&blob.bytes));
 
-                    let outer_body: OuterBody = match serde_json::from_slice(&blob.bytes) {
-                        Ok(outer_body) => outer_body,
+                    let ws_message: WebSocketMessage = match serde_json::from_slice(&blob.bytes) {
+                        Ok(ws_message) => ws_message,
                         Err(e) => {
                             println!("Invalid JSON: {:?}", e);
                             return Ok(());
                         }
                     };
 
-                    // Since player and cube are always present, directly access them
-                    let player = &outer_body.body.validate_move.player;
-                    let cube = &outer_body.body.validate_move.cube;
-                    let outcome = process_request(player, cube)?;
-                    let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
+                    match ws_message.method() {
+                        Method::ValidateMove { ValidateMove } => {
+                            let outcome = process_request(ValidateMove.player(),
+                                                            Some(ValidateMove.cube()),
+                                                          &Method::ValidateMove { ValidateMove: (*ValidateMove).clone() })?;
+                            let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
 
-                    send_ws_push(
-                        *channel_id,
-                        http::WsMessageType::Text,
-                        LazyLoadBlob {
-                            mime: Some("application/json".to_string()),
-                            bytes: serialized_message.into_bytes(),
-                        },
-                    );
-                    println!("Position check request received.");
+                            send_ws_push(
+                                *channel_id,
+                                http::WsMessageType::Text,
+                                LazyLoadBlob {
+                                    mime: Some("application/json".to_string()),
+                                    bytes: serialized_message.into_bytes(),
+                                },
+                            );
+                            println!("Position check request received.");
+                        }
+                        Method::PlayerJoinRequest { PlayerJoinRequest } => {
+                            let outcome = process_request(PlayerJoinRequest.player(),
+                              None,
+                              &Method::PlayerJoinRequest { PlayerJoinRequest: (*PlayerJoinRequest).clone() })?;
+let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
+
+                            send_ws_push(
+                                *channel_id,
+                                http::WsMessageType::Text,
+                                LazyLoadBlob {
+                                    mime: Some("application/json".to_string()),
+                                    bytes: serialized_message.into_bytes(),
+                                },
+                            );
+                            println!("Player join request received for player: {:?}", PlayerJoinRequest.player());
+                        }
+                        // Add other message types here
+                    }
                     return Ok(());
                 }
 
