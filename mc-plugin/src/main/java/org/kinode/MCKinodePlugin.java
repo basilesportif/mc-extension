@@ -68,6 +68,11 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         getLogger().info("Fetching player id from Mojang API...");
         String playerName = MojangAPI.getPlayerId(playerUUID);
         getLogger().info("Player name: " + playerName);
+
+        // Send WebSocket message
+        if (client != null && client.isConnected()) {
+            client.sendPlayerJoinMessage(playerName, event);
+        }
     }
 
     @EventHandler
