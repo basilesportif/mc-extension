@@ -60,7 +60,8 @@ impl GamelordRequest {
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordResponse {
     ValidateMove(bool, String),
-    AddPlayer(bool, String),
+    AddPlayer(bool, String, Cube),
+    AddPlayerFailed(bool ,String),
     RemovePlayer(bool),
     WorldGenerated,
     WorldDeleted,
@@ -151,13 +152,13 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
                 active_players.insert(player.kinode_id().clone(), active_player);
                 println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(true, "Player added.".to_string())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
                     .unwrap();
             } else {
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(false, "Player not added.".to_string())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponse::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
@@ -272,7 +273,10 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
-    http::bind_http_path("/world_config", false, false).expect("failed to bind http path");
+    for path in ["/home", "/world_config"] {
+        http::bind_http_path(path, true, false).expect("failed to bind http path");
+    }
+    http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     loop {
         match handle_message() {

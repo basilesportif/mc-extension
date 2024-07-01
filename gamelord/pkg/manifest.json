@@ -5,7 +5,8 @@
         "on_exit": "None",
         "request_networking": true,
         "request_capabilities": [
-            "http_server:distro:sys"
+            "http_server:distro:sys",
+            "vfs:distro:sys"
         ],
         "grant_capabilities": [
             "gamelord:gamelord:basilesex.os"

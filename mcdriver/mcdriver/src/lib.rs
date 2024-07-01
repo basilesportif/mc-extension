@@ -138,8 +138,10 @@ fn handle_ws_message(
                         }
                         Method::PlayerJoinRequest { PlayerJoinRequest } => {
                             let outcome = process_request(PlayerJoinRequest.player(),
-                              None,
-                              &Method::PlayerJoinRequest { PlayerJoinRequest: (*PlayerJoinRequest).clone() })?;
+                                                            None,
+                                                          &Method::PlayerJoinRequest {
+                                                             PlayerJoinRequest: (*PlayerJoinRequest).clone() 
+                                                            })?;
                             let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
 
                             send_ws_push(
