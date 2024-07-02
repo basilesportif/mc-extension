@@ -182,11 +182,6 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             }
             Ok(())
         },
-        _ => {
-            println!("Invalid request received");
-            Ok(())
-        },
-        
     }
 }
 
@@ -201,45 +196,47 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
     match our_http_request {
         http::HttpServerRequest::Http(http_request) => {
             match http_request.method().unwrap() {
-                http::Method::GET => match http_request.path() {
-                    Ok(path) => {
+                http::Method::GET => {
+                    if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
                                 let read_guard = WORLD_SHARABLE_CONFIG.read().unwrap();
-                                let sharable_world_config: &World = &*read_guard;
-                                let serialized_world_config = serde_json::to_string(sharable_world_config).expect("error serializing");
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    serialized_world_config.into_bytes(),
-                                );
-                            }
-                            _ => {
-                                println!("Error handling path");
-                                http::send_response(
-                                    http::StatusCode::NOT_FOUND,
-                                    None,
-                                    b"Not Found".to_vec(),
-                                );
-                            }
+                                let serialized_world_config = serde_json::to_string(&*read_guard).expect("error serializing");
+                                http::send_response(http::StatusCode::OK, None, serialized_world_config.into_bytes());
+                            },
+                            "/api/available_regions" => {
+                                let regions = vec!["Region1", "Region2", "Region3"];
+                                let response = serde_json::to_string(&regions).unwrap();
+                                http::send_response(http::StatusCode::OK, None, response.into_bytes());
+                            },
+                            _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }
-                    }
-                    Err(e) => {
-                        println!("Error retrieving path: {:?}", e);
-                        http::send_response(
-                            http::StatusCode::INTERNAL_SERVER_ERROR,
-                            None,
-                            b"Internal Server Error".to_vec(),
-                        );
+                    } else {
+                        http::send_response(http::StatusCode::INTERNAL_SERVER_ERROR, None, b"Internal Server Error".to_vec());
                     }
                 },
-                _ => {
-                    http::send_response(
-                        http::StatusCode::METHOD_NOT_ALLOWED,
-                        None,
-                        b"Method Not Allowed".to_vec(),
-                    );
-                }
+                http::Method::POST => {
+                    if let Ok(path) = http_request.path() {
+                        match path.as_str() {
+                            "/api/loadWorld" => {
+                                //add logic
+                                http::send_response(http::StatusCode::OK, None, b"World Loaded".to_vec());
+                            },
+                            "/api/addPlayer" => {
+                                // add logic
+                                http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
+                            },
+                            "/api/selectRegion" => {
+                                // let response = serde_json::to_string(&{"message": "Region selected successfully"}).unwrap();
+                                // http::send_response(http::StatusCode::OK, None, response.into_bytes());
+                            },
+                            _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
+                        }
+                    } else {
+                        http::send_response(http::StatusCode::INTERNAL_SERVER_ERROR, None, b"Internal Server Error".to_vec());
+                    }
+                },
+                _ => http::send_response(http::StatusCode::METHOD_NOT_ALLOWED, None, b"Method Not Allowed".to_vec()),
             }
         }
         _ => {

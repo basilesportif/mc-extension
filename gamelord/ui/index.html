@@ -9,69 +9,181 @@
             margin: 0;
             padding: 0;
             font-family: 'Arial', sans-serif;
-            background: url('path_to_your_background_image.jpg') no-repeat center center fixed;
+            background: url('https://i.imgur.com/tazsUO9.png') no-repeat center center fixed;
             background-size: cover;
-            color: #f5f5f5;
+            color: #ffffff;
             text-align: center;
         }
         h1 {
-            font-size: 5em;
-            margin-top: 20vh;
+            font-size: 4em;
+            margin-top: 10vh;
             letter-spacing: 0.1em;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
         }
         .container {
+            display: flex;
+            justify-content: space-around;
             margin-top: 5vh;
+        }
+        .option {
+            padding: 20px;
+            border-radius: 5px;
+            background-color: rgba(0, 0, 0, 0.5);
+            width: 40%;
         }
         .form-group {
             margin: 20px 0;
         }
-        input[type="text"] {
+        input[type="text"], input[type="file"] {
             padding: 10px;
             font-size: 1em;
             width: 80%;
             max-width: 400px;
             border: none;
             border-radius: 5px;
+            margin-bottom: 10px;
+            color: #333;
+            background-color: #ffffff;
         }
         button {
             padding: 10px 20px;
             font-size: 1em;
-            background-color: #ff4500;
+            background-color: rgba(255, 69, 0, 0.8);
             color: #fff;
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            margin: 5px;
         }
         button:hover {
-            background-color: #e03e00;
+            background-color: rgba(224, 62, 0, 0.8);
         }
         .disclaimer {
             margin-top: 20px;
             font-size: 0.9em;
-            color: #ccc;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
         }
     </style>
 </head>
 <body>
     <h1>Gamelord</h1>
     <div class="container">
-        <form>
-            <div class="form-group">
-                <input type="text" id="playerName" name="playerName" placeholder="Enter Player Name">
+        <div class="option">
+            <h2>Add Player to Game</h2>
+            <form id="playerForm">
+                <div class="form-group">
+                    <input type="text" id="minecraftName" name="minecraftName" placeholder="Enter Minecraft Name">
+                </div>
+                <div class="form-group">
+                    <input type="text" id="playerID" name="playerID" placeholder="Enter Kinode ID">
+                </div>
+                <button type="button" onclick="promptRegionSelection()">Submit Details</button>
+            </form>
+        </div>
+        <div class="option" id="regionSelection" style="display:none;">
+            <h2>Select Region</h2>
+            <div class="disclaimer">
+                Disclaimer: You can only select one region for now.
             </div>
-            <div class="form-group">
-                <input type="text" id="minecraftName" name="minecraftName" placeholder="Enter Minecraft Name">
-            </div>
-            <button type="button" onclick="showRegions()">Show Available Regions</button>
-        </form>
-        <div class="disclaimer">
-            Disclaimer: You can only select one region for now.
+        </div>
+        <div class="option">
+            <h2>Load Preconfigured World</h2>
+            <form>
+                <div class="form-group">
+                    <input type="file" id="preConfigWorld" name="preConfigWorld" accept=".json">
+                </div>
+                <button type="button" onclick="loadPreconfiguredWorld()">Load World</button>
+            </form>
         </div>
     </div>
+    <pre id="response-output"></pre>
     <script>
-        function showRegions() {
-            // Placeholder function to show available regions
-            alert('Showing available regions...');
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("playerForm").addEventListener("submit", promptRegionSelection);
+            document.getElementById("loadPreconfiguredWorld").addEventListener("click", loadPreconfiguredWorld);
+        });
+
+        async function promptRegionSelection(event) {
+            event.preventDefault();  // Ensure to prevent the default form submission
+            const minecraftName = document.getElementById('minecraftName').value;
+            const playerID = document.getElementById('playerID').value;
+            if (minecraftName && playerID) {
+                const url = `/api/available_regions?minecraftName=${encodeURIComponent(minecraftName)}&playerID=${encodeURIComponent(playerID)}`;
+                await fetchGetData(url);
+            } else {
+                alert('Please enter both Minecraft Name and Kinode ID.');
+            }
+        }
+
+        async function loadPreconfiguredWorld() {
+            const fileInput = document.getElementById('preConfigWorld');
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('worldFile', file);
+                await fetchPostData('/api/loadWorld', formData);
+            } else {
+                alert('Please select a JSON file to load the preconfigured world.');
+            }
+        }
+
+        async function fetchGetData(url) {
+            try {
+                const response = await fetch(url, { method: 'GET' });
+                if (response.ok) {
+                    const regions = await response.json(); // Assuming the response is a JSON array
+                    displayRegions(regions);
+                } else {
+                    console.error("Failed to fetch data:", response.status, response.statusText);
+                    document.getElementById("response-output").innerText = `Error: ${response.statusText}`;
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById("response-output").innerText = `Error: ${error.message}`;
+            }
+        }
+
+        function displayRegions(regions) {
+            const regionContainer = document.getElementById('regionSelection');
+            regionContainer.style.display = 'block'; // Make the region selection visible
+            const list = document.createElement('ul');
+            regions.forEach(region => {
+                const listItem = document.createElement('li');
+                listItem.textContent = region;
+                listItem.addEventListener('click', () => selectRegion(region));
+                list.appendChild(listItem);
+            });
+            regionContainer.innerHTML = ''; // Clear previous contents
+            regionContainer.appendChild(list);
+        }
+
+        function selectRegion(region) {
+            console.log("Selected region:", region);
+            // Additional code to handle the selected region
+        }
+
+        async function fetchPostData(url, body) {
+            try {
+                const options = {
+                    method: 'POST',
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ account: body })
+                };
+                const response = await fetch(url, options);
+                if (response.ok) {
+                    const responseData = await response.text();
+                    document.getElementById("response-output").innerText = responseData;
+                    console.log("Response:", responseData);
+                } else {
+                    console.error("Failed to fetch data:", response.status, response.statusText);
+                    document.getElementById("response-output").innerText = `Error: ${response.statusText}`;
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById("response-output").innerText = `Error: ${error.message}`;
+            }
         }
     </script>
 </body>
