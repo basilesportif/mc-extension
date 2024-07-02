@@ -8,7 +8,7 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, World, Cube, ActivePlayer, Region};
+use gamelord_types::{Player, World, Cube, ActivePlayer, Region, CubePermissions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -17,14 +17,14 @@ lazy_static! {
     static ref WORLD_CONFIG: RwLock<HashMap<String, HashMap<u64, Cube>>> = RwLock::new(HashMap::new());
 }
 
-lazy_static! {
-    static ref WORLD_SHARABLE_CONFIG: RwLock<World> = RwLock::new(World { regions: Vec::new() });
-}
 // Remember to change the type key type here to Address.
 lazy_static! {
     static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
 }
 
+lazy_static! {
+    static ref CUBE_PERMISSIONS: RwLock<HashMap<Cube, CubePermissions>> = RwLock::new(HashMap::new());
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequest {
@@ -85,10 +85,14 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 let owner_cubes = world_config.entry(region.owner().clone()).or_insert_with(HashMap::new);
                 for cube in region.cubes() {
                     owner_cubes.insert(cube.identifier(), cube.clone());
+            
+                    let cube_permissions = CubePermissions {
+                        authorized_players: vec![region.owner().clone()], // Add the owner as an authorized player
+                        everyone_allowed: true,
+                    };
+                    CUBE_PERMISSIONS.write().unwrap().insert(cube.clone(), cube_permissions);
                 }
-            }
-            let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
-            *sharable_config = World { regions: regions.clone() };            
+            }        
 
             println!("World generated with regions: {:?}", &regions);
             Response::new()
@@ -100,8 +104,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
         GamelordRequest::DeleteWorld => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
-            let mut sharable_config = WORLD_SHARABLE_CONFIG.write().unwrap();
-            sharable_config.regions.clear();
+            
 
             println!("World deleted");
             Response::new()
@@ -114,7 +117,8 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
             if let Some(active_player) = active_players.get_mut(player.kinode_id()) {
                 let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
-                let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
+                let cube_permissions = CUBE_PERMISSIONS.read().unwrap().get(&cube).cloned().unwrap();
+                let (response_message, is_valid) = valid_position(&world_config, &player, &cube, Some(&cube_permissions));
                 if is_valid {
                     active_player.current_cube = cube.clone();
                     println!("Active player {} moved to cube: {:?}", player.kinode_id(), cube);
@@ -200,9 +204,7 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
-                                let read_guard = WORLD_SHARABLE_CONFIG.read().unwrap();
-                                let serialized_world_config = serde_json::to_string(&*read_guard).expect("error serializing");
-                                http::send_response(http::StatusCode::OK, None, serialized_world_config.into_bytes());
+                                
                             },
                             "/api/available_regions" => {
                                 let regions = vec!["Region1", "Region2", "Region3"];
@@ -229,6 +231,7 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                             "/api/selectRegion" => {
                                 // let response = serde_json::to_string(&{"message": "Region selected successfully"}).unwrap();
                                 // http::send_response(http::StatusCode::OK, None, response.into_bytes());
+                                http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
                             },
                             _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }

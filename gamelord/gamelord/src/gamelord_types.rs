@@ -75,6 +75,12 @@ impl Hash for Cube {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CubePermissions {
+    pub everyone_allowed: bool,
+    pub authorized_players: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
     pub cubes: Vec<Cube>,
     pub owner: String,
