@@ -71,10 +71,7 @@ public class MCKinodeWS extends WebSocketClient {
                 + "\"message_type\": \"Text\","
                 + "\"body\": {"
                 + "\"PlayerJoinRequest\": {"
-                + "\"player\": {"
-                + "\"kinode_id\": \"fake2.dev\","
                 + "\"minecraft_player_name\": \"" + playerName + "\""
-                + "}"
                 + "}"
                 + "}"
                 + "}";
@@ -83,29 +80,40 @@ public class MCKinodeWS extends WebSocketClient {
         // Handle the response
         onMessageResponse = (response) -> {
             JSONObject jsonResponse = new JSONObject(response);
-            JSONArray addPlayerArray = jsonResponse.getJSONArray("AddPlayer");
-            if (addPlayerArray.length() > 0) {
-                boolean success = addPlayerArray.getBoolean(0);
-                String messageResponse = addPlayerArray.getString(1);
-                JSONObject cubeData = addPlayerArray.getJSONObject(2);
+            JSONArray responseArray;
+            boolean success;
+            String messageResponse;
 
+            if (jsonResponse.has("AddPlayer")) {
+                responseArray = jsonResponse.getJSONArray("AddPlayer");
+                success = responseArray.getBoolean(0);
+                messageResponse = responseArray.getString(1);
+            } else if (jsonResponse.has("AddPlayerFailed")) {
+                responseArray = jsonResponse.getJSONArray("AddPlayerFailed");
+                success = responseArray.getBoolean(0);
+                messageResponse = responseArray.getString(1);
+            } else {
+                System.err.println("Unexpected response format: " + response);
+                return;
+            }
+
+            if (success) {
+                JSONObject cubeData = responseArray.getJSONObject(2);
                 JSONArray center = cubeData.getJSONArray("center");
                 int x = center.getInt(0);
                 int y = center.getInt(1);
                 int z = center.getInt(2);
 
-                if (success) {
-                    MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
-                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
-                        Location spawnLocation = new Location(event.getPlayer().getWorld(), x, y, z);
-                        event.getPlayer().teleport(spawnLocation);
-                    });
-                } else {
-                    MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
-                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
-                        event.getPlayer().kickPlayer("You are not allowed to join the server.");
-                    });
-                }
+                MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
+                Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                    Location spawnLocation = new Location(event.getPlayer().getWorld(), x, y, z);
+                    event.getPlayer().teleport(spawnLocation);
+                });
+            } else {
+                MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
+                Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                    event.getPlayer().kickPlayer("You are not allowed to join the server.");
+                });
             }
         };
     }
