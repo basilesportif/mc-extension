@@ -113,11 +113,10 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 .unwrap();
             Ok(())
         },
+        // figure out where the deletion of the world can come from
         GamelordRequest::DeleteWorld => {
             let mut world_config = WORLD_CONFIG.write().unwrap();
             world_config.clear();
-            
-
             println!("World deleted");
             Response::new()
                 .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
@@ -151,13 +150,13 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             }
             Ok(())
         },
+        // this comes from MC-Driver
         GamelordRequest::PlayerSpawnRequest{player} => {
             println!("Gamelord request matched");
             println!("Player spawn request received for player: {:?}", player);
             let world_config = WORLD_CONFIG.read().unwrap();
             if world_config.contains_key(player.kinode_id()) {
-                /*  bring this back and refactor it to handle the new logic
-                let available_cubes = world_config.get(player.kinode_id()).map_or_else(|| Vec::new(), |cubes| cubes.values().cloned().collect());
+                let available_cubes = world_config.get(player.kinode_id()).map_or_else(|| Vec::new(), |region| region.cubes.values().cloned().collect());
                 // for now its the first one, let's set the first available cube as the players 'spawn' point
                 let spawn_cube: &Cube = available_cubes.get(0).expect("No available cubes");
                 let active_player = ActivePlayer {
@@ -173,7 +172,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                     .body(response)
                     .send()
                     .unwrap();
-                */
+                
             } else {
                 let response = serde_json::to_vec(&GamelordResponse::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
                 Response::new()
