@@ -10,6 +10,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 
 import org.kinode.MCKinodeWS;
 import org.kinode.WorldInfo;
@@ -25,6 +26,9 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     private static final int ALLOWED_BOUNDS = 50000;
     private boolean positionDisplayToggle = false;
     private MCKinodeWS client;
+
+    // Add a field to track the last cube the player was in
+    private String prevCube = "";
 
     @Override
     public void onEnable() {
@@ -86,29 +90,27 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Location toLocation = event.getTo();
-        // don't print pitch & yaw
-        if (prevLocation != null && toLocation.getX() == prevLocation.getX() && toLocation.getY() == prevLocation.getY()
-                && toLocation.getZ() == prevLocation.getZ()) {
-            return;
-        }
-        prevLocation = toLocation;
-        /*
-         * getLogger().info(event.getPlayer().getName() + " moved to X: " +
-         * toLocation.getX() + " Y: " + toLocation.getY()
-         * + " Z: " + toLocation.getZ());
-         */
+        Player player = event.getPlayer();
+        int cubeSize = 50; // Edge length of each cube
 
-        if (positionDisplayToggle) {
-            event.getPlayer()
-                    .sendMessage(
-                            Math.round(toLocation.getX()) + "," + Math.round(toLocation.getY()) + ","
-                                    + Math.round(toLocation.getZ()));
-        }
+        // Calculate the base coordinates of the cube the player is in
+        int baseX = (toLocation.getBlockX() / cubeSize) * cubeSize;
+        int baseY = (toLocation.getBlockY() / cubeSize) * cubeSize;
+        int baseZ = (toLocation.getBlockZ() / cubeSize) * cubeSize;
 
-        if (Math.abs(toLocation.getX()) > ALLOWED_BOUNDS || Math.abs(toLocation.getY()) > ALLOWED_BOUNDS
-                || Math.abs(toLocation.getZ()) > ALLOWED_BOUNDS) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage("Movement outside allowed bounds is not permitted.");
+        // Calculate the center of the cube
+        int centerX = baseX + cubeSize / 2;
+        int centerY = baseY + cubeSize / 2;
+        int centerZ = baseZ + cubeSize / 2;
+
+        // Create a unique identifier for the cube
+        String currentCube = "Base: " + baseX + "," + baseY + "," + baseZ + " Center: " + centerX + "," + centerY + "," + centerZ;
+
+        // Check if the player has moved to a new cube
+        if (!currentCube.equals(prevCube)) {
+            getLogger().info("Player has moved to a new cube: " + currentCube);
+            player.sendMessage("You are now in a new cube: " + currentCube);
+            prevCube = currentCube; // Update the previous cube tracker
         }
     }
 
