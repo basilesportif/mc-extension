@@ -1,5 +1,5 @@
 use kinode_process_lib::{
-    await_message, call_init, http::{self}, println, Address, Message, Response
+    await_message, call_init, http::{self}, println, Address, Message, Response, get_blob   
 };
 
 use lazy_static::lazy_static;
@@ -8,22 +8,28 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{Player, World, Cube, ActivePlayer, Region, CubePermissions};
+use gamelord_types::{Player, ConfigurationRegion, Cube, ActivePlayer, Region};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 //Here is where we store the CURRENT world config
 lazy_static! {
-    static ref WORLD_CONFIG: RwLock<HashMap<String, HashMap<u64, Cube>>> = RwLock::new(HashMap::new());
+    static ref WORLD_CONFIG: RwLock<HashMap<String, Region>> = RwLock::new(HashMap::new());
 }
 
+lazy_static!{
+    static ref CUBE_TO_OWNER: RwLock<HashMap<Cube, String>> = RwLock::new(HashMap::new());
+}
 // Remember to change the type key type here to Address.
 lazy_static! {
     static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
 }
 
-lazy_static! {
-    static ref CUBE_PERMISSIONS: RwLock<HashMap<Cube, CubePermissions>> = RwLock::new(HashMap::new());
+
+// Function to get the owner of a cube
+fn get_cube_owner(cube: &Cube) -> Option<String> {
+    let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
+    cube_to_owner.get(cube).cloned()
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -31,7 +37,7 @@ enum GamelordRequest {
     ValidateMove { player: Player, cube: Cube },
     PlayerSpawnRequest { player: Player },
     PlayerLeaveRequest { player: Player },
-    GenerateWorld { regions: Vec<Region> },
+    GenerateWorld { regions: Vec<ConfigurationRegion> },
     DeleteWorld,
 }
 impl GamelordRequest {
@@ -78,27 +84,33 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
     match GamelordRequest::parse(message.body())? {
         GamelordRequest::GenerateWorld { regions } => {
+            let regions_clone = regions.clone();
             let mut world_config = WORLD_CONFIG.write().unwrap();
+            let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
             world_config.clear();
+            cube_to_owner.clear();
             
-            for region in &regions {
-                let owner_cubes = world_config.entry(region.owner().clone()).or_insert_with(HashMap::new);
-                for cube in region.cubes() {
-                    owner_cubes.insert(cube.identifier(), cube.clone());
-            
-                    let cube_permissions = CubePermissions {
-                        authorized_players: vec![region.owner().clone()], // Add the owner as an authorized player
-                        everyone_allowed: true,
-                    };
-                    CUBE_PERMISSIONS.write().unwrap().insert(cube.clone(), cube_permissions);
+            for region in regions { // Assuming regions is a Vec<ConfigurationRegion>
+                let mut cubes_transformed = HashMap::new();
+                for cube in &region.cubes {
+                    let cube_id = cube.identifier(); // Use the identifier method to get the key
+                    cubes_transformed.insert(cube_id.clone(), cube.clone()); // Insert into the new HashMap
+                    cube_to_owner.insert(cube.clone(), region.owner.clone()); // Map cube to owner
                 }
-            }        
 
-            println!("World generated with regions: {:?}", &regions);
+                let new_region = Region {
+                    cubes: cubes_transformed, // Use the transformed HashMap
+                    owner: region.owner.clone(),
+                    everyone_allowed: region.everyone_allowed,
+                    authorized_players: region.authorized_players.clone(),
+                };
+                world_config.insert(region.owner.clone(), new_region);
+            }
+            println!("World generated with regions: {:?}", &regions_clone); // Use cloned data
             Response::new()
-            .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
-            .send()
-            .unwrap();
+                .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
+                .send()
+                .unwrap();
             Ok(())
         },
         GamelordRequest::DeleteWorld => {
@@ -108,17 +120,16 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
 
             println!("World deleted");
             Response::new()
-            .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
-            .send()
-            .unwrap();
+                .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
+                .send()
+                .unwrap();
             Ok(())
         },
         GamelordRequest::ValidateMove{player, cube} => {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
             if let Some(active_player) = active_players.get_mut(player.kinode_id()) {
                 let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
-                let cube_permissions = CUBE_PERMISSIONS.read().unwrap().get(&cube).cloned().unwrap();
-                let (response_message, is_valid) = valid_position(&world_config, &player, &cube, Some(&cube_permissions));
+                let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
                 if is_valid {
                     active_player.current_cube = cube.clone();
                     println!("Active player {} moved to cube: {:?}", player.kinode_id(), cube);
@@ -145,9 +156,10 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             println!("Player spawn request received for player: {:?}", player);
             let world_config = WORLD_CONFIG.read().unwrap();
             if world_config.contains_key(player.kinode_id()) {
+                /*  bring this back and refactor it to handle the new logic
                 let available_cubes = world_config.get(player.kinode_id()).map_or_else(|| Vec::new(), |cubes| cubes.values().cloned().collect());
                 // for now its the first one, let's set the first available cube as the players 'spawn' point
-                let spawn_cube = available_cubes.get(0).expect("No available cubes");
+                let spawn_cube: &Cube = available_cubes.get(0).expect("No available cubes");
                 let active_player = ActivePlayer {
                     kinode_id: player.kinode_id().clone(),
                     minecraft_player_name: player.minecraft_player_name().clone(),
@@ -161,6 +173,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                     .body(response)
                     .send()
                     .unwrap();
+                */
             } else {
                 let response = serde_json::to_vec(&GamelordResponse::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
                 Response::new()
@@ -221,8 +234,44 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/api/loadWorld" => {
-                                //add logic
-                                http::send_response(http::StatusCode::OK, None, b"World Loaded".to_vec());
+                                // Directly access the body (assuming it's already fully available)
+                                let body = get_blob().unwrap_or_default();
+                                println!("body: {:?}", body);
+                                let body_str = String::from_utf8_lossy(&body.bytes);
+                                println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
+                                match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
+                                    Ok(regions) => {
+                                        let mut world_config = WORLD_CONFIG.write().unwrap();
+                                        let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
+                                        world_config.clear();
+                                        cube_to_owner.clear();
+
+                                        // Process each ConfigurationRegion
+                                        for region in regions {
+                                            let mut cubes_transformed = HashMap::new();
+                                            for cube in &region.cubes {
+                                                let cube_id = cube.identifier(); // Assuming `identifier` method exists
+                                                cubes_transformed.insert(cube_id.clone(), cube.clone());
+                                                cube_to_owner.insert(cube.clone(), region.owner.clone());
+                                            }
+
+                                            let new_region = Region {
+                                                cubes: cubes_transformed,
+                                                owner: region.owner.clone(),
+                                                everyone_allowed: region.everyone_allowed,
+                                                authorized_players: region.authorized_players.clone(),
+                                            };
+                                            world_config.insert(region.owner.clone(), new_region);
+                                        }
+
+                                        println!("World loaded from request");
+                                        http::send_response(http::StatusCode::OK, None, b"World Loaded".to_vec());
+                                    },
+                                    Err(e) => {
+                                        println!("Failed to parse world data: {:?}", e);
+                                        http::send_response(http::StatusCode::BAD_REQUEST, None, b"Invalid world data".to_vec());
+                                    }
+                                }
                             },
                             "/api/addPlayer" => {
                                 // add logic
@@ -273,7 +322,7 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
-    for path in ["/home", "/world_config"] {
+    for path in ["/api/loadWorld", "/world_config"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();

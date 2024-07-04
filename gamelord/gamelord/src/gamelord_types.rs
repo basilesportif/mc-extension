@@ -2,6 +2,8 @@
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 // Note that the name might need to be changed
 pub struct Player {
@@ -25,19 +27,6 @@ pub struct ActivePlayer {
     pub current_cube: Cube,
 }
 
-impl ActivePlayer {
-    pub fn kinode_id(&self) -> &String {
-        &self.kinode_id
-    }
-
-    pub fn minecraft_player_name(&self) -> &String {
-        &self.minecraft_player_name
-    }
-
-    pub fn current_cube(&self) -> &Cube {
-        &self.current_cube
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {
@@ -46,13 +35,6 @@ pub struct Cube {
 }
 
 impl Cube {
-    pub fn center(&self) -> &(i32, i32, i32) {
-        &self.center
-    }
-
-    pub fn side_length(&self) -> i32 {
-        self.side_length
-    }
 
     pub fn identifier(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -75,26 +57,20 @@ impl Hash for Cube {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CubePermissions {
+pub struct Region {
+    pub cubes: HashMap<u64, Cube>,
+    pub owner: String,
+    pub everyone_allowed: bool,
+    pub authorized_players: Vec<String>,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConfigurationRegion {
+    pub cubes: Vec<Cube>,
+    pub owner: String,
     pub everyone_allowed: bool,
     pub authorized_players: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Region {
-    pub cubes: Vec<Cube>,
-    pub owner: String,
-}
-
-impl Region {
-    pub fn cubes(&self) -> &Vec<Cube> {
-        &self.cubes
-    }
-
-    pub fn owner(&self) -> &String {
-        &self.owner
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct World {

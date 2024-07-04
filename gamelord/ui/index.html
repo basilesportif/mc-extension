@@ -92,9 +92,9 @@
             <h2>Load Preconfigured World</h2>
             <form>
                 <div class="form-group">
-                    <input type="file" id="preConfigWorld" name="preConfigWorld" accept=".json">
+                    <input type="file" id="fileInput" accept=".json">
                 </div>
-                <button type="button" onclick="loadPreconfiguredWorld()">Load World</button>
+                <button type="button" onclick="uploadFile()">Upload File</button>
             </form>
         </div>
     </div>
@@ -105,27 +105,77 @@
             document.getElementById("loadPreconfiguredWorld").addEventListener("click", loadPreconfiguredWorld);
         });
 
-        async function promptRegionSelection(event) {
-            event.preventDefault();  // Ensure to prevent the default form submission
-            const minecraftName = document.getElementById('minecraftName').value;
-            const playerID = document.getElementById('playerID').value;
-            if (minecraftName && playerID) {
-                const url = `/api/available_regions?minecraftName=${encodeURIComponent(minecraftName)}&playerID=${encodeURIComponent(playerID)}`;
-                await fetchGetData(url);
-            } else {
-                alert('Please enter both Minecraft Name and Kinode ID.');
+    function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            try {
+                const jsonData = JSON.parse(text); // Parse text to JSON
+                const url = 'http://localhost:8080/gamelord:gamelord:basilesex.os/api/loadWorld'; // Your API endpoint to handle the JSON data
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(jsonData) // Send JSON data as string
+                });
+
+                if (response.ok) {
+                    console.log("JSON uploaded successfully.");
+                    document.getElementById("response-output").innerText = "JSON uploaded successfully.";
+                } else {
+                    throw new Error('Failed to upload JSON');
+                }
+            } catch (error) {
+                console.error("Error reading or sending file:", error);
+                document.getElementById("response-output").innerText = `Error: ${error.message}`;
             }
-        }
+        };
+        reader.readAsText(file); // Read the file as text
+    } else {
+        console.log("No file selected.");
+        document.getElementById("response-output").innerText = "No file selected.";
+    }
+} // Added missing closing brace here
 
         async function loadPreconfiguredWorld() {
             const fileInput = document.getElementById('preConfigWorld');
             const file = fileInput.files[0];
             if (file) {
-                const formData = new FormData();
-                formData.append('worldFile', file);
-                await fetchPostData('/api/loadWorld', formData);
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const text = e.target.result;
+                    await fetchPostData('http://localhost:8080/gamelord:gamelord:basilesex.os/api/loadWorld', text);
+                };
+                reader.readAsText(file);
             } else {
                 alert('Please select a JSON file to load the preconfigured world.');
+            }
+        }
+
+        async function fetchPostData(url, data) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: data
+                });
+
+                if (response.ok) {
+                    const responseData = await response.json();
+                    document.getElementById("response-output").innerText = `World loaded successfully: ${responseData.message}`;
+                } else {
+                    console.error("Failed to post data:", response.status, response.statusText);
+                    document.getElementById("response-output").innerText = `Error: ${response.statusText}`;
+                }
+            } catch (error) {
+                console.error("Error posting data:", error);
+                document.getElementById("response-output").innerText = `Error: ${error.message}`;
             }
         }
 
@@ -161,30 +211,72 @@
 
         function selectRegion(region) {
             console.log("Selected region:", region);
-            // Additional code to handle the selected region
+            const playerID = document.getElementById('playerID').value; // Get the player ID from the input field
+            const url = '/api/selectRegion'; // Endpoint where the POST request should be sent
+            const data = { region: region, playerID: playerID }; // Data to be sent with the POST request, including the player ID
+
+            fetchPostData(url, data);
         }
 
-        async function fetchPostData(url, body) {
+        async function fetchPostData(url, data) {
             try {
-                const options = {
+                const response = await fetch(url, {
                     method: 'POST',
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ account: body })
-                };
-                const response = await fetch(url, options);
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
                 if (response.ok) {
-                    const responseData = await response.text();
-                    document.getElementById("response-output").innerText = responseData;
-                    console.log("Response:", responseData);
+                    const responseData = await response.json(); // Assuming the server responds with JSON
+                    console.log("Server Response:", responseData);
+                    document.getElementById("response-output").innerText = `Region selected successfully: ${responseData.message}`;
                 } else {
-                    console.error("Failed to fetch data:", response.status, response.statusText);
+                    console.error("Failed to post data:", response.status, response.statusText);
                     document.getElementById("response-output").innerText = `Error: ${response.statusText}`;
                 }
             } catch (error) {
-                console.error("Error fetching data:", error);
+                console.error("Error posting data:", error);
                 document.getElementById("response-output").innerText = `Error: ${error.message}`;
             }
         }
+
+        function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const text = e.target.result;
+                    try {
+                        const jsonData = JSON.parse(text); // Parse text to JSON
+                        const url = 'http://localhost:8080/gamelord:gamelord:basilesex.os/api/loadWorld'; // Your API endpoint to handle the JSON data
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(jsonData) // Send JSON data as string
+                        });
+
+                        if (response.ok) {
+                            console.log("JSON uploaded successfully.");
+                            document.getElementById("response-output").innerText = "JSON uploaded successfully.";
+                        } else {
+                            throw new Error('Failed to upload JSON');
+                        }
+                    } catch (error) {
+                        console.error("Error reading or sending file:", error);
+                        document.getElementById("response-output").innerText = `Error: ${error.message}`;
+                    }
+                };
+                reader.readAsText(file); // Read the file as text
+            } else {
+                console.log("No file selected.");
+                document.getElementById("response-output").innerText = "No file selected.";
+            }
+        } // Added missing closing brace here
     </script>
 </body>
 </html>
