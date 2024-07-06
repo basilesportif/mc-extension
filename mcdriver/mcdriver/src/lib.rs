@@ -36,18 +36,18 @@ fn is_expected_channel_id(
 }
 
 
-fn process_request(player: &Player, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
-    println!("Processing request for player: {:?}", player);
+fn process_request(minecraft_id: &String, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
+    println!("Processing request for player: {:?}", minecraft_id);
     let action = match method {
         Method::ValidateMove { ValidateMove: _ } => serde_json::json!({
             "ValidateMove": {
-                "player": player,
+                "minecraft_id": minecraft_id,
                 "cube": cube.unwrap()  // probably a bad place to unwrap
             }
         }),
         Method::PlayerJoinRequest { PlayerJoinRequest: _ } => serde_json::json!({
             "PlayerSpawnRequest": {
-                "player": player,
+                "minecraft_id": minecraft_id,
             }
         }),
         _ => return Err(anyhow::anyhow!("Unsupported request type")),
@@ -87,6 +87,14 @@ fn handle_ws_message(
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             println!("WSOPEN channel open: {}", channel_id);
             *connection = Some(Connection { channel_id });
+            send_ws_push(
+                channel_id,
+                http::WsMessageType::Text,
+                LazyLoadBlob {
+                    mime: Some("text/plain".to_string()),
+                    bytes: "Connection established".as_bytes().to_vec(),
+                },
+            );
         }
         http::HttpServerRequest::WebSocketClose(ref channel_id) => {
             if !is_expected_channel_id(connection, channel_id)? {
@@ -121,7 +129,7 @@ fn handle_ws_message(
 
                     match ws_message.method() {
                         Method::ValidateMove { ValidateMove } => {
-                            let outcome = process_request(ValidateMove.player(),
+                            let outcome = process_request(ValidateMove.minecraft_id(),
                                                             Some(ValidateMove.cube()),
                                                           &Method::ValidateMove { ValidateMove: (*ValidateMove).clone() })?;
                             let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
@@ -137,7 +145,7 @@ fn handle_ws_message(
                             println!("Position check request received.");
                         }
                         Method::PlayerJoinRequest { PlayerJoinRequest } => {
-                            let outcome = process_request(PlayerJoinRequest.player(),
+                            let outcome = process_request(&PlayerJoinRequest.minecraft_player_name().clone(),
                                                             None,
                                                           &Method::PlayerJoinRequest {
                                                              PlayerJoinRequest: (*PlayerJoinRequest).clone() 
@@ -152,13 +160,24 @@ fn handle_ws_message(
                                     bytes: serialized_message.into_bytes(),
                                 },
                             );
-                            println!("Player join request received for player: {:?}", PlayerJoinRequest.player());
+                            println!("Player join request received for player: {:?}", PlayerJoinRequest.minecraft_player_name());
                         }
                         // Add other message types here
                     }
                     return Ok(());
                 }
-
+                http::WsMessageType::Ping => {
+                    send_ws_push(
+                        *channel_id,
+                        http::WsMessageType::Pong,
+                        LazyLoadBlob {
+                            mime: None,
+                            bytes: vec![],
+                        },
+                    );
+                    println!("Ping received, pong sent.");
+                    return Ok(());
+                }
                 _ => {
                     return Err(anyhow::anyhow!("Unsupported message type"));
                 }

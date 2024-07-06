@@ -9,7 +9,8 @@
             "vfs:distro:sys"
         ],
         "grant_capabilities": [
-            "gamelord:gamelord:basilesex.os"
+            "gamelord:gamelord:basilesex.os",
+            "mcdriver:mcdriver:basilesex.os"
         ],
         "public": true
     }

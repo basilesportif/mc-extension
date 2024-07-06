@@ -48,13 +48,13 @@ pub struct Cube {
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValidateMove {
-    player: Player,
-    cube: Cube,
+    minecraft_id: String,
+    cube: Cube
 }
 
 impl ValidateMove {
-    pub fn player(&self) -> &Player {
-        &self.player
+    pub fn minecraft_id(&self) -> &String {
+        &self.minecraft_id
     }
     pub fn cube(&self) -> &Cube {
         &self.cube
@@ -63,12 +63,12 @@ impl ValidateMove {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlayerJoinRequest {
-    player: Player,
+    minecraft_player_name: String,
 }
 
 impl PlayerJoinRequest {
-    pub fn player(&self) -> &Player {
-        &self.player
+    pub fn minecraft_player_name(&self) -> &String {
+        &self.minecraft_player_name
     }
 }
 

@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 // Note that the name might need to be changed
 pub struct Player {
     pub kinode_id: String,
@@ -35,7 +35,6 @@ pub struct Cube {
 }
 
 impl Cube {
-
     pub fn identifier(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);

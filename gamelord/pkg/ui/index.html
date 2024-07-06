@@ -77,7 +77,7 @@
                     <input type="text" id="minecraftName" name="minecraftName" placeholder="Enter Minecraft Name">
                 </div>
                 <div class="form-group">
-                    <input type="text" id="playerID" name="playerID" placeholder="Enter Kinode ID">
+                    <input type="text" id="kinode_id" name="kinode_id" placeholder="Enter Kinode ID">
                 </div>
                 <button type="button" onclick="addPlayer()">Submit Details</button>
             </form>
@@ -100,9 +100,36 @@
 
         function addPlayer() {
             const minecraftName = document.getElementById('minecraftName').value;
-            const playerID = document.getElementById('playerID').value;
-            console.log("Adding player:", minecraftName, "with ID:", playerID);
-            document.getElementById("response-output").innerText = `Player ${minecraftName} with ID ${playerID} added successfully.`;
+            const kinode_id = document.getElementById('kinode_id').value;
+            const playerData = {
+                kinode_id: kinode_id,
+                minecraft_player_name: minecraftName
+            };
+
+            const url = 'http://localhost:8080/gamelord:gamelord:basilesex.os/api/addPlayer'; // Adjust the URL as needed
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(playerData)
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json(); // or response.text() if the response is not JSON
+                } else {
+                    throw new Error('Failed to add player');
+                }
+            })
+            .then(data => {
+                console.log("Player added successfully:", data);
+                document.getElementById("response-output").innerText = `Player ${minecraftName} with ID ${playerID} added successfully.`;
+            })
+            .catch(error => {
+                console.error("Error adding player:", error);
+                document.getElementById("response-output").innerText = `Error: ${error.message}`;
+            });
         }
 
         function uploadFile() {

@@ -20,22 +20,19 @@ lazy_static! {
 lazy_static!{
     static ref CUBE_TO_OWNER: RwLock<HashMap<Cube, String>> = RwLock::new(HashMap::new());
 }
-// Remember to change the type key type here to Address.
+// Remember to change the type key type here to Address. (maybe not, it might be a MC username)
 lazy_static! {
     static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
 }
-
-
-// Function to get the owner of a cube
-fn get_cube_owner(cube: &Cube) -> Option<String> {
-    let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
-    cube_to_owner.get(cube).cloned()
+lazy_static! {
+    static ref ALLOWED_PLAYERS: RwLock<HashMap<String, Player>> = RwLock::new(HashMap::new());
 }
+
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequest {
-    ValidateMove { player: Player, cube: Cube },
-    PlayerSpawnRequest { player: Player },
+    ValidateMove { minecraft_id: String, cube: Cube },
+    PlayerSpawnRequest { minecraft_id: String },
     PlayerLeaveRequest { player: Player },
     GenerateWorld { regions: Vec<ConfigurationRegion> },
     DeleteWorld,
@@ -124,49 +121,100 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 .unwrap();
             Ok(())
         },
-        GamelordRequest::ValidateMove{player, cube} => {
+        GamelordRequest::ValidateMove { minecraft_id, cube } => {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
-            if let Some(active_player) = active_players.get_mut(player.kinode_id()) {
-                let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
-                let (response_message, is_valid) = valid_position(&world_config, &player, &cube);
-                if is_valid {
-                    active_player.current_cube = cube.clone();
-                    println!("Active player {} moved to cube: {:?}", player.kinode_id(), cube);
+            if active_players.contains_key(&minecraft_id) {
+                println!("Player {} is active in the game.", minecraft_id);
+                if let Some(active_player) = active_players.get_mut(&minecraft_id) {
+                    let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
+                    let (response_message, is_valid) = valid_position(&world_config, &*active_player, &cube);
+                    if !is_valid {
+                        // If the position is not valid, check the cube ownership and permissions
+                        let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
+                        if let Some(owner) = cube_to_owner.get(&cube) {
+                            let region = world_config.get(owner).unwrap();
+                            if region.everyone_allowed || region.authorized_players.contains(&active_player.kinode_id) {
+                                // If everyone is allowed or the player is an authorized player, consider the move valid
+                                active_player.current_cube = cube.clone();
+                                println!("Active player {} moved to cube: {:?}", active_player.kinode_id, cube);
+                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(true, "Move allowed by owner permissions.".to_string())).unwrap();
+                                Response::new()
+                                    .body(response)
+                                    .send()
+                                    .unwrap();
+                            } else {
+                                // If not allowed, send a negative response
+                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(false, "Move not allowed by owner permissions.".to_string())).unwrap();
+                                Response::new()
+                                    .body(response)
+                                    .send()
+                                    .unwrap();
+                            }
+                        } else {
+                            // If no owner found, send a negative response
+                            let response = serde_json::to_vec(&GamelordResponse::ValidateMove(true, "Cube unclaimed, allowed to pass.".to_string())).unwrap();
+                            Response::new()
+                                .body(response)
+                                .send()
+                                .unwrap();
+                        }
+                    } else {
+                        // If the initial position check is valid, proceed as before
+                        active_player.current_cube = cube.clone();
+                        println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
+                        let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
+                        Response::new()
+                            .body(response)
+                            .send()
+                            .unwrap();
+                    }
                 }
-
-                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
+            } else {
+                println!("Player {} is not active in the game.", minecraft_id);
+                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(false, "Player not active in the game.".to_string())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
                     .unwrap();
-
-            } else {
-                println!("Player {} is not active in the game.", player.kinode_id());
-                Response::new()
-                    .body(b"Player not in game.")
-                    .send()
-                    .unwrap();
-                // To do - send response for inactive player
             }
             Ok(())
         },
         // this comes from MC-Driver
-        GamelordRequest::PlayerSpawnRequest{player} => {
+        GamelordRequest::PlayerSpawnRequest{minecraft_id} => {
             println!("Gamelord request matched");
-            println!("Player spawn request received for player: {:?}", player);
-            let world_config = WORLD_CONFIG.read().unwrap();
-            if world_config.contains_key(player.kinode_id()) {
-                let available_cubes = world_config.get(player.kinode_id()).map_or_else(|| Vec::new(), |region| region.cubes.values().cloned().collect());
+            println!("Player spawn request received for player: {:?}", minecraft_id);
+            let world_config = match WORLD_CONFIG.read() {
+                Ok(config) => config,
+                Err(e) => {
+                    println!("Failed to acquire read lock on WORLD_CONFIG: {:?}", e);
+                    return Ok(());
+                }
+            };
+            let allowed_players = match ALLOWED_PLAYERS.read() {
+                Ok(players) => players,
+                Err(e) => {
+                    println!("Failed to acquire read lock on ALLOWED_PLAYERS: {:?}", e);
+                    return Ok(());
+                }
+            };
+            println!("checked whether player is allowed beginning of function");
+            if allowed_players.contains_key(&minecraft_id) {
+                let player = allowed_players.get(&minecraft_id).expect("Player should exist");
+                println!("player exists");
+                //let available_cubes = world_config.get("gamelord").map_or_else(|| Vec::new(), |region| region.cubes.values().cloned().collect());
                 // for now its the first one, let's set the first available cube as the players 'spawn' point
-                let spawn_cube: &Cube = available_cubes.get(0).expect("No available cubes");
+                let spawn_cube = Cube { center: (0, 0, 0), side_length: 50 };
+                println!("available cubes found");
                 let active_player = ActivePlayer {
                     kinode_id: player.kinode_id().clone(),
                     minecraft_player_name: player.minecraft_player_name().clone(),
                     current_cube: spawn_cube.clone(),
                 };
+                println!("active player created");
                 let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
-                active_players.insert(player.kinode_id().clone(), active_player);
-                println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
+                println!("active players inserted");
+                active_players.insert(player.minecraft_player_name().clone(), active_player);
+                //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
                 let response = serde_json::to_vec(&GamelordResponse::AddPlayer(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
                 Response::new()
                     .body(response)
@@ -180,7 +228,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                     .send()
                     .unwrap();
                 
-                println!("Player {} is not allowed on the server", player.kinode_id());
+                println!("Player {} is not allowed on the server", minecraft_id);
                 Response::new()
                     .body(b"Player not added.")
                     .send()
@@ -216,12 +264,11 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
-                                
-                            },
-                            "/api/available_regions" => {
-                                let regions = vec!["Region1", "Region2", "Region3"];
-                                let response = serde_json::to_string(&regions).unwrap();
+                                /*
+                                let world_config = WORLD_CONFIG.read().unwrap();
+                                let response = serde_json::to_string(&world_config).unwrap();
                                 http::send_response(http::StatusCode::OK, None, response.into_bytes());
+                                 */
                             },
                             _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }
@@ -273,13 +320,24 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                                 }
                             },
                             "/api/addPlayer" => {
-                                // add logic
-                                http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
-                            },
-                            "/api/selectRegion" => {
-                                // let response = serde_json::to_string(&{"message": "Region selected successfully"}).unwrap();
-                                // http::send_response(http::StatusCode::OK, None, response.into_bytes());
-                                http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
+                                let body = get_blob().unwrap_or_default();
+                                println!("body: {:?}", body);
+                                let body_str = String::from_utf8_lossy(&body.bytes);
+                                println!("body_str: {:?}", body_str);
+                                match serde_json::from_str::<Player>(&body_str) {
+                                    Ok(player) => {
+                                        println!("player: {:?}", player);
+                                        let player_clone = player.clone(); // Clone player before insertion
+                                        let mut allowed_players = ALLOWED_PLAYERS.write().unwrap();
+                                        allowed_players.insert(player.minecraft_player_name().clone(), player);
+                                        println!("Player {} added to allowed players", player_clone.minecraft_player_name());
+                                        http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
+                                    },
+                                    Err(e) => {
+                                        println!("Failed to parse player data: {:?}", e);
+                                        http::send_response(http::StatusCode::BAD_REQUEST, None, b"Invalid player data".to_vec());
+                                    }
+                                }
                             },
                             _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }
@@ -321,7 +379,7 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
-    for path in ["/api/loadWorld", "/world_config"] {
+    for path in ["/api/loadWorld", "/world_config", "/api/addPlayer"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
@@ -336,3 +394,4 @@ fn init(our: Address) {
     }
     
 }
+
