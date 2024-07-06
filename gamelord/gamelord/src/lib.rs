@@ -151,7 +151,9 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                                     .unwrap();
                             }
                         } else {
-                            // If no owner found, send a negative response
+                            // If no owner found, allow the move and update the active player's current cube
+                            active_player.current_cube = cube.clone();
+                            println!("Active player {} moved to unclaimed cube: {:?}", active_player.kinode_id, cube);
                             let response = serde_json::to_vec(&GamelordResponse::ValidateMove(true, "Cube unclaimed, allowed to pass.".to_string())).unwrap();
                             Response::new()
                                 .body(response)
@@ -183,13 +185,6 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
         GamelordRequest::PlayerSpawnRequest{minecraft_id} => {
             println!("Gamelord request matched");
             println!("Player spawn request received for player: {:?}", minecraft_id);
-            let world_config = match WORLD_CONFIG.read() {
-                Ok(config) => config,
-                Err(e) => {
-                    println!("Failed to acquire read lock on WORLD_CONFIG: {:?}", e);
-                    return Ok(());
-                }
-            };
             let allowed_players = match ALLOWED_PLAYERS.read() {
                 Ok(players) => players,
                 Err(e) => {
@@ -264,11 +259,14 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
-                                /*
                                 let world_config = WORLD_CONFIG.read().unwrap();
-                                let response = serde_json::to_string(&world_config).unwrap();
+                                let response = serde_json::to_string(&*world_config).unwrap();
                                 http::send_response(http::StatusCode::OK, None, response.into_bytes());
-                                 */
+                            },
+                            "/active_players" => {
+                                let active_players = ACTIVE_PLAYERS.read().unwrap();
+                                let response = serde_json::to_string(&*active_players).unwrap();
+                                http::send_response(http::StatusCode::OK, None, response.into_bytes());
                             },
                             _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }
@@ -339,6 +337,14 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                                     }
                                 }
                             },
+                            "/api/deleteWorld" => {
+                                let mut world_config = WORLD_CONFIG.write().unwrap();
+                                let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
+                                world_config.clear();
+                                cube_to_owner.clear();
+                                println!("World deleted from request");
+                                http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
+                            },
                             _ => http::send_response(http::StatusCode::NOT_FOUND, None, b"Not Found".to_vec()),
                         }
                     } else {
@@ -382,6 +388,7 @@ fn init(our: Address) {
     for path in ["/api/loadWorld", "/world_config", "/api/addPlayer"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
+    http::bind_http_path("/active_players", false, false).expect("failed to bind http path");
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     loop {

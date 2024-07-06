@@ -20,7 +20,7 @@ impl Player {
         &self.minecraft_player_name
     }
 }
-
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
     pub kinode_id: String,
     pub minecraft_player_name: String,
