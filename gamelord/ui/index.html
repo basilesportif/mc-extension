@@ -108,7 +108,7 @@
             document.getElementById("playerForm").addEventListener("submit", addPlayer);
         });
 
-        function addPlayer() {
+        async function addPlayer() {
             const minecraftName = document.getElementById('minecraftName').value;
             const kinode_id = document.getElementById('kinode_id').value;
             const playerData = {
@@ -118,28 +118,26 @@
 
             const url = 'http://localhost:8080/gamelord:gamelord:basilesex.os/api/addPlayer'; // Adjust the URL as needed
 
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(playerData)
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json(); // or response.text() if the response is not JSON
-                } else {
-                    throw new Error('Failed to add player');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(playerData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            })
-            .then(data => {
+
+                const data = await response.text();
                 console.log("Player added successfully:", data);
                 document.getElementById("response-output").innerText = `Player ${minecraftName} with ID ${kinode_id} added successfully.`;
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error("Error adding player:", error);
                 document.getElementById("response-output").innerText = `Error: ${error.message}`;
-            });
+            }
         }
 
         function uploadFile() {

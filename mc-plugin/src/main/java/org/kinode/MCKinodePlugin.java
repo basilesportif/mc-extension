@@ -160,11 +160,9 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
         // Check if the player has moved to a new cube
         if (!currentCube.equals(prevCube)) {
-            getLogger().info("Player has moved to a new cube: " + currentCube);
-            player.sendMessage("You are now in a new cube: " + currentCube);
-            prevCube = currentCube; // Update the previous cube tracker
-
-            // Send ValidateMove message
+            //getLogger().info("Player has moved to a new cube: " + currentCube);
+            //player.sendMessage("You are now in a new cube: " + currentCube);
+            prevCube = currentCube; // Update the previous cube tracker            // Send ValidateMove message
             if (client != null && client.isConnected()) {
                 client.sendValidateMoveMessage(player.getName(), centerX, centerY, centerZ);
             }

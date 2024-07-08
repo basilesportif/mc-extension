@@ -144,7 +144,9 @@ public class MCKinodeWS extends WebSocketClient {
                 messageResponse = responseArray.getString(1);
 
                 if (success) {
-                    MCKinodePlugin.getInstance().getLogger().info("Move validated: " + messageResponse);
+                    MCKinodePlugin.getInstance().getLogger().info("Move allowed: " + messageResponse);
+                    Player player = Bukkit.getPlayer(playerName);
+                    player.sendMessage("Move allowed: " + messageResponse);
                 } else {
                     MCKinodePlugin.getInstance().getLogger().info("Move invalid: " + messageResponse);
                     Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
@@ -156,7 +158,7 @@ public class MCKinodeWS extends WebSocketClient {
                             Location currentLocation = player.getLocation();
                             
                             // Calculate a new position 15 blocks behind the player
-                            Vector direction = currentLocation.getDirection().normalize().multiply(-15);  // Reverse direction and move 15 blocks back
+                            Vector direction = currentLocation.getDirection().normalize().multiply(-10);  // Reverse direction and move 15 blocks back
                             Location newLocation = currentLocation.add(direction);
                             
                             // Ensure the new location is safe (not inside a block)

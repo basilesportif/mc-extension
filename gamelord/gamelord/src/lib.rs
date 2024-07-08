@@ -294,7 +294,7 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                                         for region in regions {
                                             let mut cubes_transformed = HashMap::new();
                                             for cube in &region.cubes {
-                                                let cube_id = cube.identifier(); // Assuming `identifier` method exists
+                                                let cube_id = cube.identifier(); 
                                                 cubes_transformed.insert(cube_id.clone(), cube.clone());
                                                 cube_to_owner.insert(cube.clone(), region.owner.clone());
                                             }
@@ -385,7 +385,7 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
-    for path in ["/api/loadWorld", "/world_config", "/api/addPlayer"] {
+    for path in ["/api/loadWorld", "/world_config", "/api/addPlayer", "/api/deleteWorld"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     http::bind_http_path("/active_players", false, false).expect("failed to bind http path");

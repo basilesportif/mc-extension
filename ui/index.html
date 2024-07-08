@@ -8,15 +8,78 @@
     <style>
         body {
             margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
         }
 
         canvas {
             display: block;
         }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #controls button,
+        #controls input {
+            display: block;
+            margin-bottom: 10px;
+            width: 100%;
+            padding: 5px;
+            font-size: 14px;
+        }
+
+        #controls label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        #regionList {
+            margin-top: 20px;
+        }
+
+        .region-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .region-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 50%;
+        }
+
+        #worldInfo p {
+            font-size: 12px;
+            margin: 5px 0;
+        }
     </style>
 </head>
 
 <body>
+    <div id="controls">
+        <button id="clearSelectionButton">Clear Selection</button>
+        <button id="addRegionButton">Add Selected Cubes to Region</button>
+        <button id="generateWorldConfigButton">Generate World Config</button>
+        <label for="cubeSizeInput">Cube Size:</label>
+        <input type="number" id="cubeSizeInput" value="50" min="1">
+        <input type="file" id="loadConfigButton" accept=".json">
+        <div id="regionList"></div>
+        <div id="worldInfo">
+            <p id="cubeCount">Cubes Available: 0</p>
+            <p id="worldSize">World Size: 0 x 0 x 0</p>
+        </div>
+    </div>
     <script type="module" src="main.js"></script>
 </body>
 
