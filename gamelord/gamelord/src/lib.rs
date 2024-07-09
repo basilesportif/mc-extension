@@ -10,7 +10,7 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, OwnerToRegion, CubeToOwner, Player, Region};
+use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, OwnerToRegion, CubeToOwner, Player, Region, McClientToGamelordRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -79,6 +79,13 @@ wit_bindgen::generate!({
 //have everything handled here
 fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
+
+    if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
+        // Handle the request here
+        println!("Received request: {:?}", request);
+        return Ok(());
+    }
+
     match GamelordRequest::parse(message.body())? {
         GamelordRequest::GenerateWorld { regions } => {
             let regions_clone = regions.clone();

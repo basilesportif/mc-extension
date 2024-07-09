@@ -72,6 +72,7 @@ pub struct ConfigurationRegion {
 pub type OwnerToRegion = HashMap<Owner, Region>;
 pub type CubeToOwner = HashMap<Cube, Owner>;
 
+// TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Owner {
     Unclaimed,
@@ -87,6 +88,18 @@ pub struct Team1 {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Team2 {
     pub players: HashSet<Player>,
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum McClientToGamelordRequest {
+    JoinTeam(JoinTeam),
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JoinTeam {
+    pub gamelord_id: NodeId,
+    pub minecraft_id: String,
+    pub team_name: String,  
 }
 
 /*

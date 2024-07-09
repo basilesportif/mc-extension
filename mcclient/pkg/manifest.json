@@ -1,0 +1,14 @@
+[
+    {
+        "process_name": "mcclient",
+        "process_wasm_path": "/mcclient.wasm",
+        "on_exit": "None",
+        "request_networking": true,
+        "request_capabilities": [
+            "http_server:distro:sys",
+            "vfs:distro:sys"
+        ],
+        "grant_capabilities": [],
+        "public": true
+    }
+]

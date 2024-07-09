@@ -1,0 +1,18 @@
+{
+    "name": "mcclient",
+    "description": "Client for gamelord. Allows player to connect to a game and play.",
+    "image": "",
+    "properties": {
+        "package_name": "mcclient",
+        "current_version": "0.1.0",
+        "publisher": "basilesex.os",
+        "mirrors": [],
+        "code_hashes": {
+            "0.1.0": ""
+        },
+        "wit_version": 0,
+        "dependencies": []
+    },
+    "external_url": "",
+    "animation_url": ""
+}
