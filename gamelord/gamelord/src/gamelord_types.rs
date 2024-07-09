@@ -1,13 +1,13 @@
-//use kinode_process_lib::Address;
+use kinode_process_lib::NodeId;
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 // Note that the name might need to be changed
 pub struct Player {
-    pub kinode_id: String,
+    pub kinode_id: NodeId,
     pub minecraft_player_name: String,
 }
 
@@ -26,7 +26,6 @@ pub struct ActivePlayer {
     pub minecraft_player_name: String,
     pub current_cube: Cube,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {
@@ -58,22 +57,36 @@ impl Hash for Cube {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
     pub cubes: HashMap<u64, Cube>,
-    pub owner: String,
+    pub owner: Owner,
     pub everyone_allowed: bool,
     pub authorized_players: Vec<String>,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConfigurationRegion {
     pub cubes: Vec<Cube>,
-    pub owner: String,
+    pub owner: Owner,
     pub everyone_allowed: bool,
     pub authorized_players: Vec<String>,
 }
 
+pub type OwnerToRegion = HashMap<Owner, Region>;
+pub type CubeToOwner = HashMap<Cube, Owner>;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
+pub enum Owner {
+    Unclaimed,
+    Team1,
+    Team2,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct World {
-    pub regions: Vec<Region>,
+pub struct Team1 {
+    pub players: HashSet<Player>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Team2 {
+    pub players: HashSet<Player>,
 }
 
 /*

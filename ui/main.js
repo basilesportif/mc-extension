@@ -172,7 +172,6 @@ function addRegion() {
   }
 
   const everyoneAllowed = confirm('Do you authorize all players to roam freely in your region? Click "OK" for Yes and "Cancel" for No.');
-  const vectorString = prompt('Enter a vector string:');
 
   let region = regions.find(r => r.owner === owner);
   const newCubes = clickedCubes.map(cube => ({
