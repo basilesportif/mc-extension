@@ -27,22 +27,29 @@ lazy_static! {
 lazy_static! {
     static ref ALLOWED_PLAYERS: RwLock<HashMap<String, Player>> = RwLock::new(HashMap::new());
 }
-
+//DIJAGRAMI
+//kako da dev setup
 
 #[derive(Serialize, Deserialize, Debug)]
-enum GamelordRequest {
+enum GamelordRequestMinecraft {
     ValidateMove { minecraft_id: String, cube: Cube },
     PlayerSpawnRequest { minecraft_id: String },
     PlayerLeaveRequest { player: Player },
-    GenerateWorld { regions: Vec<ConfigurationRegion> },
-    DeleteWorld,
 }
-impl GamelordRequest {
-    fn parse(bytes: &[u8]) -> Result<GamelordRequest, serde_json::Error> {
+
+
+//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
+//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
+
+
+//GamelordResponseMinecraft
+//GamelordResponseUI (maybe not needed)
+impl GamelordRequestMinecraft {
+    fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
         let json_str = String::from_utf8_lossy(bytes);
         println!("Attempting to parse JSON: {}", json_str);
 
-        match serde_json::from_str::<GamelordRequest>(&json_str) {
+        match serde_json::from_str::<GamelordRequestMinecraft>(&json_str) {
             Ok(request) => {
                 println!("Successfully parsed GamelordRequest: {:?}", request);
                 Ok(request)
@@ -59,15 +66,13 @@ impl GamelordRequest {
         }
     }
 }
-// The boolean might not be needed
+
+//have to figure this out, since these are responses read by mcdriver, so have to update on that side
 #[derive(Serialize, Deserialize, Debug)]
-enum GamelordResponse {
+enum GamelordResponseMinecraft {
     ValidateMove(bool, String),
     AddPlayer(bool, String, Cube),
     AddPlayerFailed(bool ,String),
-    RemovePlayer(bool),
-    WorldGenerated,
-    WorldDeleted,
 }
 
 wit_bindgen::generate!({
@@ -79,49 +84,8 @@ wit_bindgen::generate!({
 //have everything handled here
 fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
-    match GamelordRequest::parse(message.body())? {
-        GamelordRequest::GenerateWorld { regions } => {
-            let regions_clone = regions.clone();
-            let mut world_config = WORLD_CONFIG.write().unwrap();
-            let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-            world_config.clear();
-            cube_to_owner.clear();
-            
-            for region in regions { // Assuming regions is a Vec<ConfigurationRegion>
-                let mut cubes_transformed = HashMap::new();
-                for cube in &region.cubes {
-                    let cube_id = cube.identifier(); // Use the identifier method to get the key
-                    cubes_transformed.insert(cube_id.clone(), cube.clone()); // Insert into the new HashMap
-                    cube_to_owner.insert(cube.clone(), region.owner.clone()); // Map cube to owner
-                }
-
-                let new_region = Region {
-                    cubes: cubes_transformed, // Use the transformed HashMap
-                    owner: region.owner.clone(),
-                    everyone_allowed: region.everyone_allowed,
-                    authorized_players: region.authorized_players.clone(),
-                };
-                world_config.insert(region.owner.clone(), new_region);
-            }
-            println!("World generated with regions: {:?}", &regions_clone); // Use cloned data
-            Response::new()
-                .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
-                .send()
-                .unwrap();
-            Ok(())
-        },
-        // figure out where the deletion of the world can come from
-        GamelordRequest::DeleteWorld => {
-            let mut world_config = WORLD_CONFIG.write().unwrap();
-            world_config.clear();
-            println!("World deleted");
-            Response::new()
-                .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
-                .send()
-                .unwrap();
-            Ok(())
-        },
-        GamelordRequest::ValidateMove { minecraft_id, cube } => {
+    match GamelordRequestMinecraft::parse(message.body())? {
+        GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
             if active_players.contains_key(&minecraft_id) {
                 println!("Player {} is active in the game.", minecraft_id);
@@ -137,14 +101,14 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                                 // If everyone is allowed or the player is an authorized player, consider the move valid
                                 active_player.current_cube = cube.clone();
                                 println!("Active player {} moved to cube: {:?}", active_player.kinode_id, cube);
-                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(true, "Move allowed by owner permissions.".to_string())).unwrap();
+                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(true, "Move allowed by owner permissions.".to_string())).unwrap();
                                 Response::new()
                                     .body(response)
                                     .send()
                                     .unwrap();
                             } else {
                                 // If not allowed, send a negative response
-                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(false, "Move not allowed by owner permissions.".to_string())).unwrap();
+                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(false, "Move not allowed by owner permissions.".to_string())).unwrap();
                                 Response::new()
                                     .body(response)
                                     .send()
@@ -154,7 +118,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                             // If no owner found, allow the move and update the active player's current cube
                             active_player.current_cube = cube.clone();
                             println!("Active player {} moved to unclaimed cube: {:?}", active_player.kinode_id, cube);
-                            let response = serde_json::to_vec(&GamelordResponse::ValidateMove(true, "Cube unclaimed, allowed to pass.".to_string())).unwrap();
+                            let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(true, "Cube unclaimed, allowed to pass.".to_string())).unwrap();
                             Response::new()
                                 .body(response)
                                 .send()
@@ -164,7 +128,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                         // If the initial position check is valid, proceed as before
                         active_player.current_cube = cube.clone();
                         println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
-                        let response = serde_json::to_vec(&GamelordResponse::ValidateMove(is_valid, response_message)).unwrap();
+                        let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(is_valid, response_message)).unwrap();
                         Response::new()
                             .body(response)
                             .send()
@@ -173,7 +137,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 }
             } else {
                 println!("Player {} is not active in the game.", minecraft_id);
-                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(false, "Player not active in the game.".to_string())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(false, "Player not active in the game.".to_string())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
@@ -182,7 +146,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             Ok(())
         },
         // this comes from MC-Driver
-        GamelordRequest::PlayerSpawnRequest{minecraft_id} => {
+        GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
             println!("Gamelord request matched");
             println!("Player spawn request received for player: {:?}", minecraft_id);
             let allowed_players = match ALLOWED_PLAYERS.read() {
@@ -210,14 +174,14 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 println!("active players inserted");
                 active_players.insert(player.minecraft_player_name().clone(), active_player);
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::AddPlayer(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
                     .unwrap();
                 
             } else {
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
@@ -231,7 +195,8 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             }
             Ok(())
         },
-        GamelordRequest::PlayerLeaveRequest{player} => {
+        // Think about whether I need this
+        GamelordRequestMinecraft::PlayerLeaveRequest{player} => {
             let mut active_players = ACTIVE_PLAYERS.write().unwrap();
             if active_players.contains_key(player.kinode_id()) {
                 active_players.remove(player.kinode_id());
