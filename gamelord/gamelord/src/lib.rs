@@ -1,7 +1,7 @@
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, set_state, Address, Message, Response
+    println, set_state, Address, Message, Response,
 };
 
 use lazy_static::lazy_static;
@@ -11,8 +11,8 @@ mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, McClientToGamelordRequest, OwnerToRegion,
-    Player, Region, State
+    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, EditLobby, McClientToGamelordRequest,
+    OwnerToRegion, Player, Region, State,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -443,9 +443,26 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 );
                             }
                             "/api/resetTeams" => {
-                                println!("teams before reset: {:#?}, {:#?}", state.lobby.team1, state.lobby.team2);
+                                // println!(
+                                //     "teams before reset: {:#?}, {:#?}",
+                                //     state.lobby.team1, state.lobby.team2
+                                // );
                                 state.reset_teams().save();
-                                println!("teams after reset: {:#?}", State::fetch().unwrap());
+                                // println!("teams after reset: {:#?}", State::fetch().unwrap());
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    b"Teams reset successful.".to_vec(),
+                                );
+                            }
+                            "/api/editLobby" => {
+                                let bytes = get_blob()
+                                    .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
+                                    .bytes;
+                                let edit_lobby = serde_json::from_slice::<EditLobby>(&bytes)?;
+                                println!("editlobby: {:#?}", edit_lobby);
+                                // state.reset_teams().save();
+                                // println!("teams after reset: {:#?}", State::fetch().unwrap());
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -509,7 +526,8 @@ fn init(our: Address) {
         "/world_config",
         "/api/addPlayer",
         "/api/deleteWorld",
-        "/api/resetTeams"
+        "/api/resetTeams",
+        "/api/editLobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }

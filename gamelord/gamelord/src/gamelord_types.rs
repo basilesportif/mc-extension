@@ -102,6 +102,13 @@ pub struct JoinTeam {
     pub team_name: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EditLobby {
+    pub name: String,
+    pub minecraft_server_address: String,
+    pub clear_teams: bool
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameLobby {
     pub name: String,
