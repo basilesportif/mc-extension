@@ -103,20 +103,33 @@ pub struct JoinTeam {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct State {
-    pub our: Address,
+pub struct GameLobby {
+    pub name: String,
+    pub minecraft_server_address: String,
     pub team1: Team1,
     pub team2: Team2,
+    pub chat: String, // TODO
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
+    pub our: Address,
+    pub lobby: GameLobby,
 }
 impl State {
     pub fn new(our: &Address) -> Self {
         State {
             our: our.clone(),
-            team1: Team1 {
-                players: HashSet::new(),
-            },
-            team2: Team2 {
-                players: HashSet::new(),
+            lobby: GameLobby {
+                name: "Game 1".to_string(),
+                minecraft_server_address: "".to_string(),
+                team1: Team1 {
+                    players: HashSet::new(),
+                },
+                team2: Team2 {
+                    players: HashSet::new(),
+                },
+                chat: "".to_string(),
             },
         }
     }
@@ -131,12 +144,14 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    pub fn reset_teams(&self) -> Self {
-        State {
-            our: self.our.clone(),
-            team1: Team1 { players: HashSet::new() },
-            team2: Team2 { players: HashSet::new() },
-        }
+    pub fn reset_teams(&mut self) -> Self {
+        self.lobby.team1 = Team1 {
+            players: HashSet::new(),
+        };
+        self.lobby.team2 = Team2 {
+            players: HashSet::new(),
+        };
+        self.clone()
     }
 }
 

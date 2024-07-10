@@ -91,8 +91,8 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             minecraft_player_name: join_team.minecraft_id.to_string(),
         };
         match join_team.team_name.as_str() {
-            "Team1" => state.team1.players.insert(player),
-            "Team2" => state.team2.players.insert(player),
+            "Team1" => state.lobby.team1.players.insert(player),
+            "Team2" => state.lobby.team2.players.insert(player),
             _ => {
                 println!("Invalid team name: {}", join_team.team_name);
                 return Ok(());
@@ -443,7 +443,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 );
                             }
                             "/api/resetTeams" => {
-                                println!("teams before reset: {:#?}, {:#?}", state.team1, state.team2);
+                                println!("teams before reset: {:#?}, {:#?}", state.lobby.team1, state.lobby.team2);
                                 state.reset_teams().save();
                                 println!("teams after reset: {:#?}", State::fetch().unwrap());
                                 http::send_response(
@@ -482,10 +482,10 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
 
 fn handle_message(state: &mut State) -> anyhow::Result<()> {
     let message = await_message()?;
-    println!(
-        "handle_message: {:?}",
-        String::from_utf8_lossy(message.body())
-    );
+    // println!(
+    //     "handle_message: {:?}",
+    //     String::from_utf8_lossy(message.body())
+    // );
 
     if is_http_request(&message) {
         // Check if it's an HTTP request
