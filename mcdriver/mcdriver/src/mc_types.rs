@@ -1,45 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Position {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-//TODO delete all this
-#[derive(Debug, Serialize, Deserialize)]
-pub enum MCDriverRequest {
-    AddPlayer { mc_player_id: String },
-}
-
-// TODO: delete all this
-// python Responses encode the `output` in the `lazy_load_blob`
-#[derive(Debug, Serialize, Deserialize)]
-pub enum MCDriverResponse {
-    Ok,
-    Err(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum MCToKinode {
-    SanityCheck,
-    SanityCheckErr(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum KinodeToMC {
-    SanityCheckOk,
-    SanityCheckErr(String),
-}
-
 // would probaly want to reconfigure this to be more optimal at some point
 // actually just the body and outerbody need to be reconfigured
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub struct Player {
-    pub kinode_id: String,
-    pub minecraft_player_name: String,
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Cube {
@@ -47,69 +9,42 @@ pub struct Cube {
     pub side_length: i32,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ValidateMove {
-    minecraft_id: String,
-    cube: Cube
-}
-
-impl ValidateMove {
-    pub fn minecraft_id(&self) -> &String {
-        &self.minecraft_id
-    }
-    pub fn cube(&self) -> &Cube {
-        &self.cube
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PlayerJoinRequest {
-    minecraft_player_name: String,
-}
-
-impl PlayerJoinRequest {
-    pub fn minecraft_player_name(&self) -> &String {
-        &self.minecraft_player_name
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
-pub enum Method {
-    ValidateMove { ValidateMove: ValidateMove },
-    PlayerJoinRequest { PlayerJoinRequest: PlayerJoinRequest },
+pub enum MinecraftToGamelord {
+    ValidateMove {
+        minecraft_id: String,
+        cube: Cube,
+    },
+    PlayerSpawnRequest {
+        minecraft_id: String,
+    },
     // Add other message types here
 }
 
-impl Method {
-    pub fn as_validate_move(&self) -> Option<&ValidateMove> {
-        if let Method::ValidateMove { ValidateMove } = self {
-            Some(ValidateMove)
-        } else {
-            None
+impl MinecraftToGamelord {
+    pub fn minecraft_id(&self) -> &String {
+        match self {
+            MinecraftToGamelord::ValidateMove { minecraft_id, .. } => minecraft_id,
+            MinecraftToGamelord::PlayerSpawnRequest { minecraft_id } => minecraft_id,
         }
     }
 
-    pub fn as_player_join(&self) -> Option<&PlayerJoinRequest> {
-        if let Method::PlayerJoinRequest { PlayerJoinRequest } = self {
-            Some(PlayerJoinRequest)
-        } else {
-            None
+    pub fn cube(&self) -> Option<&Cube> {
+        match self {
+            MinecraftToGamelord::ValidateMove { cube, .. } => Some(cube),
+            _ => None,
         }
     }
 }
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WebSocketMessage {
     message_type: String,
-    body: Method,
+    body: MinecraftToGamelord,
 }
 
 impl WebSocketMessage {
-    pub fn message_type(&self) -> &String {
-        &self.message_type
-    }
-
-    pub fn method(&self) -> &Method {
+    pub fn method(&self) -> &MinecraftToGamelord {
         &self.body
     }
 }

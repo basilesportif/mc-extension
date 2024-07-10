@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 use kinode_process_lib::kernel_types::MessageType;
 use kinode_process_lib::{
     await_message, call_init, get_blob, http::send_ws_push, println, Address, LazyLoadBlob,
-    Message, Request, Response,
+    Message, Request,
 };
 
 mod mc_types;
-use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode, Player, Cube, WebSocketMessage, Method, PlayerJoinRequest, ValidateMove };
+use mc_types::{WebSocketMessage, MinecraftToGamelord};
 
 
 wit_bindgen::generate!({
@@ -35,21 +35,12 @@ fn is_expected_channel_id(
     Ok(channel_id == current_channel_id)
 }
 
-
-fn process_request(minecraft_id: &String, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
+//going to Kinode
+fn process_gamelord_request(minecraft_id: &String, method: &MinecraftToGamelord) -> anyhow::Result<serde_json::Value> {
     println!("Processing request for player: {:?}", minecraft_id);
     let action = match method {
-        Method::ValidateMove { ValidateMove: _ } => serde_json::json!({
-            "ValidateMove": {
-                "minecraft_id": minecraft_id,
-                "cube": cube.unwrap()  // probably a bad place to unwrap
-            }
-        }),
-        Method::PlayerJoinRequest { PlayerJoinRequest: _ } => serde_json::json!({
-            "PlayerSpawnRequest": {
-                "minecraft_id": minecraft_id,
-            }
-        }),
+        MinecraftToGamelord::ValidateMove { .. } => method,
+        MinecraftToGamelord::PlayerSpawnRequest { .. } => method,
         _ => return Err(anyhow::anyhow!("Unsupported request type")),
     };
 
@@ -128,10 +119,12 @@ fn handle_ws_message(
                     };
 
                     match ws_message.method() {
-                        Method::ValidateMove { ValidateMove } => {
-                            let outcome = process_request(ValidateMove.minecraft_id(),
-                                                            Some(ValidateMove.cube()),
-                                                          &Method::ValidateMove { ValidateMove: (*ValidateMove).clone() })?;
+                        MinecraftToGamelord::ValidateMove {  minecraft_id, cube } => {
+                            let outcome = process_gamelord_request(minecraft_id,
+                                                          &MinecraftToGamelord::ValidateMove { 
+                                                              minecraft_id: minecraft_id.to_string(), 
+                                                              cube: cube.clone() 
+                                                          })?;
                             let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
 
                             send_ws_push(
@@ -144,11 +137,10 @@ fn handle_ws_message(
                             );
                             println!("Position check request received.");
                         }
-                        Method::PlayerJoinRequest { PlayerJoinRequest } => {
-                            let outcome = process_request(&PlayerJoinRequest.minecraft_player_name().clone(),
-                                                            None,
-                                                          &Method::PlayerJoinRequest {
-                                                             PlayerJoinRequest: (*PlayerJoinRequest).clone() 
+                        MinecraftToGamelord::PlayerSpawnRequest { minecraft_id } => {
+                            let outcome = process_gamelord_request(minecraft_id,
+                                                            &MinecraftToGamelord::PlayerSpawnRequest { 
+                                                                minecraft_id: minecraft_id.to_string()
                                                             })?;
                             let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
 
@@ -160,7 +152,7 @@ fn handle_ws_message(
                                     bytes: serialized_message.into_bytes(),
                                 },
                             );
-                            println!("Player join request received for player: {:?}", PlayerJoinRequest.minecraft_player_name());
+                            println!("Player join request received for player: {:?}", &minecraft_id);
                         }
                         // Add other message types here
                     }
@@ -201,15 +193,8 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
         println!("Local message received.");
         handle_ws_message(connection, message)?;
     } else {
-        // Will handle this better, wanted to keep your code
-        if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
-            println!("AddPlayer request received.");
-        } else {
-            println!("Invalid message");
-            
-        }
+        println!("Invalid message"); 
     }
-
     Ok(())
 }
 

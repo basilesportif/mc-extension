@@ -27,8 +27,7 @@ lazy_static! {
 lazy_static! {
     static ref ALLOWED_PLAYERS: RwLock<HashMap<String, Player>> = RwLock::new(HashMap::new());
 }
-//DIJAGRAMI
-//kako da dev setup
+
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequestMinecraft {
@@ -36,7 +35,6 @@ enum GamelordRequestMinecraft {
     PlayerSpawnRequest { minecraft_id: String },
     PlayerLeaveRequest { player: Player },
 }
-
 
 //GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
 //GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
@@ -71,8 +69,8 @@ impl GamelordRequestMinecraft {
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordResponseMinecraft {
     ValidateMove(bool, String),
-    AddPlayer(bool, String, Cube),
-    AddPlayerFailed(bool ,String),
+    PlayerSpawnRequestAuthorized(bool, String, Cube),
+    PlayerSpawnRequestDenied(bool ,String),
 }
 
 wit_bindgen::generate!({
@@ -82,8 +80,8 @@ wit_bindgen::generate!({
 
 
 //have everything handled here
-fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
-    println!("handle kinode message entered");
+fn handle_driver_message(message: &Message) -> anyhow::Result<()> {
+    println!("handle driver message entered");
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
@@ -160,8 +158,7 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
             if allowed_players.contains_key(&minecraft_id) {
                 let player = allowed_players.get(&minecraft_id).expect("Player should exist");
                 println!("player exists");
-                //let available_cubes = world_config.get("gamelord").map_or_else(|| Vec::new(), |region| region.cubes.values().cloned().collect());
-                // for now its the first one, let's set the first available cube as the players 'spawn' point
+                // we send the cube, but we haven't specified the plugin to do anything with that info
                 let spawn_cube = Cube { center: (0, 0, 0), side_length: 50 };
                 println!("available cubes found");
                 let active_player = ActivePlayer {
@@ -174,14 +171,14 @@ fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
                 println!("active players inserted");
                 active_players.insert(player.minecraft_player_name().clone(), active_player);
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::AddPlayer(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(true, "Player added.".to_string(), spawn_cube.clone())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
                     .unwrap();
                 
             } else {
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::AddPlayerFailed(false, "Player not added.".to_string())).unwrap();
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(false, "Player not added.".to_string())).unwrap();
                 Response::new()
                     .body(response)
                     .send()
@@ -215,7 +212,7 @@ fn is_http_request(message: &Message) -> bool {
         _ => false,
     }
 }
-fn handle_http_request(message: &Message) -> anyhow::Result<()> {
+fn handle_http_ui_request(message: &Message) -> anyhow::Result<()> {
     let our_http_request = serde_json::from_slice::<http::HttpServerRequest>(message.body()).unwrap();
     match our_http_request {
         http::HttpServerRequest::Http(http_request) => {
@@ -333,13 +330,13 @@ fn handle_message() -> anyhow::Result<()> {
         "handle_message: {:?}",
         String::from_utf8_lossy(message.body())
     );
-
+    // Should update this so the requests are better handled
     if is_http_request(&message) { // Check if it's an HTTP request
         println!("HTTP request received");
-        handle_http_request(&message)?; // Dedicated function to handle HTTP requests
+        handle_http_ui_request(&message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
-        handle_kinode_message(&message)?;
+        handle_driver_message(&message)?;
     } else{
         println!("Message from invalid source: {:?}", message.source());
     }
