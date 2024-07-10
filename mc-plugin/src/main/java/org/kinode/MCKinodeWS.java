@@ -72,8 +72,8 @@ public class MCKinodeWS extends WebSocketClient {
                 + "\"channel_id\": 1,"
                 + "\"message_type\": \"Text\","
                 + "\"body\": {"
-                + "\"PlayerJoinRequest\": {"
-                + "\"minecraft_player_name\": \"" + playerName + "\""
+                + "\"PlayerSpawnRequest\": {"
+                + "\"minecraft_id\": \"" + playerName + "\""
                 + "}"
                 + "}"
                 + "}";
@@ -86,13 +86,15 @@ public class MCKinodeWS extends WebSocketClient {
             boolean success;
             String messageResponse;
 
-            if (jsonResponse.has("AddPlayer")) {
-                responseArray = jsonResponse.getJSONArray("AddPlayer");
+            if (jsonResponse.has("PlayerSpawnRequestAuthorized")) {
+                responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestAuthorized");
                 success = responseArray.getBoolean(0);
                 messageResponse = responseArray.getString(1);
-            } else if (jsonResponse.has("AddPlayerFailed")) {
-                responseArray = jsonResponse.getJSONArray("AddPlayerFailed");
+                //remember that the third element should be the cube that the player spawns in
+            } else if (jsonResponse.has("PlayerSpawnRequestDenied")) {
+                responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestDenied");
                 success = responseArray.getBoolean(0);
+                // remember that the th
                 messageResponse = responseArray.getString(1);
             } else {
                 System.err.println("Unexpected response format: " + response);
