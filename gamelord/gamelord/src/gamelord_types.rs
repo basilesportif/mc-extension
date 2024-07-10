@@ -1,4 +1,5 @@
-use kinode_process_lib::NodeId;
+use alloy_consensus::Sealed;
+use kinode_process_lib::{get_state, set_state, Address, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -90,7 +91,6 @@ pub struct Team2 {
     pub players: HashSet<Player>,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum McClientToGamelordRequest {
     JoinTeam(JoinTeam),
@@ -99,7 +99,45 @@ pub enum McClientToGamelordRequest {
 pub struct JoinTeam {
     pub gamelord_id: NodeId,
     pub minecraft_id: String,
-    pub team_name: String,  
+    pub team_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
+    pub our: Address,
+    pub team1: Team1,
+    pub team2: Team2,
+}
+impl State {
+    pub fn new(our: &Address) -> Self {
+        State {
+            our: our.clone(),
+            team1: Team1 {
+                players: HashSet::new(),
+            },
+            team2: Team2 {
+                players: HashSet::new(),
+            },
+        }
+    }
+    pub fn fetch() -> Option<State> {
+        if let Some(state_bytes) = get_state() {
+            bincode::deserialize(&state_bytes).ok()
+        } else {
+            None
+        }
+    }
+    pub fn save(&self) {
+        let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
+        set_state(&serialized_state);
+    }
+    pub fn reset_teams(&self) -> Self {
+        State {
+            our: self.our.clone(),
+            team1: Team1 { players: HashSet::new() },
+            team2: Team2 { players: HashSet::new() },
+        }
+    }
 }
 
 /*

@@ -1,7 +1,7 @@
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, Address, Message, Response,
+    println, set_state, Address, Message, Response
 };
 
 use lazy_static::lazy_static;
@@ -10,7 +10,10 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, OwnerToRegion, CubeToOwner, Player, Region, McClientToGamelordRequest};
+use gamelord_types::{
+    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, McClientToGamelordRequest, OwnerToRegion,
+    Player, Region, State
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -77,12 +80,26 @@ wit_bindgen::generate!({
 });
 
 //have everything handled here
-fn handle_kinode_message(message: &Message) -> anyhow::Result<()> {
+fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
 
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
-        // Handle the request here
         println!("Received request: {:?}", request);
+        let McClientToGamelordRequest::JoinTeam(join_team) = request;
+        let player = Player {
+            kinode_id: message.source().node().to_string(),
+            minecraft_player_name: join_team.minecraft_id.to_string(),
+        };
+        match join_team.team_name.as_str() {
+            "Team1" => state.team1.players.insert(player),
+            "Team2" => state.team2.players.insert(player),
+            _ => {
+                println!("Invalid team name: {}", join_team.team_name);
+                return Ok(());
+            }
+        };
+        state.save();
+        println!("state after join team: {:?}", state);
         return Ok(());
     }
 
@@ -285,7 +302,7 @@ fn is_http_request(message: &Message) -> bool {
         _ => false,
     }
 }
-fn handle_http_request(message: &Message) -> anyhow::Result<()> {
+fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<()> {
     let our_http_request =
         serde_json::from_slice::<http::HttpServerRequest>(message.body()).unwrap();
     match our_http_request {
@@ -425,6 +442,16 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
                                     b"World Deleted".to_vec(),
                                 );
                             }
+                            "/api/resetTeams" => {
+                                println!("teams before reset: {:#?}, {:#?}", state.team1, state.team2);
+                                state.reset_teams().save();
+                                println!("teams after reset: {:#?}", State::fetch().unwrap());
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    b"Teams reset successful.".to_vec(),
+                                );
+                            }
                             _ => http::send_response(
                                 http::StatusCode::NOT_FOUND,
                                 None,
@@ -453,7 +480,7 @@ fn handle_http_request(message: &Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_message() -> anyhow::Result<()> {
+fn handle_message(state: &mut State) -> anyhow::Result<()> {
     let message = await_message()?;
     println!(
         "handle_message: {:?}",
@@ -463,10 +490,10 @@ fn handle_message() -> anyhow::Result<()> {
     if is_http_request(&message) {
         // Check if it's an HTTP request
         println!("HTTP request received");
-        handle_http_request(&message)?; // Dedicated function to handle HTTP requests
+        handle_http_request(state, &message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
-        handle_kinode_message(&message)?;
+        handle_kinode_message(state, &message)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
     }
@@ -482,14 +509,18 @@ fn init(our: Address) {
         "/world_config",
         "/api/addPlayer",
         "/api/deleteWorld",
+        "/api/resetTeams"
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     http::bind_http_path("/active_players", false, false).expect("failed to bind http path");
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
+    let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
+    println!("state on init: {:?}", state);
+
     loop {
-        match handle_message() {
+        match handle_message(&mut state) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);
