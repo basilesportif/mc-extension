@@ -1,15 +1,10 @@
 use std::str::FromStr;
 use kinode_process_lib::{http, ProcessId};
-use serde::{Deserialize, Serialize};
-use kinode_process_lib::kernel_types::MessageType;
 use kinode_process_lib::{
     await_message, call_init, get_blob, http::send_ws_push, println, Address, LazyLoadBlob,
-    Message, Request, Response,
+    Message, Request,
 };
-
-mod mc_types;
-use mc_types::{KinodeToMC, MCDriverRequest, MCDriverResponse, MCToKinode, Player, Cube, WebSocketMessage, Method, PlayerJoinRequest, ValidateMove };
-
+use serde_json::Value;
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -35,45 +30,19 @@ fn is_expected_channel_id(
     Ok(channel_id == current_channel_id)
 }
 
-
-fn process_request(minecraft_id: &String, cube: Option<&Cube>, method: &Method) -> anyhow::Result<serde_json::Value> {
-    println!("Processing request for player: {:?}", minecraft_id);
-    let action = match method {
-        Method::ValidateMove { ValidateMove: _ } => serde_json::json!({
-            "ValidateMove": {
-                "minecraft_id": minecraft_id,
-                "cube": cube.unwrap()  // probably a bad place to unwrap
-            }
-        }),
-        Method::PlayerJoinRequest { PlayerJoinRequest: _ } => serde_json::json!({
-            "PlayerSpawnRequest": {
-                "minecraft_id": minecraft_id,
-            }
-        }),
-        _ => return Err(anyhow::anyhow!("Unsupported request type")),
-    };
-
+// forward messages to gamelord
+fn process_gamelord_request(request: &[u8]) -> anyhow::Result<Vec<u8>> {
     let response = Request::new()
         .target(Address::new("fake.dev", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
-        .body(serde_json::to_vec(&action)?)
-        .send_and_await_response(5);
+        .body(request.to_vec())
+        .send_and_await_response(2)?;
 
-    match response {
-        Ok(message) => {
-            let body = match message {
-                Ok(msg) => serde_json::from_slice::<serde_json::Value>(msg.body())
-                    .map_err(|e| anyhow::anyhow!("Failed to parse response body: {}", e))?,
-                Err(e) => return Err(anyhow::anyhow!("Failed to receive response: {}", e)),
-            };
-            return Ok(body);
-        },
-        Err(e) => {
-            println!("Failed to send or receive response: {:?}", e);
-            return Err(e);
+        match response {
+            Ok(msg) => Ok(msg.body().to_vec()),
+            Err(e) => Err(anyhow::anyhow!("Failed to receive response: {}", e)),
         }
-    }
-}
 
+}
 
 fn handle_ws_message(
     connection: &mut Option<Connection>,
@@ -117,52 +86,33 @@ fn handle_ws_message(
                     let Some(blob) = get_blob() else {
                         return Ok(());
                     };
-                    println!("Received blob: {:?}", String::from_utf8_lossy(&blob.bytes));
+                    
+                    // Parse the JSON and extract only the body (which removes the WS metadata and converts it to gamelord)
+                    let parsed: Value = serde_json::from_slice(&blob.bytes)?;
+                    // parse the `body` of the WS message (which should contain gamelord stuff)
+                    if let Some(body) = parsed.get("body") {
+                        let body_json = serde_json::to_vec(body)?;
+                        println!("Extracted body: {}", String::from_utf8_lossy(&body_json));
 
-                    let ws_message: WebSocketMessage = match serde_json::from_slice(&blob.bytes) {
-                        Ok(ws_message) => ws_message,
-                        Err(e) => {
-                            println!("Invalid JSON: {:?}", e);
-                            return Ok(());
+                        // forward only the body to gamelord
+                        match process_gamelord_request(&body_json) {
+                            Ok(response) => {
+                                send_ws_push(
+                                    *channel_id,
+                                    http::WsMessageType::Text,
+                                    LazyLoadBlob {
+                                        mime: Some("application/json".to_string()),
+                                        bytes: response,
+                                    },
+                                );
+                                println!("Request processed and relayed.");
+                            },
+                            Err(e) => {
+                                println!("Error processing request: {:?}", e);
+                            }
                         }
-                    };
-
-                    match ws_message.method() {
-                        Method::ValidateMove { ValidateMove } => {
-                            let outcome = process_request(ValidateMove.minecraft_id(),
-                                                            Some(ValidateMove.cube()),
-                                                          &Method::ValidateMove { ValidateMove: (*ValidateMove).clone() })?;
-                            let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
-
-                            send_ws_push(
-                                *channel_id,
-                                http::WsMessageType::Text,
-                                LazyLoadBlob {
-                                    mime: Some("application/json".to_string()),
-                                    bytes: serialized_message.into_bytes(),
-                                },
-                            );
-                            println!("Position check request received.");
-                        }
-                        Method::PlayerJoinRequest { PlayerJoinRequest } => {
-                            let outcome = process_request(&PlayerJoinRequest.minecraft_player_name().clone(),
-                                                            None,
-                                                          &Method::PlayerJoinRequest {
-                                                             PlayerJoinRequest: (*PlayerJoinRequest).clone() 
-                                                            })?;
-                            let serialized_message = serde_json::to_string(&outcome).expect("Failed to serialize JSON");
-
-                            send_ws_push(
-                                *channel_id,
-                                http::WsMessageType::Text,
-                                LazyLoadBlob {
-                                    mime: Some("application/json".to_string()),
-                                    bytes: serialized_message.into_bytes(),
-                                },
-                            );
-                            println!("Player join request received for player: {:?}", PlayerJoinRequest.minecraft_player_name());
-                        }
-                        // Add other message types here
+                    } else {
+                        println!("No body found in the message");
                     }
                     return Ok(());
                 }
@@ -201,15 +151,8 @@ fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
         println!("Local message received.");
         handle_ws_message(connection, message)?;
     } else {
-        // Will handle this better, wanted to keep your code
-        if let Ok(MCDriverRequest::AddPlayer { .. }) = rmp_serde::from_slice(message.body()) {
-            println!("AddPlayer request received.");
-        } else {
-            println!("Invalid message");
-            
-        }
+        println!("Invalid message"); 
     }
-
     Ok(())
 }
 

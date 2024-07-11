@@ -34,19 +34,24 @@ lazy_static! {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-enum GamelordRequest {
+enum GamelordRequestMinecraft {
     ValidateMove { minecraft_id: String, cube: Cube },
     PlayerSpawnRequest { minecraft_id: String },
     PlayerLeaveRequest { player: Player },
-    GenerateWorld { regions: Vec<ConfigurationRegion> },
-    DeleteWorld,
 }
-impl GamelordRequest {
-    fn parse(bytes: &[u8]) -> Result<GamelordRequest, serde_json::Error> {
+
+//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
+//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
+
+
+//GamelordResponseMinecraft
+//GamelordResponseUI (maybe not needed)
+impl GamelordRequestMinecraft {
+    fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
         let json_str = String::from_utf8_lossy(bytes);
         println!("Attempting to parse JSON: {}", json_str);
 
-        match serde_json::from_str::<GamelordRequest>(&json_str) {
+        match serde_json::from_str::<GamelordRequestMinecraft>(&json_str) {
             Ok(request) => {
                 println!("Successfully parsed GamelordRequest: {:?}", request);
                 Ok(request)
@@ -63,15 +68,13 @@ impl GamelordRequest {
         }
     }
 }
-// The boolean might not be needed
+
+//have to figure this out, since these are responses read by mcdriver, so have to update on that side
 #[derive(Serialize, Deserialize, Debug)]
-enum GamelordResponse {
+enum GamelordResponseMinecraft {
     ValidateMove(bool, String),
-    AddPlayer(bool, String, Cube),
-    AddPlayerFailed(bool, String),
-    RemovePlayer(bool),
-    WorldGenerated,
-    WorldDeleted,
+    PlayerSpawnRequestAuthorized(bool, String, Cube),
+    PlayerSpawnRequestDenied(bool ,String),
 }
 
 wit_bindgen::generate!({
@@ -103,50 +106,8 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
         return Ok(());
     }
 
-    match GamelordRequest::parse(message.body())? {
-        GamelordRequest::GenerateWorld { regions } => {
-            let regions_clone = regions.clone();
-            let mut world_config = WORLD_CONFIG.write().unwrap();
-            let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-            world_config.clear();
-            cube_to_owner.clear();
-
-            for region in regions {
-                // Assuming regions is a Vec<ConfigurationRegion>
-                let mut cubes_transformed = HashMap::new();
-                for cube in &region.cubes {
-                    let cube_id = cube.identifier(); // Use the identifier method to get the key
-                    cubes_transformed.insert(cube_id.clone(), cube.clone()); // Insert into the new HashMap
-                    cube_to_owner.insert(cube.clone(), region.owner.clone()); // Map cube to owner
-                }
-
-                let new_region = Region {
-                    cubes: cubes_transformed, // Use the transformed HashMap
-                    owner: region.owner.clone(),
-                    everyone_allowed: region.everyone_allowed,
-                    authorized_players: region.authorized_players.clone(),
-                };
-                world_config.insert(region.owner.clone(), new_region);
-            }
-            println!("World generated with regions: {:?}", &regions_clone); // Use cloned data
-            Response::new()
-                .body(serde_json::to_vec(&GamelordResponse::WorldGenerated)?)
-                .send()
-                .unwrap();
-            Ok(())
-        }
-        // figure out where the deletion of the world can come from
-        GamelordRequest::DeleteWorld => {
-            let mut world_config = WORLD_CONFIG.write().unwrap();
-            world_config.clear();
-            println!("World deleted");
-            Response::new()
-                .body(serde_json::to_vec(&GamelordResponse::WorldDeleted)?)
-                .send()
-                .unwrap();
-            Ok(())
-        }
-        GamelordRequest::ValidateMove { minecraft_id, cube } => {
+    match GamelordRequestMinecraft::parse(message.body())? {
+        GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
             if active_players.contains_key(&minecraft_id) {
                 println!("Player {} is active in the game.", minecraft_id);
@@ -221,7 +182,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             Ok(())
         }
         // this comes from MC-Driver
-        GamelordRequest::PlayerSpawnRequest { minecraft_id } => {
+        GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
             println!("Gamelord request matched");
             println!(
                 "Player spawn request received for player: {:?}",
@@ -276,8 +237,9 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 Response::new().body(b"Player not added.").send().unwrap();
             }
             Ok(())
-        }
-        GamelordRequest::PlayerLeaveRequest { player } => {
+        },
+        // Think about whether I need this
+        GamelordRequestMinecraft::PlayerLeaveRequest{player} => {
             let mut active_players = ACTIVE_PLAYERS.write().unwrap();
             if active_players.contains_key(player.kinode_id()) {
                 active_players.remove(player.kinode_id());
@@ -511,6 +473,7 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
     if is_http_request(&message) {
         // Check if it's an HTTP request
         println!("HTTP request received");
+         // Dedicated function to handle HTTP requests
         handle_http_request(state, &message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
