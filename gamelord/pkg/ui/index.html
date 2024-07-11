@@ -49,6 +49,7 @@
         display: flex;
         justify-content: space-around;
         margin-top: 5vh;
+        flex-direction: row;
       }
       .option {
         padding: 20px;
@@ -146,7 +147,7 @@
       </div>
       <pre id="response-output-tab1"></pre>
     </div>
-    <div id="tab2" class="tab-content">
+    <div id="tab2" class="tab-content active">
       <div class="container">
         <div class="option">
           <h2>Edit Lobby</h2>
@@ -193,7 +194,6 @@
           </form>
         </div>
       </div>
-      <div class="container"></div>
       <pre id="response-output-tab2"></pre>
     </div>
     <script>
@@ -209,6 +209,8 @@
         document
           .getElementById("playerForm")
           .addEventListener("submit", addPlayer);
+        getLobby();
+        showTab("tab1");
       });
 
       async function addPlayer() {
@@ -377,6 +379,39 @@
           })
           .catch((error) => {
             console.error("Error editing lobby:", error);
+            document.getElementById(
+              "response-output-tab2"
+            ).innerText = `Error: ${error.message}`;
+          });
+      }
+
+      function getLobby() {
+        const url =
+          "http://localhost:8080/gamelord:gamelord:basilesex.os/lobby";
+
+        fetch(url)
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              throw new Error("Failed to get lobby data");
+            }
+          })
+          .then((data) => {
+            console.log("Lobby data retrieved successfully:", data);
+
+            // Update the lobby information in the UI
+            document.getElementById("lobbyName").placeholder = "Game Name: " + data.name;
+            document.getElementById("minecraftServerAddress").placeholder = "MC Server: " + data.minecraft_server_address;
+            // Clear existing team lists
+            document.getElementById("team1").placeholder = "Team1: " + data.team1.players.map(player => player.kinode_id).join(',');
+            document.getElementById("team2").placeholder = "Team2: " + data.team1.players.map(player => player.kinode_id).join(',');
+
+            document.getElementById("response-output-tab2").innerText =
+              "Lobby data updated successfully";
+          })
+          .catch((error) => {
+            console.error("Error getting lobby data:", error);
             document.getElementById(
               "response-output-tab2"
             ).innerText = `Error: ${error.message}`;

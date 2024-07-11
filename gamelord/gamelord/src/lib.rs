@@ -329,6 +329,15 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     response.into_bytes(),
                                 );
                             }
+                            "/lobby" => {
+                                let lobby = state.lobby.clone();
+                                let response = serde_json::to_string(&lobby).unwrap();
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    response.into_bytes(),
+                                );
+                            }
                             _ => http::send_response(
                                 http::StatusCode::NOT_FOUND,
                                 None,
@@ -522,6 +531,7 @@ fn init(our: Address) {
         "/api/addPlayer",
         "/api/deleteWorld",
         "/api/editLobby",
+        "/lobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
