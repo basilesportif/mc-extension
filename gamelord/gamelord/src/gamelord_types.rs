@@ -26,12 +26,23 @@ pub struct ActivePlayer {
     pub kinode_id: String,
     pub minecraft_player_name: String,
     pub current_cube: Cube,
+    // determines what team the player is on
+    pub team: Owner
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {
     pub center: (i32, i32, i32),
     pub side_length: i32,
+
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Effect{
+    Slowness
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CubeEffectList{
+    effects: Vec<Effect>
 }
 
 impl Cube {
@@ -57,21 +68,12 @@ impl Hash for Cube {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
-    pub cubes: HashMap<u64, Cube>,
-    pub owner: Owner,
-    pub everyone_allowed: bool,
-    pub authorized_players: Vec<String>,
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ConfigurationRegion {
-    pub cubes: Vec<Cube>,
-    pub owner: Owner,
-    pub everyone_allowed: bool,
-    pub authorized_players: Vec<String>,
+    pub cubes: HashMap<Cube, CubeEffectList>,
 }
 
 pub type OwnerToRegion = HashMap<Owner, Region>;
-pub type CubeToOwner = HashMap<Cube, Owner>;
+// 
+pub type CubeToOwner = HashMap<Cube, Vec<Owner>>;
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]

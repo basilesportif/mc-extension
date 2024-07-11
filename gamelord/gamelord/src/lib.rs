@@ -11,7 +11,7 @@ mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, McClientToGamelordRequest, OwnerToRegion,
+    ActivePlayer, Cube, CubeToOwner, McClientToGamelordRequest, OwnerToRegion,
     Player, Region, State
 };
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,7 @@ enum GamelordResponseMinecraft {
     ValidateMove(bool, String),
     PlayerSpawnRequestAuthorized(bool, String, Cube),
     PlayerSpawnRequestDenied(bool ,String),
+
 }
 
 wit_bindgen::generate!({
@@ -108,80 +109,40 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
 
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
+            // we get information about what team the player is in based on Active players
             let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
-            if active_players.contains_key(&minecraft_id) {
-                println!("Player {} is active in the game.", minecraft_id);
-                if let Some(active_player) = active_players.get_mut(&minecraft_id) {
-                    let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
-                    let (response_message, is_valid) =
-                        valid_position(&world_config, &*active_player, &cube);
-                    if !is_valid {
-                        // If the position is not valid, check the cube ownership and permissions
-                        let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
-                        if let Some(owner) = cube_to_owner.get(&cube) {
-                            let region = world_config.get(owner).unwrap();
-                            if region.everyone_allowed
-                                || region.authorized_players.contains(&active_player.kinode_id)
-                            {
-                                // If everyone is allowed or the player is an authorized player, consider the move valid
-                                active_player.current_cube = cube.clone();
-                                println!(
-                                    "Active player {} moved to cube: {:?}",
-                                    active_player.kinode_id, cube
-                                );
-                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                    true,
-                                    "Move allowed by owner permissions.".to_string(),
-                                ))
-                                .unwrap();
-                                Response::new().body(response).send().unwrap();
-                            } else {
-                                // If not allowed, send a negative response
-                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                    false,
-                                    "Move not allowed by owner permissions.".to_string(),
-                                ))
-                                .unwrap();
-                                Response::new().body(response).send().unwrap();
+            if let Some(active_player) = active_players.get(&minecraft_id) {
+                println!("Player {} is active in the game on team {:?}.", minecraft_id, active_player.team);
+                
+                let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
+                let cube_to_owner = CUBE_TO_OWNER.read().expect("Failed to acquire lock");
+
+                if let Some(owners) = cube_to_owner.get(&cube) {
+                    if !owners.contains(&active_player.team) {
+                        // Cube is owned by enemy team(s)
+                        for owner in owners {
+                            if let Some(team_cubes) = world_config.get(owner) {
+                                if let Some(cube_effects) = team_cubes.cubes.get(&cube) {
+                                    println!("Cube effects for enemy owner {:?}: {:?}", owner, cube_effects);
+                                    // TODO: Send these effects to mcdriver
+                                    return Ok(());
+                                }
                             }
-                        } else {
-                            // If no owner found, allow the move and update the active player's current cube
-                            active_player.current_cube = cube.clone();
-                            println!(
-                                "Active player {} moved to unclaimed cube: {:?}",
-                                active_player.kinode_id, cube
-                            );
-                            let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                true,
-                                "Cube unclaimed, allowed to pass.".to_string(),
-                            ))
-                            .unwrap();
-                            Response::new().body(response).send().unwrap();
                         }
-                    } else {
-                        // If the initial position check is valid, proceed as before
-                        active_player.current_cube = cube.clone();
-                        println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
-                        let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                            is_valid,
-                            response_message,
-                        ))
-                        .unwrap();
-                        Response::new().body(response).send().unwrap();
                     }
                 }
+                
+                // If we reach here, either the cube is not owned, or it's owned by the player's team
+                println!("Cube not in enemy region, you are clear");
+                Ok(())
             } else {
                 println!("Player {} is not active in the game.", minecraft_id);
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                    false,
-                    "Player not active in the game.".to_string(),
-                ))
-                .unwrap();
-                Response::new().body(response).send().unwrap();
+                Err(anyhow::anyhow!("Player not found in active players"))
             }
-            Ok(())
         }
-        // this comes from MC-Driver
+        
+        // this comes from MC-Driver 
+        // TO DO, connect this to the team registration interface for checking
         GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
             println!("Gamelord request matched");
             println!(
@@ -314,33 +275,19 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 println!("body: {:?}", body);
                                 let body_str = String::from_utf8_lossy(&body.bytes);
                                 println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
-                                match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
-                                    Ok(regions) => {
+                                match serde_json::from_str::<OwnerToRegion>(&body_str) {
+                                    Ok(new_world_config) => {
                                         let mut world_config = WORLD_CONFIG.write().unwrap();
                                         let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-                                        world_config.clear();
+                                        *world_config = new_world_config;
                                         cube_to_owner.clear();
-
-                                        // Process each ConfigurationRegion
-                                        for region in regions {
-                                            let mut cubes_transformed = HashMap::new();
-                                            for cube in &region.cubes {
-                                                let cube_id = cube.identifier();
-                                                cubes_transformed
-                                                    .insert(cube_id.clone(), cube.clone());
-                                                cube_to_owner
-                                                    .insert(cube.clone(), region.owner.clone());
+                                        // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
+                                        for (owner, region) in world_config.iter() {
+                                            for cube in region.cubes.keys() {
+                                                cube_to_owner.entry(cube.clone())
+                                                    .and_modify(|owners| owners.push(owner.clone()))
+                                                    .or_insert_with(|| vec![owner.clone()]);
                                             }
-
-                                            let new_region = Region {
-                                                cubes: cubes_transformed,
-                                                owner: region.owner.clone(),
-                                                everyone_allowed: region.everyone_allowed,
-                                                authorized_players: region
-                                                    .authorized_players
-                                                    .clone(),
-                                            };
-                                            world_config.insert(region.owner.clone(), new_region);
                                         }
 
                                         println!("World loaded from request");
@@ -350,6 +297,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                             b"World Loaded".to_vec(),
                                         );
                                     }
+
                                     Err(e) => {
                                         println!("Failed to parse world data: {:?}", e);
                                         http::send_response(
