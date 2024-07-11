@@ -442,31 +442,26 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     b"World Deleted".to_vec(),
                                 );
                             }
-                            "/api/resetTeams" => {
-                                // println!(
-                                //     "teams before reset: {:#?}, {:#?}",
-                                //     state.lobby.team1, state.lobby.team2
-                                // );
-                                state.reset_teams().save();
-                                // println!("teams after reset: {:#?}", State::fetch().unwrap());
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    b"Teams reset successful.".to_vec(),
-                                );
-                            }
                             "/api/editLobby" => {
                                 let bytes = get_blob()
                                     .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
                                     .bytes;
                                 let edit_lobby = serde_json::from_slice::<EditLobby>(&bytes)?;
-                                println!("editlobby: {:#?}", edit_lobby);
-                                // state.reset_teams().save();
-                                // println!("teams after reset: {:#?}", State::fetch().unwrap());
+
+                                println!("state before edit_lobby: {:#?}", state);
+                                state.lobby.name = edit_lobby.name;
+                                state.lobby.minecraft_server_address =
+                                    edit_lobby.minecraft_server_address;
+                                if edit_lobby.clear_teams {
+                                    state.clear_teams().save();
+                                } else {
+                                    state.save()
+                                }
+                                println!("state after editlobby: {:#?}", State::fetch().unwrap());
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
-                                    b"Teams reset successful.".to_vec(),
+                                    b"Lobby updated.".to_vec(),
                                 );
                             }
                             _ => http::send_response(
@@ -526,7 +521,6 @@ fn init(our: Address) {
         "/world_config",
         "/api/addPlayer",
         "/api/deleteWorld",
-        "/api/resetTeams",
         "/api/editLobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");

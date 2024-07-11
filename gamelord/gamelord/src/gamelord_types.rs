@@ -151,7 +151,7 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    pub fn reset_teams(&mut self) -> Self {
+    pub fn clear_teams(&mut self) -> Self {
         self.lobby.team1 = Team1 {
             players: HashSet::new(),
         };

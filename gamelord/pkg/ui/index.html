@@ -149,10 +149,6 @@
     <div id="tab2" class="tab-content">
       <div class="container">
         <div class="option">
-          <h2>Reset Teams</h2>
-          <button type="button" onclick="resetTeams()">Reset Teams</button>
-        </div>
-        <div class="option">
           <h2>Edit Lobby</h2>
           <form id="editLobbyForm">
             <div class="form-group">
@@ -186,6 +182,12 @@
                 name="team2"
                 placeholder="Should show Team2 members"
               />
+              <div class="form-group">
+                <label for="clearTeams">
+                  <input type="checkbox" id="clearTeams" name="clearTeams" />
+                  Clear Teams
+                </label>
+              </div>
             </div>
             <button type="button" onclick="editLobby()">Submit Changes</button>
           </form>
@@ -338,65 +340,48 @@
           });
       }
 
-      function resetTeams() {
+      function editLobby() {
+        const lobbyName = document.getElementById("lobbyName").value;
+        const minecraftServerAddress = document.getElementById(
+          "minecraftServerAddress"
+        ).value;
+        const clearTeams = document.getElementById("clearTeams").checked;
+
         const url =
-          "http://localhost:8080/gamelord:gamelord:basilesex.os/api/resetTeams";
+          "http://localhost:8080/gamelord:gamelord:basilesex.os/api/editLobby";
+
+        const data = {
+          name: lobbyName,
+          minecraft_server_address: minecraftServerAddress,
+          clear_teams: clearTeams,
+        };
+        console.log(data);
 
         fetch(url, {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
         })
           .then((response) => {
             if (response.ok) {
-              console.log("Teams reset successfully.");
-              document.getElementById("response-output-tab2").innerText =
-                "Teams reset successfully.";
+              return response.text();
             } else {
-              throw new Error("Failed to reset teams");
+              throw new Error("Failed to edit lobby");
             }
           })
+          .then((result) => {
+            console.log("Lobby edited successfully:", result);
+            document.getElementById("response-output-tab2").innerText = result;
+          })
           .catch((error) => {
-            console.error("Error resetting teams:", error);
+            console.error("Error editing lobby:", error);
             document.getElementById(
               "response-output-tab2"
             ).innerText = `Error: ${error.message}`;
           });
       }
-    
-    function editLobby() {
-      const lobbyName = document.getElementById('lobbyName').value;
-      const minecraftServerAddress = document.getElementById('minecraftServerAddress').value;
-
-      const url = "http://localhost:8080/gamelord:gamelord:basilesex.os/api/editLobby";
-
-      const data = {
-        name: lobbyName,
-        minecraft_server_address: minecraftServerAddress,
-        clear_teams: false
-      };
-
-      fetch(url, {
-        method: "POST",
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      })
-        .then((response) => {
-          if (response.ok) {
-            return response.text();
-          } else {
-            throw new Error("Failed to edit lobby");
-          }
-        })
-        .then((result) => {
-          console.log("Lobby edited successfully:", result);
-          document.getElementById("response-output-tab2").innerText = result;
-        })
-        .catch((error) => {
-          console.error("Error editing lobby:", error);
-          document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
-        });
-    }
     </script>
   </body>
 </html>
