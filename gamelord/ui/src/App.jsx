@@ -1,22 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 function App() {
-  
+  const [lobby, setLobby] = useState({
+    name: "",
+    minecraft_server_address: "",
+    team1: [],
+    team2: [],
+  });
+  const [activeTab, setActiveTab] = useState("tab1");
 
-
-  function showTab(tabId) {
-    const tabs = document.querySelectorAll(".tab-content");
-    tabs.forEach((tab) => {
-      tab.classList.remove("active");
-    });
-    document.getElementById(tabId).classList.add("active");
-  }
-
-  useEffect (() => {
+  useEffect(() => {
     document.getElementById("playerForm").addEventListener("submit", addPlayer);
     getLobby();
-    showTab("tab1");
-  })
+    setActiveTab("tab1");
+  }, []);
+
+  useEffect(() => {
+    // Remove 'active' class from all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    // Add 'active' class to the selected tab
+    document.getElementById(activeTab).classList.add('active');
+  }, [activeTab]);
 
   async function addPlayer() {
     const minecraftName = document.getElementById("minecraftName").placeholder;
@@ -143,11 +149,11 @@ function App() {
       });
   }
 
-  function editLobby() {
-    const lobbyName = document.getElementById("lobbyName").placeholder;
+  const editLobby = () => {
+    const lobbyName = document.getElementById("lobbyName").value || lobby.name  ;
     const minecraftServerAddress = document.getElementById(
       "minecraftServerAddress"
-    ).placeholder;
+    ).value || lobby.minecraft_server_address;
     const clearTeams = document.getElementById("clearTeams").checked;
 
     const url = "/gamelord:gamelord:basilesex.os/api/editLobby";
@@ -204,13 +210,13 @@ function App() {
           "Game Name: " + data.name;
         document.getElementById("minecraftServerAddress").placeholder =
           "MC Server: " + data.minecraft_server_address;
-        // Clear existing team lists
-        // document.getElementById("team1").value =
-        //   "Team1: " +
-        //   data.team1.players.map((player) => player.kinode_id).join(",");
-        // document.getElementById("team2").value =
-        //   "Team2: " +
-        //   data.team1.players.map((player) => player.kinode_id).join(",");
+
+        setLobby({
+          name: data.name,
+          minecraft_server_address: data.minecraft_server_address,
+          team1: data.team1.players,
+          team2: data.team2.players,
+        });
 
         document.getElementById("response-output-tab2").innerText =
           "Lobby data updated successfully";
@@ -227,10 +233,10 @@ function App() {
     <div>
       <h1>Gamelord</h1>
       <div className="tabs">
-        <div className="tab" onClick={() => showTab("tab1")}>
+        <div className="tab" onClick={() => setActiveTab("tab1")}>
           Gamelord
         </div>
-        <div className="tab" onClick={() => showTab("tab2")}>
+        <div className="tab" onClick={() => setActiveTab("tab2")}>
           Lobby Manager
         </div>
       </div>
@@ -309,8 +315,7 @@ function App() {
                   placeholder="Enter Minecraft Server Address"
                 />
               </div>
-              <div className="form-group">
-              </div>
+              <div className="form-group"></div>
               <div className="form-group">
                 <div className="form-group">
                   <label htmlFor="clearTeams">
@@ -323,6 +328,25 @@ function App() {
                 Submit Changes
               </button>
             </form>
+          </div>
+          <div className="option">
+            <h2>Team Members</h2>
+            <div>
+              <h3>Team 1</h3>
+              <ul>
+                {lobby.team1.map((player, index) => (
+                  <li key={index}>{player.kinode_id}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3>Team 2</h3>
+              <ul>
+                {lobby.team2.map((player, index) => (
+                  <li key={index}>{player.kinode_id}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
         <pre id="response-output-tab2"></pre>
