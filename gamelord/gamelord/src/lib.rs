@@ -129,7 +129,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                                     "Active player {} moved to cube: {:?}",
                                     active_player.kinode_id, cube
                                 );
-                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(
+                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
                                     true,
                                     "Move allowed by owner permissions.".to_string(),
                                 ))
@@ -137,7 +137,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                                 Response::new().body(response).send().unwrap();
                             } else {
                                 // If not allowed, send a negative response
-                                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(
+                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
                                     false,
                                     "Move not allowed by owner permissions.".to_string(),
                                 ))
@@ -151,7 +151,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                                 "Active player {} moved to unclaimed cube: {:?}",
                                 active_player.kinode_id, cube
                             );
-                            let response = serde_json::to_vec(&GamelordResponse::ValidateMove(
+                            let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
                                 true,
                                 "Cube unclaimed, allowed to pass.".to_string(),
                             ))
@@ -162,7 +162,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                         // If the initial position check is valid, proceed as before
                         active_player.current_cube = cube.clone();
                         println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
-                        let response = serde_json::to_vec(&GamelordResponse::ValidateMove(
+                        let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
                             is_valid,
                             response_message,
                         ))
@@ -172,7 +172,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 }
             } else {
                 println!("Player {} is not active in the game.", minecraft_id);
-                let response = serde_json::to_vec(&GamelordResponse::ValidateMove(
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
                     false,
                     "Player not active in the game.".to_string(),
                 ))
@@ -218,7 +218,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 println!("active players inserted");
                 active_players.insert(player.minecraft_player_name().clone(), active_player);
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayer(
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
                     true,
                     "Player added.".to_string(),
                     spawn_cube.clone(),
@@ -226,7 +226,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 .unwrap();
                 Response::new().body(response).send().unwrap();
             } else {
-                let response = serde_json::to_vec(&GamelordResponse::AddPlayerFailed(
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
                     false,
                     "Player not added.".to_string(),
                 ))
