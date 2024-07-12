@@ -5,22 +5,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-// Note that the name might need to be changed
-pub struct Player {
-    pub kinode_id: NodeId,
-    pub minecraft_player_name: String,
-}
+use mcstructs::{GameLobby, Team, TeamName};
 
-impl Player {
-    pub fn kinode_id(&self) -> &String {
-        &self.kinode_id
-    }
-
-    pub fn minecraft_player_name(&self) -> &String {
-        &self.minecraft_player_name
-    }
-}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
     pub kinode_id: String,
@@ -82,41 +68,12 @@ pub enum Owner {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Team1 {
-    pub players: HashSet<Player>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Team2 {
-    pub players: HashSet<Player>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum McClientToGamelordRequest {
-    JoinTeam(JoinTeam),
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinTeam {
-    pub gamelord_id: NodeId,
-    pub minecraft_id: String,
-    pub team_name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EditLobby {
     pub name: String,
     pub minecraft_server_address: String,
     pub clear_teams: bool
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameLobby {
-    pub name: String,
-    pub minecraft_server_address: String,
-    pub team1: Team1,
-    pub team2: Team2,
-    pub chat: String, // TODO
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
@@ -130,13 +87,17 @@ impl State {
             lobby: GameLobby {
                 name: "Game 1".to_string(),
                 minecraft_server_address: "".to_string(),
-                team1: Team1 {
+                team1: Team {
+                    name: TeamName::Team1,
                     players: HashSet::new(),
+                    chat: "".to_string(),
+
                 },
-                team2: Team2 {
+                team2: Team {
+                    name: TeamName::Team2,
                     players: HashSet::new(),
+                    chat: "".to_string(),
                 },
-                chat: "".to_string(),
             },
         }
     }
@@ -152,11 +113,15 @@ impl State {
         set_state(&serialized_state);
     }
     pub fn clear_teams(&mut self) -> Self {
-        self.lobby.team1 = Team1 {
+        self.lobby.team1 = Team {
+            name: TeamName::Team1,
             players: HashSet::new(),
+            chat: "".to_string(),
         };
-        self.lobby.team2 = Team2 {
+        self.lobby.team2 = Team {
+            name: TeamName::Team2,
             players: HashSet::new(),
+            chat: "".to_string(),
         };
         self.clone()
     }

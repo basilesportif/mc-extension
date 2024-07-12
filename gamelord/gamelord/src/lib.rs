@@ -1,9 +1,8 @@
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, set_state, Address, Message, Response,
+    println, Address, Message, Response,
 };
-
 use lazy_static::lazy_static;
 use std::sync::RwLock;
 
@@ -11,9 +10,10 @@ mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, EditLobby, McClientToGamelordRequest,
-    OwnerToRegion, Player, Region, State,
+    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, EditLobby,
+    OwnerToRegion, Region, State,
 };
+use mcstructs::{McClientToGamelordRequest, TeamName, Player};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -93,11 +93,11 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             kinode_id: message.source().node().to_string(),
             minecraft_player_name: join_team.minecraft_id.to_string(),
         };
-        match join_team.team_name.as_str() {
-            "Team1" => state.lobby.team1.players.insert(player),
-            "Team2" => state.lobby.team2.players.insert(player),
+        match join_team.team_name {
+            TeamName::Team1 => state.lobby.team1.players.insert(player),
+            TeamName::Team2 => state.lobby.team2.players.insert(player),
             _ => {
-                println!("Invalid team name: {}", join_team.team_name);
+                println!("Invalid team name: {:?}", join_team.team_name);
                 return Ok(());
             }
         };
