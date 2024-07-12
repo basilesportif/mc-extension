@@ -1,214 +1,129 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 
 let scene, camera, renderer, controls;
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
-let INTERSECTED;
 let selectedCube = null;
-// Grid of cubes
-const gridSize = 10;
-const height = 4;
-let cubeSize = 50; // Initial cube size
-const cubes = [];
-const regions = []; // List to store regions
-const regionColors = new Map(); // Map to store colors for each region
+const cubes = [], regions = [], regionColors = new Map();
+let minecraftWorld;
 
 document.addEventListener('DOMContentLoaded', () => {
   init();
+  loadMinecraftWorld();
   animate();
 });
 
 function init() {
-  // Scene
+  setupScene();
+  setupCamera();
+  setupRenderer();
+  setupControls();
+  setupLighting();
+  createAxes();
+  setupEventListeners();
+  updateWorldInfo();
+}
+
+function setupScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xffffff);
+}
 
-  // Camera
+function setupCamera() {
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 50, 200);
+}
 
-  // Renderer
+function setupRenderer() {
   renderer = new THREE.WebGLRenderer();
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
+}
 
-  // Controls
+function setupControls() {
   controls = new OrbitControls(camera, renderer.domElement);
+}
 
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0x404040);
-  scene.add(ambientLight);
+function setupLighting() {
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
   directionalLight.position.set(1, 1, 1).normalize();
-  scene.add(directionalLight);
+  scene.add(ambientLight, directionalLight, hemisphereLight);
+}
 
-  createCubes();
-  createAxes();
+function createAxes() {
+  const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  const largeNumber = 10000;
+  const axes = ['x', 'y', 'z'].map(axis => {
+    const points = [new THREE.Vector3(), new THREE.Vector3()];
+    points[0][axis] = -largeNumber;
+    points[1][axis] = largeNumber;
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geometry, material);
+  });
+  scene.add(...axes);
+}
 
-  const axesHelper = new THREE.AxesHelper(200);
-  axesHelper.setColors(0xffffff, 0xffffff, 0xffffff);
-  scene.add(axesHelper);
-
-  // Event listeners
+function setupEventListeners() {
   window.addEventListener('resize', onWindowResize, false);
   window.addEventListener('mousemove', onMouseMove, false);
   window.addEventListener('click', onMouseClick, false);
   window.addEventListener('keydown', onKeyDown, false);
-
-  // Add button event listeners
   document.getElementById('clearSelectionButton').addEventListener('click', clearSelection);
   document.getElementById('addRegionButton').addEventListener('click', addRegion);
   document.getElementById('generateWorldConfigButton').addEventListener('click', generateWorldConfig);
   document.getElementById('cubeSizeInput').addEventListener('change', onCubeSizeChange);
   document.getElementById('loadConfigButton').addEventListener('change', loadConfig);
-
-  // Update world info
-  updateWorldInfo();
-}
-
-function createCubes() {
-  // Remove existing cubes
-  cubes.forEach(cube => scene.remove(cube));
-  cubes.length = 0;
-
-  // Create new cubes
-  for (let i = 0; i < gridSize; i++) {
-    for (let j = 0; j < gridSize; j++) {
-      for (let k = 0; k < height; k++) {
-        const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
-        const material = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          transparent: true,
-          opacity: 0.1
-        });
-        const cube = new THREE.Mesh(geometry, material);
-        cube.position.set(
-          i * cubeSize - (gridSize * cubeSize) / 2 + cubeSize / 2,
-          k * cubeSize + cubeSize / 2,
-          j * cubeSize - (gridSize * cubeSize) / 2 + cubeSize / 2
-        );
-        cube.userData.clicked = false;  // Track if the cube has been clicked
-        scene.add(cube);
-        cubes.push(cube);
-      }
-    }
-  }
-
-  // Update world info
-  updateWorldInfo();
-}
-
-function createAxes() {
-  const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
-  const largeNumber = 10000; // Use a large number instead of Infinity
-
-  const pointsX = [];
-  pointsX.push(new THREE.Vector3(-largeNumber, 0, 0));
-  pointsX.push(new THREE.Vector3(largeNumber, 0, 0));
-
-  const pointsY = [];
-  pointsY.push(new THREE.Vector3(0, -largeNumber, 0));
-  pointsY.push(new THREE.Vector3(0, largeNumber, 0));
-
-  const pointsZ = [];
-  pointsZ.push(new THREE.Vector3(0, 0, -largeNumber));
-  pointsZ.push(new THREE.Vector3(0, 0, largeNumber));
-
-  const geometryX = new THREE.BufferGeometry().setFromPoints(pointsX);
-  const geometryY = new THREE.BufferGeometry().setFromPoints(pointsY);
-  const geometryZ = new THREE.BufferGeometry().setFromPoints(pointsZ);
-
-  const lineX = new THREE.Line(geometryX, material);
-  const lineY = new THREE.Line(geometryY, material);
-  const lineZ = new THREE.Line(geometryZ, material);
-
-  scene.add(lineX);
-  scene.add(lineY);
-  scene.add(lineZ);
 }
 
 function onCubeSizeChange(event) {
   cubeSize = parseInt(event.target.value);
-  createCubes();
+  createCubesBasedOnMinecraftWorld();
 }
 
 function clearSelection() {
-  // Clear the regions array
   regions.length = 0;
-
-  // Reset the cubes
   cubes.forEach(cube => {
     cube.userData.clicked = false;
     cube.material.color.set(0x000000);
-    cube.material.opacity = 0.1;
+    cube.material.opacity = 0.05;
   });
   selectedCube = null;
-  console.log('Selection cleared');
-
-  // Clear the region list
-  const regionList = document.getElementById('regionList');
-  regionList.innerHTML = '';
-
-  // Clear the loaded file input
-  const loadConfigButton = document.getElementById('loadConfigButton');
-  loadConfigButton.value = '';
-
-  // Recreate the initial cubes
-  createCubes();
+  document.getElementById('regionList').innerHTML = '';
+  document.getElementById('loadConfigButton').value = '';
+  createCubesBasedOnMinecraftWorld();
 }
 
 function addRegion() {
   const clickedCubes = cubes.filter(cube => cube.userData.clicked);
-  if (clickedCubes.length === 0) {
-    alert('No cubes selected!');
-    return;
-  }
-
+  if (clickedCubes.length === 0) return alert('No cubes selected!');
   const owner = prompt('Enter region owner:');
-  if (!owner) {
-    alert('Owner name is required!');
-    return;
-  }
-
+  if (!owner) return alert('Owner name is required!');
   const everyoneAllowed = confirm('Do you authorize all players to roam freely in your region? Click "OK" for Yes and "Cancel" for No.');
-
   let region = regions.find(r => r.owner === owner);
-  const newCubes = clickedCubes.map(cube => ({
-    center: [cube.position.x, cube.position.y, cube.position.z],
-    side_length: cubeSize
-  }));
-
-  if (!regionColors.has(owner)) {
-    regionColors.set(owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
-  }
-
+  const newCubes = clickedCubes.map(cube => ({ center: [cube.position.x, cube.position.y, cube.position.z], side_length: cubeSize }));
+  if (!regionColors.has(owner)) regionColors.set(owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
   if (region) {
-    // Only add cubes that are not already in the region
     const existingCenters = new Set(region.cubes.map(c => c.center.join(',')));
     const uniqueNewCubes = newCubes.filter(c => !existingCenters.has(c.center.join(',')));
     region.cubes.push(...uniqueNewCubes);
   } else {
-    region = {
-      owner: owner,
-      everyone_allowed: everyoneAllowed,
-      authorized_players: [],
-      cubes: newCubes
-    };
+    region = { owner, everyone_allowed: everyoneAllowed, authorized_players: [], cubes: newCubes };
     regions.push(region);
   }
-
-  // Mark the cubes as part of a region
   clickedCubes.forEach(cube => {
     cube.userData.clicked = false;
     cube.material.color.set(0x000000);
-    cube.material.opacity = 0.1;
+    cube.material.opacity = 0.05;
   });
-
   updateRegionList();
   colorRegionCubes(region);
-  console.log('Region added:', JSON.stringify(region, null, 2));
 }
+
 function generateWorldConfig() {
   const json = JSON.stringify(regions, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -218,20 +133,15 @@ function generateWorldConfig() {
   a.download = 'world_config.json';
   a.click();
   URL.revokeObjectURL(url);
-  console.log('World config generated and downloaded');
 }
 
 function loadConfig(event) {
   const file = event.target.files[0];
-  if (!file) {
-    return;
-  }
-
+  if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(e) {
-    const content = e.target.result;
-    const loadedRegions = JSON.parse(content);
-    regions.length = 0; // Clear existing regions
+  reader.onload = e => {
+    const loadedRegions = JSON.parse(e.target.result);
+    regions.length = 0;
     regions.push(...loadedRegions);
     createCubesFromConfig(loadedRegions);
     updateRegionList();
@@ -241,96 +151,64 @@ function loadConfig(event) {
 
 function createCubesFromConfig(loadedRegions) {
   loadedRegions.forEach(region => {
-    let color;
-    if (regionColors.has(region.owner)) {
-      color = regionColors.get(region.owner);
-    } else {
-      color = new THREE.Color(Math.random(), Math.random(), Math.random());
-      regionColors.set(region.owner, color);
-    }
-
+    const color = regionColors.get(region.owner) || new THREE.Color(Math.random(), Math.random(), Math.random());
+    regionColors.set(region.owner, color);
     region.cubes.forEach(cubeData => {
       const geometry = new THREE.BoxGeometry(cubeData.side_length, cubeData.side_length, cubeData.side_length);
-      const material = new THREE.MeshStandardMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.7
-      });
+      const material = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.7 });
       const cube = new THREE.Mesh(geometry, material);
       cube.position.set(...cubeData.center);
-      cube.userData.clicked = false;  // Track if the cube has been clicked
+      cube.userData.clicked = false;
       scene.add(cube);
       cubes.push(cube);
     });
   });
-
-  // Update world info
   updateWorldInfo();
 }
 
 function colorRegionCubes(region) {
-  let color;
-  if (regionColors.has(region.owner)) {
-    color = regionColors.get(region.owner);
-  } else {
-    color = new THREE.Color(Math.random(), Math.random(), Math.random());
-    regionColors.set(region.owner, color);
-  }
-
+  const color = regionColors.get(region.owner) || new THREE.Color(Math.random(), Math.random(), Math.random());
+  regionColors.set(region.owner, color);
   region.cubes.forEach(cubeData => {
     const cube = cubes.find(c => c.position.x === cubeData.center[0] && c.position.y === cubeData.center[1] && c.position.z === cubeData.center[2]);
     if (cube) {
       cube.material.color.set(color);
-      cube.material.opacity = 0.7;
+      cube.material.opacity = 0.2;
     }
   });
-
-  // Update world info
   updateWorldInfo();
 }
+
 function updateRegionList() {
   const regionList = document.getElementById('regionList');
   regionList.innerHTML = '';
-
   const ownerCubeCount = new Map();
-
   regions.forEach(region => {
     const cubeCount = region.cubes.length;
     ownerCubeCount.set(region.owner, (ownerCubeCount.get(region.owner) || 0) + cubeCount);
-    
-    // Ensure a color is assigned to the owner if it doesn't exist
-    if (!regionColors.has(region.owner)) {
-      regionColors.set(region.owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
-    }
+    if (!regionColors.has(region.owner)) regionColors.set(region.owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
   });
-
   ownerCubeCount.forEach((cubeCount, owner) => {
     const color = regionColors.get(owner);
     const regionItem = document.createElement('div');
     regionItem.className = 'region-item';
-
     const colorBox = document.createElement('div');
     colorBox.className = 'region-color';
     colorBox.style.backgroundColor = color.getStyle();
-
     const ownerText = document.createElement('span');
     ownerText.textContent = `${owner} (${cubeCount} cubes)`;
-
     regionItem.appendChild(colorBox);
     regionItem.appendChild(ownerText);
     regionList.appendChild(regionItem);
   });
-
-  // Update world info
   updateWorldInfo();
 }
 
 function updateWorldInfo() {
-  const totalCubes = gridSize * gridSize * height;
+  const totalCubes = cubes.length;
   const usedCubes = regions.reduce((sum, region) => sum + region.cubes.length, 0);
   const availableCubes = totalCubes - usedCubes;
-  const worldSize = `${gridSize * cubeSize} x ${height * cubeSize} x ${gridSize * cubeSize}`;
-
+  const worldSize = `${totalCubes} cubes`;
   document.getElementById('cubeCount').textContent = `Cubes Available: ${availableCubes}`;
   document.getElementById('worldSize').textContent = `World Size: ${worldSize}`;
 }
@@ -346,78 +224,53 @@ function onMouseMove(event) {
   mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
 }
 
-function onMouseClick(event) {
+function onMouseClick() {
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(scene.children);
-
+  const intersects = raycaster.intersectObjects(cubes);
   if (intersects.length > 0) {
     const clickedObject = intersects[0].object;
     if (!clickedObject.userData.clicked) {
       clickedObject.material.color.set(0xff0000);
-      clickedObject.material.opacity = 0.7;
+      clickedObject.material.opacity = 0.3; // Make the cube visible
       clickedObject.userData.clicked = true;
-      console.log('Selected & clicked cube position:', clickedObject.position);
       setSelectedCube(clickedObject);
-    }
-    else {
+    } else {
       clickedObject.material.color.set(0x000000);
-      clickedObject.material.opacity = 0.1;
-      clickedObject.userData.clicked = false;  // Mark the cube as clicked
+      clickedObject.material.opacity = 0; // Make the cube invisible again
+      clickedObject.userData.clicked = false;
     }
+
+    // Log the position of the clicked cube's center
+    console.log(`Clicked cube at position: (${clickedObject.position.x}, ${clickedObject.position.y}, ${clickedObject.position.z})`);
   }
 }
 
 function onKeyDown(event) {
-  if (selectedCube) {
-    let x = selectedCube.position.x;
-    let y = selectedCube.position.y;
-    let z = selectedCube.position.z;
-    console.log(`x: ${x}, y: ${y}, z: ${z}`)
-
-    const step = cubeSize; // Adjust step to match the new cube size
-
-    switch (event.key) {
-      case ' ':
-        selectedCube.userData.clicked = !selectedCube.userData.clicked;
-        break;
-      case 'a':
-        x -= step;
-        break;
-      case 'd':
-        x += step;
-        break;
-      case 'w':
-        z -= step;
-        break;
-      case 's':
-        z += step;
-        break;
-      case 'q':
-        y -= step;
-        break;
-      case 'e':
-        y += step;
-        break;
-      default:
-        return;
-    }
-    const nextCube = cubes.find(cube => cube.position.x === x && cube.position.y === y && cube.position.z === z);
-    if (nextCube) {
-      setSelectedCube(nextCube);
-    }
+  if (!selectedCube) return;
+  let { x, y, z } = selectedCube.position;
+  const step = 16; // Each step is 16 units (one chunk)
+  switch (event.key) {
+    case ' ': selectedCube.userData.clicked = !selectedCube.userData.clicked; break;
+    case 'a': x -= step; break;
+    case 'd': x += step; break;
+    case 'w': z -= step; break;
+    case 's': z += step; break;
+    case 'q': y -= step; break;
+    case 'e': y += step; break;
+    default: return;
   }
+  const nextCube = cubes.find(cube => 
+    Math.abs(cube.position.x - x) < 0.1 && 
+    Math.abs(cube.position.y - y) < 0.1 && 
+    Math.abs(cube.position.z - z) < 0.1
+  );
+  if (nextCube) setSelectedCube(nextCube);
 }
 
 function unselectCube() {
   if (selectedCube) {
-    if (selectedCube.userData.clicked) {
-      selectedCube.material.color.set(0xff0000);
-      selectedCube.material.opacity = 0.7; // Set to red if clicked
-    }
-    else {
-      selectedCube.material.color.set(0x000000);
-      selectedCube.material.opacity = 0.1;
-    }
+    selectedCube.material.color.set(selectedCube.userData.clicked ? 0xff0000 : 0x000000);
+    selectedCube.material.opacity = selectedCube.userData.clicked ? 0.3 : 0.05;
     selectedCube = null;
   }
 }
@@ -426,33 +279,124 @@ function setSelectedCube(cube) {
   unselectCube();
   selectedCube = cube;
   selectedCube.material.color.set(0xfd7904);
-  selectedCube.material.opacity = 0.7;// Set to orange if selected
+  selectedCube.material.opacity = 0.3;
+
+  // Log the position of the selected cube's center
+  console.log(`Selected cube at position: (${selectedCube.position.x}, ${selectedCube.position.y}, ${selectedCube.position.z})`);
+}
+
+function loadMinecraftWorld() {
+  const objLoader = new OBJLoader();
+  const mtlLoader = new MTLLoader();
+  const objPath = '/ExportedMinecraftWorld/minecraft.obj';
+  const mtlPath = '/ExportedMinecraftWorld/minecraft.mtl';
+
+  mtlLoader.load(
+    mtlPath,
+    (materials) => {
+      materials.preload();
+      objLoader.setMaterials(materials);
+      objLoader.load(
+        objPath,
+        (object) => {
+          object.traverse((child) => {
+            if (child.isMesh) {
+              child.userData.isMinecraftWorld = true;
+              if (child.material.map) {
+                const textureType = getTextureType(child.material.map.name);
+                console.log(`Texture type: ${textureType}`);
+              }
+            }
+          });
+          scene.add(object);
+          minecraftWorld = object;
+          createCubesBasedOnMinecraftWorld();
+        },
+        undefined,
+        (error) => {
+          console.error('Error loading OBJ file:', error);
+          createCubes();
+        }
+      );
+    },
+    undefined,
+    (error) => {
+      console.error('Error loading MTL file:', error);
+      createCubes();
+    }
+  );
+}
+
+function getTextureType(textureName) {
+  if (textureName.includes('block')) return 'block';
+  if (textureName.includes('entity')) return 'entity';
+  if (textureName.includes('painting')) return 'painting';
+  if (textureName.includes('banner')) return 'banner';
+  if (textureName.includes('models')) return 'models';
+  return 'block';
+}
+
+function createCubesBasedOnMinecraftWorld() {
+  const bbox = new THREE.Box3().setFromObject(minecraftWorld);
+  const size = bbox.getSize(new THREE.Vector3());
+
+  const cubeSize = 16; // Each cube represents a 16x16x16 block volume
+  const gridX = Math.floor(size.x / cubeSize);
+  const gridY = Math.floor(size.y / cubeSize);
+  const gridZ = Math.floor(size.z / cubeSize);
+
+  const gridGroup = new THREE.Group(); // Create a group for the grid
+
+  for (let i = 0; i < gridX; i++) {
+    for (let j = 0; j < gridY; j++) {
+      for (let k = 0; k < gridZ; k++) {
+        const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+        const material = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0 }); // Initially invisible
+        const cube = new THREE.Mesh(geometry, material);
+        
+        // Position the cube center
+        cube.position.set(
+          (i - Math.floor(gridX / 2)) * cubeSize + (cubeSize / 2),
+          j * cubeSize + (cubeSize / 2) + Math.floor(bbox.min.y / cubeSize) * cubeSize,
+          (k - Math.floor(gridZ / 2)) * cubeSize + (cubeSize / 2)
+        );
+        
+        cube.userData.clicked = false;
+        gridGroup.add(cube);
+        cubes.push(cube);
+      }
+    }
+  }
+
+  scene.add(gridGroup);
+  updateWorldInfo();
+}
+
+function fitCameraToObject(camera, object, offset = 1.25) {
+  const boundingBox = new THREE.Box3().setFromObject(object);
+  const center = boundingBox.getCenter(new THREE.Vector3());
+  const size = boundingBox.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fov = camera.fov * (Math.PI / 180);
+  let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+  cameraZ *= offset;
+  camera.position.set(center.x, center.y, cameraZ);
+  const minZ = boundingBox.min.z;
+  const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
+  camera.far = cameraToFarEdge * 3;
+  camera.updateProjectionMatrix();
+  if (controls) {
+    controls.target.copy(center);
+    controls.maxDistance = cameraToFarEdge * 2;
+    controls.update();
+  } else {
+    camera.lookAt(center);
+  }
 }
 
 function animate() {
   requestAnimationFrame(animate);
-
-  // Raycasting
-  raycaster.setFromCamera(mouse, camera);
-
-  const intersects = raycaster.intersectObjects(scene.children);
-  if (intersects.length > 0) {
-    if (INTERSECTED != intersects[0].object) {
-      if (INTERSECTED && !INTERSECTED.userData.clicked) {
-        INTERSECTED.material.color.set(0x000000);  // Reset color if not clicked
-      }
-      INTERSECTED = intersects[0].object;
-      if (!INTERSECTED.userData.clicked) {
-        INTERSECTED.material.color.set(0xffff00);
-      }
-    }
-  } else {
-    if (INTERSECTED && !INTERSECTED.userData.clicked) {
-      INTERSECTED.material.color.set(0x000000);  // Reset color if not clicked
-    }
-    INTERSECTED = null;
-  }
-
   controls.update();
   renderer.render(scene, camera);
 }
+
