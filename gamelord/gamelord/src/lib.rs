@@ -10,28 +10,12 @@ mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, CubeToOwner, EditLobby,
-    OwnerToRegion, Region, State,
+    ActivePlayer, ConfigurationRegion, Cube, EditLobby,
+    Region, State,
 };
 use mcstructs::{McClientToGamelordRequest, TeamName, Player};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-//Here is where we store the CURRENT world config
-lazy_static! {
-    static ref WORLD_CONFIG: RwLock<OwnerToRegion> = RwLock::new(HashMap::new());
-}
-lazy_static! {
-    static ref CUBE_TO_OWNER: RwLock<CubeToOwner> = RwLock::new(HashMap::new());
-}
-
-// Remember to change the type key type here to Address. (maybe not, it might be a MC username)
-lazy_static! {
-    static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
-}
-lazy_static! {
-    static ref ALLOWED_PLAYERS: RwLock<HashMap<String, Player>> = RwLock::new(HashMap::new());
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequestMinecraft {
@@ -108,18 +92,15 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
 
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
-            let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
-            if active_players.contains_key(&minecraft_id) {
+            if state.active_players.contains_key(&minecraft_id) {
                 println!("Player {} is active in the game.", minecraft_id);
-                if let Some(active_player) = active_players.get_mut(&minecraft_id) {
-                    let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
+                if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
                     let (response_message, is_valid) =
-                        valid_position(&state.lobby, &world_config, &active_player.to_player(), &cube);
+                        valid_position(&state.lobby, &state.world_config, &active_player.to_player(), &cube);
                     if !is_valid {
                         // If the position is not valid, check the cube ownership and permissions
-                        let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
-                        if let Some(owner) = cube_to_owner.get(&cube) {
-                            let region = world_config.get(owner).unwrap();
+                        if let Some(owner) = state.cube_to_owner.get(&cube) {
+                            let region = state.world_config.get(owner).unwrap();
                             if region.everyone_allowed
                                 || region.authorized_players.contains(&active_player.kinode_id)
                             {
@@ -188,16 +169,9 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 "Player spawn request received for player: {:?}",
                 minecraft_id
             );
-            let allowed_players = match ALLOWED_PLAYERS.read() {
-                Ok(players) => players,
-                Err(e) => {
-                    println!("Failed to acquire read lock on ALLOWED_PLAYERS: {:?}", e);
-                    return Ok(());
-                }
-            };
             println!("checked whether player is allowed beginning of function");
-            if allowed_players.contains_key(&minecraft_id) {
-                let player = allowed_players
+            if state.allowed_players.contains_key(&minecraft_id) {
+                let player = state.allowed_players
                     .get(&minecraft_id)
                     .expect("Player should exist");
                 println!("player exists");
@@ -214,9 +188,9 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                     current_cube: spawn_cube.clone(),
                 };
                 println!("active player created");
-                let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
                 println!("active players inserted");
-                active_players.insert(player.minecraft_player_name().clone(), active_player);
+                state.active_players.insert(player.minecraft_player_name().clone(), active_player);
+                state.save();
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
                 let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
                     true,
@@ -240,13 +214,13 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
         },
         // Think about whether I need this
         GamelordRequestMinecraft::PlayerLeaveRequest{player} => {
-            let mut active_players = ACTIVE_PLAYERS.write().unwrap();
-            if active_players.contains_key(player.kinode_id()) {
-                active_players.remove(player.kinode_id());
+            if state.active_players.contains_key(player.kinode_id()) {
+                state.active_players.remove(player.kinode_id());
                 println!(
                     "Player with kinode_id {} has left the game.",
                     player.kinode_id()
                 );
+                state.save();
             } else {
                 println!(
                     "Player with kinode_id {} is not in the active players list.",
@@ -274,8 +248,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
-                                let world_config = WORLD_CONFIG.read().unwrap();
-                                let response = serde_json::to_string(&*world_config).unwrap();
+                                let response = serde_json::to_string(&state.world_config).unwrap();
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -283,8 +256,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 );
                             }
                             "/active_players" => {
-                                let active_players = ACTIVE_PLAYERS.read().unwrap();
-                                let response = serde_json::to_string(&*active_players).unwrap();
+                                let response = serde_json::to_string(&state.active_players).unwrap();
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -325,10 +297,8 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
                                 match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
                                     Ok(regions) => {
-                                        let mut world_config = WORLD_CONFIG.write().unwrap();
-                                        let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-                                        world_config.clear();
-                                        cube_to_owner.clear();
+                                        state.world_config.clear();
+                                        state.cube_to_owner.clear();
 
                                         // Process each ConfigurationRegion
                                         for region in regions {
@@ -337,7 +307,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                                 let cube_id = cube.identifier();
                                                 cubes_transformed
                                                     .insert(cube_id.clone(), cube.clone());
-                                                cube_to_owner
+                                                state.cube_to_owner
                                                     .insert(cube.clone(), region.owner.clone());
                                             }
 
@@ -349,8 +319,10 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                                     .authorized_players
                                                     .clone(),
                                             };
-                                            world_config.insert(region.owner.clone(), new_region);
+                                            state.world_config.insert(region.owner.clone(), new_region);
                                         }
+
+                                        state.save();
 
                                         println!("World loaded from request");
                                         http::send_response(
@@ -378,13 +350,13 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     Ok(player) => {
                                         println!("player: {:?}", player);
                                         let player_clone = player.clone(); // Clone player before insertion
-                                        let mut allowed_players = ALLOWED_PLAYERS.write().unwrap();
-                                        allowed_players
+                                        state.allowed_players
                                             .insert(player.minecraft_player_name().clone(), player);
                                         println!(
                                             "Player {} added to allowed players",
                                             player_clone.minecraft_player_name()
                                         );
+                                        state.save();
                                         http::send_response(
                                             http::StatusCode::OK,
                                             None,
@@ -402,10 +374,9 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 }
                             }
                             "/api/deleteWorld" => {
-                                let mut world_config = WORLD_CONFIG.write().unwrap();
-                                let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-                                world_config.clear();
-                                cube_to_owner.clear();
+                                state.world_config.clear();
+                                state.cube_to_owner.clear();
+                                state.save();
                                 println!("World deleted from request");
                                 http::send_response(
                                     http::StatusCode::OK,

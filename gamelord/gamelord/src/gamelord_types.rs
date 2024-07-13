@@ -64,8 +64,6 @@ pub struct ConfigurationRegion {
     pub authorized_players: Vec<String>,
 }
 
-pub type OwnerToRegion = HashMap<Owner, Region>;
-pub type CubeToOwner = HashMap<Cube, Owner>;
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
@@ -81,12 +79,16 @@ pub struct EditLobby {
     pub clear_teams: bool
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
     pub lobby: GameLobby,
+    pub world_config: HashMap<Owner, Region>,
+    pub cube_to_owner: HashMap<Cube, Owner>,
+    pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
+    pub allowed_players: HashMap<String, Player>,
 }
+
 impl State {
     pub fn new(our: &Address) -> Self {
         State {
@@ -106,6 +108,10 @@ impl State {
                     chat: "".to_string(),
                 },
             },
+            world_config: HashMap::new(),
+            cube_to_owner: HashMap::new(),
+            active_players: HashMap::new(),
+            allowed_players: HashMap::new(),
         }
     }
     pub fn fetch() -> Option<State> {

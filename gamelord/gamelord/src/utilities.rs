@@ -1,10 +1,11 @@
-use crate::gamelord_types::{Cube, OwnerToRegion, Region, Owner::TeamName};
+use crate::gamelord_types::{Cube, Owner, Region, Owner::TeamName};
 use mcstructs::{Player, GameLobby};
+use std::collections::HashMap;
 
 /// Function that takes in Regions, player, and current coordinates, and returns a boolean whether a player is allowed to be there or not 
 pub fn valid_position(
     lobby: &GameLobby,
-    layout: &OwnerToRegion,
+    layout: &HashMap<Owner, Region>,
     player: &Player,
     cube: &Cube,
 ) -> (String, bool) {
