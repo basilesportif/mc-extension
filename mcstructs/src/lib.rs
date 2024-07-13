@@ -17,7 +17,6 @@ impl Player {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TeamName {
     Team1,
@@ -57,13 +56,44 @@ pub struct GameLobby {
     pub team2: Team,
 }
 impl GameLobby {
-    pub fn player_in_team(&self, player: &Player) -> Option<&Team> {
+    pub fn player_in_team(&self, player: &Player) -> Option<TeamName> {
         if self.team1.team_has_player(player) {
-            Some(&self.team1)
+            Some(TeamName::Team1)
         } else if self.team2.team_has_player(player) {
-            Some(&self.team2)
+            Some(TeamName::Team2)
         } else {
             None
         }
     }
+    // team1 shouldn't seed team 2 chat
+    pub fn team1_lobby(&self) -> GameLobby {
+        let mut lobby = self.clone();
+        lobby.team2.chat = String::new();
+        lobby
+    }
+    // team2 shouldn't seed team 1 chat
+    pub fn team2_lobby(&self) -> GameLobby {
+        let mut lobby = self.clone();
+        lobby.team1.chat = String::new();
+        lobby
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum GameLobbyDiff {
+    Message(ChatMessage),
+    FullMessageHistory(Vec<ChatMessage>),
+    // AddPlayerToTeam(Player, TeamName),
+    // RemovePlayerFromTeam(Player, TeamName),
+    // UpdateName(String),
+    // UpdateMinecraftServerAddress(String),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ChatMessage {
+    pub id: u64,
+    pub time: u64,
+    pub from: Player,
+    pub to: TeamName,
+    pub msg: String,
 }

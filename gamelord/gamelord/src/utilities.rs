@@ -9,8 +9,8 @@ pub fn valid_position(
     player: &Player,
     cube: &Cube,
 ) -> (String, bool) {
-    if let Some(team) = lobby.player_in_team(player) {
-        if let Some(region) = layout.get(&TeamName(team.name.clone())) {
+    if let Some(team_name) = lobby.player_in_team(player) {
+        if let Some(region) = layout.get(&TeamName(team_name.clone())) {
             if region.cubes.contains_key(&cube.identifier()) {
                 return (format!("Access granted to player: {} in region owned by: {:?}", player.kinode_id, region.owner), true);
             }
