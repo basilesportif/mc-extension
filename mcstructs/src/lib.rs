@@ -18,7 +18,7 @@ impl Player {
 }
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TeamName {
     Team1,
     Team2,
@@ -29,6 +29,12 @@ pub struct Team {
     pub name: TeamName,
     pub players: HashSet<Player>,
     pub chat: String,
+}
+
+impl Team {
+    pub fn team_has_player(&self, player: &Player) -> bool {
+        self.players.contains(player)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -49,4 +55,15 @@ pub struct GameLobby {
     pub minecraft_server_address: String,
     pub team1: Team,
     pub team2: Team,
+}
+impl GameLobby {
+    pub fn player_in_team(&self, player: &Player) -> Option<&Team> {
+        if self.team1.team_has_player(player) {
+            Some(&self.team1)
+        } else if self.team2.team_has_player(player) {
+            Some(&self.team2)
+        } else {
+            None
+        }
+    }
 }

@@ -1,19 +1,22 @@
-use crate::gamelord_types::{ActivePlayer, Cube, OwnerToRegion, Region};
+use crate::gamelord_types::{Cube, OwnerToRegion, Region, Owner::TeamName};
+use mcstructs::{Player, GameLobby};
 
 /// Function that takes in Regions, player, and current coordinates, and returns a boolean whether a player is allowed to be there or not 
 pub fn valid_position(
+    lobby: &GameLobby,
     layout: &OwnerToRegion,
-    player: &ActivePlayer,
+    player: &Player,
     cube: &Cube,
 ) -> (String, bool) {
-    return (format!("Access granted to player: {}", player.kinode_id), true);
-
-    // if let Some(region) = layout.get(&player.kinode_id) {
-    //     if region.cubes.contains_key(&cube.identifier()) {
-    //         return (format!("Access granted to player: {} in region owned by: {}", player.kinode_id, region.owner), true);
-    //     }
-    // }
-    // ("Access denied or invalid player ID.".to_string(), false)
+    if let Some(team) = lobby.player_in_team(player) {
+        if let Some(region) = layout.get(&TeamName(team.name.clone())) {
+            if region.cubes.contains_key(&cube.identifier()) {
+                return (format!("Access granted to player: {} in region owned by: {:?}", player.kinode_id, region.owner), true);
+            }
+        }
+        return ("Owner not in map.".to_string(), false); 
+    } 
+    return ("Player not in either Team.".to_string(), false);
 }
 //pub fn authorized_player()
 

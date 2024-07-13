@@ -5,13 +5,21 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{GameLobby, Team, TeamName};
+use mcstructs::{GameLobby, Team, TeamName, Player};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
     pub kinode_id: String,
     pub minecraft_player_name: String,
     pub current_cube: Cube,
+}
+impl ActivePlayer {
+    pub fn to_player(&self) -> Player {
+        Player {
+            kinode_id: self.kinode_id.clone(),
+            minecraft_player_name: self.minecraft_player_name.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
@@ -62,9 +70,8 @@ pub type CubeToOwner = HashMap<Cube, Owner>;
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Owner {
+    TeamName(TeamName),
     Unclaimed,
-    Team1,
-    Team2,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

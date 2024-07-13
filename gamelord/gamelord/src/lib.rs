@@ -114,7 +114,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 if let Some(active_player) = active_players.get_mut(&minecraft_id) {
                     let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
                     let (response_message, is_valid) =
-                        valid_position(&world_config, &*active_player, &cube);
+                        valid_position(&state.lobby, &world_config, &active_player.to_player(), &cube);
                     if !is_valid {
                         // If the position is not valid, check the cube ownership and permissions
                         let cube_to_owner = CUBE_TO_OWNER.read().unwrap();
