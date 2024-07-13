@@ -136,25 +136,32 @@ public class MCKinodeWS extends WebSocketClient {
         System.out.println("Sent ValidateMove message: " + message);
 
         onMessageResponse = (response) -> {
-            JSONObject jsonResponse = new JSONObject(response);
-            boolean success;
-            String messageResponse;
-            if (jsonResponse.has("TransitionTriggeredResponse")) {
-                JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
-                JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
-                MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
-                Player player = Bukkit.getPlayer(playerName);
-                if (player != null) {
-                    player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
-                }
-            } else if (jsonResponse.has("TransitionSilentResponse")) {
+            // Remove " from the response and convert it to a string
+            String cleanedResponse = response.trim().replace("\"", "");
+            System.err.println("cleaned responses: " + cleanedResponse);
+            if ("TransitionSilentResponse".equals(cleanedResponse)) {
                 MCKinodePlugin.getInstance().getLogger().info("Entering non-enemy territory");
                 Player player = Bukkit.getPlayer(playerName);
                 if (player != null) {
                     player.sendMessage("You are entering non-enemy territory");
                 }
             } else {
-                System.err.println("Unexpected response format: " + response);
+                try {
+                    JSONObject jsonResponse = new JSONObject(response);
+                    if (jsonResponse.has("TransitionTriggeredResponse")) {
+                        JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
+                        JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
+                        MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
+                        Player player = Bukkit.getPlayer(playerName);
+                        if (player != null) {
+                            player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
+                        }
+                    } else {
+                        System.err.println("Unexpected JSON response format: " + response);
+                    }
+                } catch (JSONException e) {
+                    System.err.println("Unexpected response format: " + response);
+                }
             }
         };
         

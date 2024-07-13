@@ -339,13 +339,18 @@ function getTextureType(textureName) {
 function createCubesBasedOnMinecraftWorld() {
   const bbox = new THREE.Box3().setFromObject(minecraftWorld);
   const size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
 
   const cubeSize = 16; // Each cube represents a 16x16x16 block volume
-  const gridX = Math.floor(size.x / cubeSize);
-  const gridY = Math.floor(size.y / cubeSize);
-  const gridZ = Math.floor(size.z / cubeSize);
+  const gridX = Math.ceil(size.x / cubeSize);
+  const gridY = Math.ceil(size.y / cubeSize);
+  const gridZ = Math.ceil(size.z / cubeSize);
 
   const gridGroup = new THREE.Group(); // Create a group for the grid
+
+  const offsetX = Math.floor(gridX / 2) * cubeSize;
+  const offsetY = Math.floor(bbox.min.y / cubeSize) * cubeSize;
+  const offsetZ = Math.floor(gridZ / 2) * cubeSize;
 
   for (let i = 0; i < gridX; i++) {
     for (let j = 0; j < gridY; j++) {
@@ -356,9 +361,9 @@ function createCubesBasedOnMinecraftWorld() {
         
         // Position the cube center
         cube.position.set(
-          (i - Math.floor(gridX / 2)) * cubeSize + (cubeSize / 2),
-          j * cubeSize + (cubeSize / 2) + Math.floor(bbox.min.y / cubeSize) * cubeSize,
-          (k - Math.floor(gridZ / 2)) * cubeSize + (cubeSize / 2)
+          i * cubeSize - offsetX + cubeSize / 2,
+          j * cubeSize + offsetY + cubeSize / 2,
+          k * cubeSize - offsetZ + cubeSize / 2
         );
         
         cube.userData.clicked = false;
@@ -368,7 +373,11 @@ function createCubesBasedOnMinecraftWorld() {
     }
   }
 
+  // Center the Minecraft world
+  minecraftWorld.position.set(-center.x, -bbox.min.y, -center.z);
+
   scene.add(gridGroup);
+  scene.add(minecraftWorld);
   updateWorldInfo();
 }
 
