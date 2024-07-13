@@ -395,7 +395,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 state.lobby.minecraft_server_address =
                                     edit_lobby.minecraft_server_address;
                                 if edit_lobby.clear_teams {
-                                    state.clear_teams().save();
+                                    state.lobby.clear_teams();
                                 } else {
                                     state.save()
                                 }

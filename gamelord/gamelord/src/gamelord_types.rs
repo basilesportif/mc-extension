@@ -93,21 +93,7 @@ impl State {
     pub fn new(our: &Address) -> Self {
         State {
             our: our.clone(),
-            lobby: GameLobby {
-                name: "Game 1".to_string(),
-                minecraft_server_address: "".to_string(),
-                team1: Team {
-                    name: TeamName::Team1,
-                    players: HashSet::new(),
-                    chat: "".to_string(),
-
-                },
-                team2: Team {
-                    name: TeamName::Team2,
-                    players: HashSet::new(),
-                    chat: "".to_string(),
-                },
-            },
+            lobby: GameLobby::new(),
             world_config: HashMap::new(),
             cube_to_owner: HashMap::new(),
             active_players: HashMap::new(),
@@ -124,19 +110,6 @@ impl State {
     pub fn save(&self) {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
-    }
-    pub fn clear_teams(&mut self) -> Self {
-        self.lobby.team1 = Team {
-            name: TeamName::Team1,
-            players: HashSet::new(),
-            chat: "".to_string(),
-        };
-        self.lobby.team2 = Team {
-            name: TeamName::Team2,
-            players: HashSet::new(),
-            chat: "".to_string(),
-        };
-        self.clone()
     }
 }
 

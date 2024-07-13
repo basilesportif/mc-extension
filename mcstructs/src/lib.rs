@@ -27,7 +27,8 @@ pub enum TeamName {
 pub struct Team {
     pub name: TeamName,
     pub players: HashSet<Player>,
-    pub chat: String,
+    pub messages: Vec<ChatMessage>,
+    pub last_message_id: u64,
 }
 
 impl Team {
@@ -56,6 +57,24 @@ pub struct GameLobby {
     pub team2: Team,
 }
 impl GameLobby {
+    pub fn new() -> GameLobby {
+        GameLobby {
+            name: "Game 1".to_string(),
+            minecraft_server_address: "".to_string(),
+            team1: Team {
+                name: TeamName::Team1,
+                players: HashSet::new(),
+                messages: Vec::new(),
+                last_message_id: 0,
+            },
+            team2: Team {
+                name: TeamName::Team2,
+                players: HashSet::new(),
+                messages: Vec::new(),
+                last_message_id: 0,
+            },
+        }
+    }
     pub fn player_in_team(&self, player: &Player) -> Option<TeamName> {
         if self.team1.team_has_player(player) {
             Some(TeamName::Team1)
@@ -65,35 +84,57 @@ impl GameLobby {
             None
         }
     }
-    // team1 shouldn't seed team 2 chat
-    pub fn team1_lobby(&self) -> GameLobby {
+    // team1 shouldn't seed team 2 chat, and vice versa
+    pub fn lobby_for_team(&self, team: TeamName) -> GameLobby {
         let mut lobby = self.clone();
-        lobby.team2.chat = String::new();
+        if team == TeamName::Team1 {
+            lobby.team2.messages = Vec::new();
+            lobby.team2.last_message_id = 0;
+        } else {
+            lobby.team1.messages = Vec::new();
+            lobby.team1.last_message_id = 0;
+        }
         lobby
     }
-    // team2 shouldn't seed team 1 chat
-    pub fn team2_lobby(&self) -> GameLobby {
-        let mut lobby = self.clone();
-        lobby.team1.chat = String::new();
-        lobby
+    pub fn clear_teams(&mut self) -> Self {
+        self.team1 = Team {
+            name: TeamName::Team1,
+            players: HashSet::new(),
+            messages: Vec::new(),
+            last_message_id: 0,
+        };
+        self.team2 = Team {
+            name: TeamName::Team2,
+            players: HashSet::new(),
+            messages: Vec::new(),
+            last_message_id: 0,
+        };
+        self.clone()
     }
+
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum GameLobbyDiff {
     Message(ChatMessage),
     FullMessageHistory(Vec<ChatMessage>),
+    // TODO
     // AddPlayerToTeam(Player, TeamName),
     // RemovePlayerFromTeam(Player, TeamName),
     // UpdateName(String),
     // UpdateMinecraftServerAddress(String),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct ChatMessage {
     pub id: u64,
     pub time: u64,
     pub from: Player,
     pub to: TeamName,
     pub msg: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub enum ChatRequest {
+    SendMessage(String),
 }
