@@ -5,6 +5,10 @@ function App() {
     document.getElementById("playerForm");
   });
 
+  useEffect(() => {
+    webSocket();
+  }, []);
+
   async function joinTeam(team_name) {
     console.log("join team");
     const minecraft_id = document.getElementById("minecraftId").value;
@@ -40,6 +44,23 @@ function App() {
       ).innerText = `Error: ${error.message}`;
     }
   }
+
+  const webSocket = () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host =
+      window.location.port === "5173" ? "localhost:8080" : window.location.host;
+    const ws = new WebSocket(
+      `${protocol}//${host}/mcclient:mcclient:basilesex.os/`
+    );
+
+    ws.onopen = function (event) {
+      console.log("Connection opened on " + window.location.host + ":", event);
+    };
+    ws.onmessage = function (event) {
+      const data = JSON.parse(event.data);
+      console.log("websocket message received:", data);
+    };
+  };
 
   return (
     <div>

@@ -1,6 +1,7 @@
+use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
-    await_message, call_init, get_blob, get_state, http, println, set_state, Address, NodeId,
-    Request,
+    await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
+    NodeId, Request,
 };
 use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest};
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,7 @@ impl State {
     }
 }
 
-fn handle_message(state: &mut State) -> anyhow::Result<()> {
+fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
     let message = await_message()?;
 
     if let Some(gamelord) = &state.gamelord_address {
@@ -49,11 +50,33 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
                 GameLobbyDiff::Init(..) => {
                     state.lobby = state.lobby.apply_diff(deserialized);
                     state.save();
+                    let blob = LazyLoadBlob {
+                        mime: Some("application/json".to_string()),
+                        bytes: serde_json::json!({
+                            "GameLobby": state.lobby
+                        })
+                        .to_string()
+                        .as_bytes()
+                        .to_vec(),
+                    };
+
+                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
                     println!("received init");
                 }
                 GameLobbyDiff::AddPlayerToTeam(..) => {
-                    state.lobby = state.lobby.apply_diff(deserialized);
+                    state.lobby = state.lobby.apply_diff(deserialized.clone());
                     state.save();
+                    let blob = LazyLoadBlob {
+                        mime: Some("application/json".to_string()),
+                        bytes: serde_json::json!({
+                            "AddPlayerToTeam": deserialized
+                        })
+                        .to_string()
+                        .as_bytes()
+                        .to_vec(),
+                    };
+
+                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
                     println!("received add player to team");
                 }
             }
@@ -62,14 +85,24 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
     }
 
     if message.source().node() == state.our.node() {
-        return handle_http_request(state, message.body());
+        return handle_http_request(state, ws_channel_id, message.body());
     }
 
     Ok(())
 }
 
-fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {
+fn handle_http_request(
+    state: &mut State,
+    ws_channel_id: &mut Option<u32>,
+    body: &[u8],
+) -> anyhow::Result<()> {
     let http_request = http::HttpServerRequest::from_bytes(body)?;
+
+    if let http::HttpServerRequest::WebSocketOpen { channel_id, .. } = http_request {
+        *ws_channel_id = Some(channel_id);
+        return Ok(());
+    }
+
     let http_request = http_request
         .request()
         .ok_or_else(|| anyhow::anyhow!("Failed to parse http request"))?;
@@ -89,9 +122,7 @@ fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {
             );
             let join_request =
                 serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
-            let _ = Request::to(gamelord.clone())
-                .body(join_request)
-                .send();
+            let _ = Request::to(gamelord.clone()).body(join_request).send();
             let _ = Request::to(gamelord.clone())
                 .body(serde_json::to_vec(&McClientToGamelordRequest::Init).unwrap())
                 .send();
@@ -116,6 +147,9 @@ fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {
 call_init!(init);
 fn init(our: Address) {
     println!("start mcclient");
+    let mut ws_channel_id: Option<u32> = None;
+    bind_ws_path("/", true, false).unwrap();
+
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
@@ -133,7 +167,7 @@ fn init(our: Address) {
     }
 
     loop {
-        match handle_message(&mut state) {
+        match handle_message(&mut state, &mut ws_channel_id) {
             Ok(_) => {}
             Err(e) => {
                 println!("mcclient: error: {:?}", e);
