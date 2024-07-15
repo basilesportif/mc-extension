@@ -459,6 +459,8 @@ call_init!(init);
 fn init(our: Address) {
     println!("{our}: started");
 
+    let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
+
     for path in [
         "/api/loadWorld",
         "/world_config",

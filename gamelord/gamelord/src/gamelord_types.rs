@@ -111,6 +111,9 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
+    // pub fn update_clients(&self) {
+        
+    // }
 }
 
 /*

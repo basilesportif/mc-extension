@@ -118,8 +118,8 @@ impl GameLobby {
 pub enum GameLobbyDiff {
     Message(ChatMessage),
     FullMessageHistory(Vec<ChatMessage>),
+    AddPlayerToTeam(Player, TeamName),
     // TODO
-    // AddPlayerToTeam(Player, TeamName),
     // RemovePlayerFromTeam(Player, TeamName),
     // UpdateName(String),
     // UpdateMinecraftServerAddress(String),

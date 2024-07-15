@@ -1,5 +1,5 @@
 use kinode_process_lib::{
-    await_message, call_init, get_blob, http, println, Address, NodeId, Request,
+    await_message, call_init, get_blob, http, println, Address, Request, get_state, set_state, NodeId
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,12 +10,38 @@ wit_bindgen::generate!({
     world: "process-v0",
 });
 
-fn handle_message(our: &Address) -> anyhow::Result<()> {
-    let message = await_message()?;
-    handle_http_request(our, message.body())
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
+    pub our: Address,
+    pub gamelord: Option<NodeId>,
 }
 
-fn handle_http_request(our: &Address, body: &[u8]) -> anyhow::Result<()> {
+impl State {
+    pub fn new(our: &Address) -> Self {
+        State {
+            our: our.clone(),
+            gamelord: None,
+        }
+    }
+    pub fn fetch() -> Option<State> {
+        if let Some(state_bytes) = get_state() {
+            bincode::deserialize(&state_bytes).ok()
+        } else {
+            None
+        }
+    }
+    pub fn save(&self) {
+        let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
+        set_state(&serialized_state);
+    }
+}
+
+fn handle_message(state: &mut State) -> anyhow::Result<()> {
+    let message = await_message()?;
+    handle_http_request(state, message.body())
+}
+
+fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {
     let http_request = http::HttpServerRequest::from_bytes(body)?;
     let http_request = http_request
         .request()
@@ -33,12 +59,15 @@ fn handle_http_request(our: &Address, body: &[u8]) -> anyhow::Result<()> {
             let join_request =
                 serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
             let _ = Request::to(Address::new(
-                ui_request.gamelord_id,
+                ui_request.gamelord_id.clone(),
                 ("gamelord", "gamelord", "basilesex.os"),
             ))
             .expects_response(5)
             .body(join_request)
             .send_and_await_response(5);
+
+            state.gamelord = Some(ui_request.gamelord_id);
+            state.save();
 
             http::send_response(
                 http::StatusCode::OK,
@@ -57,6 +86,7 @@ fn handle_http_request(our: &Address, body: &[u8]) -> anyhow::Result<()> {
 call_init!(init);
 fn init(our: Address) {
     println!("start mcclient");
+    let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
 
@@ -67,7 +97,7 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
 
     loop {
-        match handle_message(&our) {
+        match handle_message(&mut state) {
             Ok(_) => {}
             Err(e) => {
                 println!("mcclient: error: {:?}", e);
