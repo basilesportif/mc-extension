@@ -59,7 +59,6 @@ fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow:
                         .as_bytes()
                         .to_vec(),
                     };
-
                     send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
                     println!("received init");
                 }

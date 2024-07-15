@@ -1,7 +1,8 @@
+use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, Address, Message, Request, Response,
+    println, Address, Message, Request, Response, LazyLoadBlob
 };
 use lazy_static::lazy_static;
 use std::sync::RwLock;
@@ -64,6 +65,7 @@ wit_bindgen::generate!({
 
 fn handle_mcclient_request(
     state: &mut State,
+    ws_channel_id: &mut Option<u32>,
     request: &McClientToGamelordRequest,
     message: &Message,
 ) -> anyhow::Result<()> {
@@ -126,6 +128,18 @@ fn handle_mcclient_request(
                 }
             };
             state.save();
+
+            let blob = LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::json!({
+                    "JoinTeam": state.lobby
+                })
+                .to_string()
+                .as_bytes()
+                .to_vec(),
+            };
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+
             return state
                 .update_clients(GameLobbyDiff::AddPlayerToTeam(player, join_team.team_name));
         }
@@ -133,11 +147,11 @@ fn handle_mcclient_request(
 }
 
 //have everything handled here
-fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result<()> {
+fn handle_kinode_message(state: &mut State, ws_channel_id: &mut Option<u32>, message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
-        return handle_mcclient_request(state, &request, message);
+        return handle_mcclient_request(state, ws_channel_id, &request, message);
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
@@ -294,14 +308,20 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
 
 fn is_http_request(message: &Message) -> bool {
     match serde_json::from_slice::<http::HttpServerRequest>(message.body()) {
-        Ok(http::HttpServerRequest::Http { .. }) => true,
+        Ok(http::HttpServerRequest::WebSocketOpen { .. }) => true,
+        Ok(http::HttpServerRequest::Http(..)) => true,
         _ => false,
     }
 }
-fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<()> {
+fn handle_http_request(state: &mut State, ws_channel_id: &mut Option<u32>, message: &Message) -> anyhow::Result<()> {
     let our_http_request =
-        serde_json::from_slice::<http::HttpServerRequest>(message.body()).unwrap();
+        serde_json::from_slice::<http::HttpServerRequest>(message.body())?;
+    println!("HERHE");
     match our_http_request {
+        http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
+            *ws_channel_id = Some(channel_id);
+            return Ok(());
+            }
         http::HttpServerRequest::Http(http_request) => {
             match http_request.method().unwrap() {
                 http::Method::GET => {
@@ -499,7 +519,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
     Ok(())
 }
 
-fn handle_message(state: &mut State) -> anyhow::Result<()> {
+fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
     let message = await_message()?;
     // println!(
     //     "handle_message: {:?}",
@@ -510,10 +530,10 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
         // Check if it's an HTTP request
         println!("HTTP request received");
         // Dedicated function to handle HTTP requests
-        handle_http_request(state, &message)?; // Dedicated function to handle HTTP requests
+        handle_http_request(state, ws_channel_id, &message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
-        handle_kinode_message(state, &message)?;
+        handle_kinode_message(state, ws_channel_id, &message)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
     }
@@ -522,7 +542,9 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
 
 call_init!(init);
 fn init(our: Address) {
-    println!("{our}: started");
+    println!("{our}: gamelord started");
+    let mut ws_channel_id: Option<u32> = None;
+    bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
 
@@ -543,7 +565,7 @@ fn init(our: Address) {
     // println!("state on init: {:?}", state);
 
     loop {
-        match handle_message(&mut state) {
+        match handle_message(&mut state, &mut ws_channel_id) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);
