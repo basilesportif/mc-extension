@@ -5,29 +5,23 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-// Note that the name might need to be changed
-pub struct Player {
-    pub kinode_id: NodeId,
-    pub minecraft_player_name: String,
-}
+use mcstructs::{GameLobby, Team, TeamName, Player};
 
-impl Player {
-    pub fn kinode_id(&self) -> &String {
-        &self.kinode_id
-    }
-
-    pub fn minecraft_player_name(&self) -> &String {
-        &self.minecraft_player_name
-    }
-}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
     pub kinode_id: String,
     pub minecraft_player_name: String,
     pub current_cube: Cube,
     // determines what team the player is on
-    pub team: Owner
+    pub team: TeamName
+}
+impl ActivePlayer {
+    pub fn to_player(&self) -> Player {
+        Player {
+            kinode_id: self.kinode_id.clone(),
+            minecraft_player_name: self.minecraft_player_name.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
@@ -71,55 +65,57 @@ pub struct Region {
     pub cubes: HashMap<Cube, CubeEffectList>,
 }
 
-pub type OwnerToRegion = HashMap<Owner, Region>;
+pub type OwnerToRegion = HashMap<TeamName, Region>;
 // 
-pub type CubeToOwner = HashMap<Cube, Vec<Owner>>;
+pub type CubeToOwner = HashMap<Cube, Vec<TeamName>>;
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Owner {
+    TeamName(TeamName),
     Unclaimed,
-    Team1,
-    Team2,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Team1 {
-    pub players: HashSet<Player>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Team2 {
-    pub players: HashSet<Player>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum McClientToGamelordRequest {
-    JoinTeam(JoinTeam),
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinTeam {
-    pub gamelord_id: NodeId,
-    pub minecraft_id: String,
-    pub team_name: String,
+pub struct EditLobby {
+    pub name: String,
+    pub minecraft_server_address: String,
+    pub clear_teams: bool
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
-    pub team1: Team1,
-    pub team2: Team2,
+    pub lobby: GameLobby,
+    pub world_config: OwnerToRegion,
+    pub cube_to_owner: CubeToOwner,
+    pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
+    pub allowed_players: HashMap<String, Player>,
 }
+
 impl State {
     pub fn new(our: &Address) -> Self {
         State {
             our: our.clone(),
-            team1: Team1 {
-                players: HashSet::new(),
+            lobby: GameLobby {
+                name: "Game 1".to_string(),
+                minecraft_server_address: "".to_string(),
+                team1: Team {
+                    name: TeamName::Team1,
+                    players: HashSet::new(),
+                    chat: "".to_string(),
+
+                },
+                team2: Team {
+                    name: TeamName::Team2,
+                    players: HashSet::new(),
+                    chat: "".to_string(),
+                },
             },
-            team2: Team2 {
-                players: HashSet::new(),
-            },
+            world_config: HashMap::new(),
+            cube_to_owner: HashMap::new(),
+            active_players: HashMap::new(),
+            allowed_players: HashMap::new(),
         }
     }
     pub fn fetch() -> Option<State> {
@@ -133,12 +129,18 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    pub fn reset_teams(&self) -> Self {
-        State {
-            our: self.our.clone(),
-            team1: Team1 { players: HashSet::new() },
-            team2: Team2 { players: HashSet::new() },
-        }
+    pub fn clear_teams(&mut self) -> Self {
+        self.lobby.team1 = Team {
+            name: TeamName::Team1,
+            players: HashSet::new(),
+            chat: "".to_string(),
+        };
+        self.lobby.team2 = Team {
+            name: TeamName::Team2,
+            players: HashSet::new(),
+            chat: "".to_string(),
+        };
+        self.clone()
     }
 }
 

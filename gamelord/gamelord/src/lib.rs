@@ -1,34 +1,16 @@
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, set_state, Address, Message, Response
+    println, Address, Message, Response,
 };
 
-use lazy_static::lazy_static;
-use std::sync::RwLock;
 
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, Cube, CubeEffectList, CubeToOwner, McClientToGamelordRequest, OwnerToRegion, Player, State, Owner
+    ActivePlayer, Cube, CubeEffectList, EditLobby, State, Owner, OwnerToRegion, CubeToOwner
 };
+use mcstructs::{McClientToGamelordRequest, TeamName, Player, };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-//Here is where we store the CURRENT world config
-lazy_static! {
-    static ref WORLD_CONFIG: RwLock<OwnerToRegion> = RwLock::new(HashMap::new());
-}
-lazy_static! {
-    static ref CUBE_TO_OWNER: RwLock<CubeToOwner> = RwLock::new(HashMap::new());
-}
-
-// Remember to change the type key type here to Address. (maybe not, it might be a MC username)
-lazy_static! {
-    static ref ACTIVE_PLAYERS: RwLock<HashMap<String, ActivePlayer>> = RwLock::new(HashMap::new());
-}
-lazy_static! {
-    static ref ALLOWED_PLAYERS: RwLock<HashMap<String, Player>> = RwLock::new(HashMap::new());
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequestMinecraft {
@@ -91,11 +73,11 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             kinode_id: message.source().node().to_string(),
             minecraft_player_name: join_team.minecraft_id.to_string(),
         };
-        match join_team.team_name.as_str() {
-            "Team1" => state.team1.players.insert(player),
-            "Team2" => state.team2.players.insert(player),
+        match join_team.team_name {
+            TeamName::Team1 => state.lobby.team1.players.insert(player),
+            TeamName::Team2 => state.lobby.team2.players.insert(player),
             _ => {
-                println!("Invalid team name: {}", join_team.team_name);
+                println!("Invalid team name: {:?}", join_team.team_name);
                 return Ok(());
             }
         };
@@ -107,15 +89,14 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
             // we get information about what team the player is in based on Active players
-            let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire lock");
-            if let Some(active_player) = active_players.get_mut(&minecraft_id) {
+            if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
                 println!("Player {} is active in the game on team {:?}.", minecraft_id, active_player.team);
                 
                 // Update the player's current cube
                 active_player.current_cube = cube.clone();
                 
-                let world_config = WORLD_CONFIG.read().expect("Failed to acquire lock");
-                let cube_to_owner = CUBE_TO_OWNER.read().expect("Failed to acquire lock");
+                let world_config = &state.world_config;
+                let cube_to_owner = &state.cube_to_owner;
 
                 if let Some(owners) = cube_to_owner.get(&cube) {
                     if !owners.contains(&active_player.team) {
@@ -153,10 +134,10 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
         GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
             println!("Player spawn request received for player: {:?}", minecraft_id);
             
-            let team_name = if state.team1.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
-                Owner::Team1
-            } else if state.team2.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
-                Owner::Team2
+            let team_name = if state.lobby.team1.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+                TeamName::Team1
+            } else if state.lobby.team2.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+                TeamName::Team2
             } else {
                 println!("Player {} is not assigned to a team", minecraft_id);
                 let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
@@ -180,8 +161,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 team: team_name.clone(),
             };
 
-            let mut active_players = ACTIVE_PLAYERS.write().expect("Failed to acquire write lock on ACTIVE_PLAYERS");
-            active_players.insert(minecraft_id.clone(), active_player);
+            state.active_players.insert(minecraft_id.clone(), active_player);
 
             println!("Player {} added to active players on team {:?}", minecraft_id, &team_name);
 
@@ -195,13 +175,13 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
         },
         // Think about whether I need this
         GamelordRequestMinecraft::PlayerLeaveRequest{minecraft_id} => {
-            let mut active_players = ACTIVE_PLAYERS.write().unwrap();
-            if active_players.contains_key(&minecraft_id) {
-                active_players.remove(&minecraft_id);
+            if state.active_players.contains_key(&minecraft_id) {
+                state.active_players.remove(&minecraft_id);
                 println!(
                     "Player with kinode_id {} has left the game.",
                     &minecraft_id
                 );
+                state.save();
             } else {
                 println!(
                     "Player with kinode_id {} is not in the active players list.",
@@ -229,8 +209,7 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                     if let Ok(path) = http_request.path() {
                         match path.as_str() {
                             "/world_config" => {
-                                let world_config = WORLD_CONFIG.read().unwrap();
-                                let response = serde_json::to_string(&*world_config).unwrap();
+                                let response = serde_json::to_string(&state.world_config).unwrap();
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -238,8 +217,16 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 );
                             }
                             "/active_players" => {
-                                let active_players = ACTIVE_PLAYERS.read().unwrap();
-                                let response = serde_json::to_string(&*active_players).unwrap();
+                                let response = serde_json::to_string(&state.active_players).unwrap();
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    response.into_bytes(),
+                                );
+                            }
+                            "/lobby" => {
+                                let lobby = state.lobby.clone();
+                                let response = serde_json::to_string(&lobby).unwrap();
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -271,18 +258,18 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
                                 match serde_json::from_str::<OwnerToRegion>(&body_str) {
                                     Ok(new_world_config) => {
-                                        let mut world_config = WORLD_CONFIG.write().unwrap();
-                                        let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-                                        *world_config = new_world_config;
-                                        cube_to_owner.clear();
+                                        state.world_config = new_world_config;
+                                        state.cube_to_owner.clear();
                                         // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
-                                        for (owner, region) in world_config.iter() {
+                                        for (owner, region) in state.world_config.iter() {
                                             for cube in region.cubes.keys() {
-                                                cube_to_owner.entry(cube.clone())
+                                                state.cube_to_owner.entry(cube.clone())
                                                     .and_modify(|owners| owners.push(owner.clone()))
                                                     .or_insert_with(|| vec![owner.clone()]);
                                             }
                                         }
+
+                                        state.save();
 
                                         println!("World loaded from request");
                                         http::send_response(
@@ -311,13 +298,13 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     Ok(player) => {
                                         println!("player: {:?}", player);
                                         let player_clone = player.clone(); // Clone player before insertion
-                                        let mut allowed_players = ALLOWED_PLAYERS.write().unwrap();
-                                        allowed_players
+                                        state.allowed_players
                                             .insert(player.minecraft_player_name().clone(), player);
                                         println!(
                                             "Player {} added to allowed players",
                                             player_clone.minecraft_player_name()
                                         );
+                                        state.save();
                                         http::send_response(
                                             http::StatusCode::OK,
                                             None,
@@ -335,10 +322,9 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 }
                             }
                             "/api/deleteWorld" => {
-                                let mut world_config = WORLD_CONFIG.write().unwrap();
-                                let mut cube_to_owner = CUBE_TO_OWNER.write().unwrap();
-                                world_config.clear();
-                                cube_to_owner.clear();
+                                state.world_config.clear();
+                                state.cube_to_owner.clear();
+                                state.save();
                                 println!("World deleted from request");
                                 http::send_response(
                                     http::StatusCode::OK,
@@ -346,14 +332,26 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     b"World Deleted".to_vec(),
                                 );
                             }
-                            "/api/resetTeams" => {
-                                println!("teams before reset: {:#?}, {:#?}", state.team1, state.team2);
-                                state.reset_teams().save();
-                                println!("teams after reset: {:#?}", State::fetch().unwrap());
+                            "/api/editLobby" => {
+                                let bytes = get_blob()
+                                    .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
+                                    .bytes;
+                                let edit_lobby = serde_json::from_slice::<EditLobby>(&bytes)?;
+
+                                println!("state before edit_lobby: {:#?}", state);
+                                state.lobby.name = edit_lobby.name;
+                                state.lobby.minecraft_server_address =
+                                    edit_lobby.minecraft_server_address;
+                                if edit_lobby.clear_teams {
+                                    state.clear_teams().save();
+                                } else {
+                                    state.save()
+                                }
+                                println!("state after editlobby: {:#?}", State::fetch().unwrap());
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
-                                    b"Teams reset successful.".to_vec(),
+                                    b"Lobby updated.".to_vec(),
                                 );
                             }
                             _ => http::send_response(
@@ -386,10 +384,10 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
 
 fn handle_message(state: &mut State) -> anyhow::Result<()> {
     let message = await_message()?;
-    println!(
-        "handle_message: {:?}",
-        String::from_utf8_lossy(message.body())
-    );
+    // println!(
+    //     "handle_message: {:?}",
+    //     String::from_utf8_lossy(message.body())
+    // );
 
     if is_http_request(&message) {
         // Check if it's an HTTP request
@@ -414,7 +412,8 @@ fn init(our: Address) {
         "/world_config",
         "/api/addPlayer",
         "/api/deleteWorld",
-        "/api/resetTeams"
+        "/api/editLobby",
+        "/lobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }

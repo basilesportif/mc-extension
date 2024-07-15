@@ -3,30 +3,12 @@ use kinode_process_lib::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use mcstructs::{JoinTeam, McClientToGamelordRequest};
 
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
-
-// TODO - extract to shared types lib
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Team {
-    Team1,
-    Team2,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinTeam {
-    pub gamelord_id: NodeId,
-    pub minecraft_id: String,
-    pub team_name: Team,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum McClientToGamelordRequest {
-    JoinTeam(JoinTeam),
-}
 
 fn handle_message(our: &Address) -> anyhow::Result<()> {
     let message = await_message()?;
