@@ -111,15 +111,27 @@ impl GameLobby {
         };
         self.clone()
     }
-
+    pub fn apply_diff(&mut self, diff: GameLobbyDiff) -> GameLobby {
+        match diff {
+            GameLobbyDiff::AddPlayerToTeam(player, team) => {
+                if team == TeamName::Team1 {
+                    self.team1.players.insert(player);
+                    self.clone()
+                } else {
+                    self.team2.players.insert(player);
+                    self.clone()
+                }
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum GameLobbyDiff {
-    Message(ChatMessage),
-    FullMessageHistory(Vec<ChatMessage>),
     AddPlayerToTeam(Player, TeamName),
     // TODO
+    // Message(ChatMessage),
+    // FullMessageHistory(Vec<ChatMessage>),
     // RemovePlayerFromTeam(Player, TeamName),
     // UpdateName(String),
     // UpdateMinecraftServerAddress(String),

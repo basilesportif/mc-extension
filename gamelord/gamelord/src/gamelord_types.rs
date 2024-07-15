@@ -1,11 +1,11 @@
 use alloy_consensus::Sealed;
-use kinode_process_lib::{get_state, set_state, Address, NodeId};
+use kinode_process_lib::{get_state, set_state, Address, NodeId, Request};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{GameLobby, Team, TeamName, Player};
+use mcstructs::{GameLobby, Team, TeamName, Player, GameLobbyDiff};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -111,9 +111,23 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    // pub fn update_clients(&self) {
-        
-    // }
+    pub fn update_clients(&self, diff: GameLobbyDiff) -> Result<(), anyhow::Error> {
+        for client in self.lobby.team1.players.iter() {
+            let body = serde_json::to_vec(&GameLobbyDiff::AddPlayerToTeam(client.clone(), TeamName::Team1))?;
+            Request::new()
+                .body(body)
+                .target(Address::new(&client.kinode_id, ("mcclient", "mcclient", "basilesex.os")))
+                .send()?;
+        }
+        for client in self.lobby.team2.players.iter() {
+            let body = serde_json::to_vec(&GameLobbyDiff::AddPlayerToTeam(client.clone(), TeamName::Team2))?;
+            Request::new()
+                .body(body)
+                .target(Address::new(&client.kinode_id, ("mcclient", "mcclient", "basilesex.os")))
+                .send()?;
+        }
+        Ok(())
+    }
 }
 
 /*

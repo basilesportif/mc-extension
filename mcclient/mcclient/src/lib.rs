@@ -3,7 +3,7 @@ use kinode_process_lib::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use mcstructs::{JoinTeam, McClientToGamelordRequest};
+use mcstructs::{JoinTeam, McClientToGamelordRequest, GameLobby, GameLobbyDiff};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -14,6 +14,7 @@ wit_bindgen::generate!({
 pub struct State {
     pub our: Address,
     pub gamelord: Option<NodeId>,
+    pub lobby: GameLobby
 }
 
 impl State {
@@ -21,6 +22,7 @@ impl State {
         State {
             our: our.clone(),
             gamelord: None,
+            lobby: GameLobby::new(),
         }
     }
     pub fn fetch() -> Option<State> {
@@ -38,7 +40,26 @@ impl State {
 
 fn handle_message(state: &mut State) -> anyhow::Result<()> {
     let message = await_message()?;
-    handle_http_request(state, message.body())
+
+    if message.source().node() == state.our.node() {
+        return handle_http_request(state, message.body())
+    }
+
+    if let Some(gamelord) = &state.gamelord {
+        if message.source().node() == gamelord {
+            let deserialized = serde_json::from_slice::<GameLobbyDiff>(message.body())?;
+            match deserialized.clone() {
+                GameLobbyDiff::AddPlayerToTeam(..) => {
+                    state.lobby = state.lobby.apply_diff(deserialized);
+                    state.save();
+                    println!("state: {:?}", state.lobby);
+                }
+            }
+            return Ok(())
+        } 
+    }
+
+    Ok(())
 }
 
 fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {

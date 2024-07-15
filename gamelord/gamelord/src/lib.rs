@@ -13,7 +13,7 @@ use gamelord_types::{
     ActivePlayer, ConfigurationRegion, Cube, EditLobby,
     Region, State,
 };
-use mcstructs::{McClientToGamelordRequest, TeamName, Player};
+use mcstructs::{McClientToGamelordRequest, TeamName, Player, GameLobbyDiff, GameLobby};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -69,7 +69,7 @@ wit_bindgen::generate!({
 //have everything handled here
 fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
-
+    
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
         let McClientToGamelordRequest::JoinTeam(join_team) = request;
@@ -78,16 +78,15 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             minecraft_player_name: join_team.minecraft_id.to_string(),
         };
         match join_team.team_name {
-            TeamName::Team1 => state.lobby.team1.players.insert(player),
-            TeamName::Team2 => state.lobby.team2.players.insert(player),
+            TeamName::Team1 => state.lobby.team1.players.insert(player.clone()),
+            TeamName::Team2 => state.lobby.team2.players.insert(player.clone()),
             _ => {
                 println!("Invalid team name: {:?}", join_team.team_name);
                 return Ok(());
             }
         };
         state.save();
-        println!("state after join team: {:?}", state);
-        return Ok(());
+        state.update_clients(GameLobbyDiff::AddPlayerToTeam(player, join_team.team_name))?
     }
 
     match GamelordRequestMinecraft::parse(message.body())? {
