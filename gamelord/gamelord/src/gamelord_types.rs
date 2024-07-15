@@ -1,11 +1,11 @@
 use alloy_consensus::Sealed;
-use kinode_process_lib::{get_state, set_state, Address, NodeId, Request};
+use kinode_process_lib::{get_state, set_state, Address, NodeId, Request, println};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{GameLobby, Team, TeamName, Player, GameLobbyDiff};
+use mcstructs::{GameLobby, GameLobbyDiff, Player, Team, TeamName};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -64,7 +64,6 @@ pub struct ConfigurationRegion {
     pub authorized_players: Vec<String>,
 }
 
-
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Owner {
@@ -76,7 +75,7 @@ pub enum Owner {
 pub struct EditLobby {
     pub name: String,
     pub minecraft_server_address: String,
-    pub clear_teams: bool
+    pub clear_teams: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,17 +112,23 @@ impl State {
     }
     pub fn update_clients(&self, diff: GameLobbyDiff) -> Result<(), anyhow::Error> {
         for client in self.lobby.team1.players.iter() {
-            let body = serde_json::to_vec(&GameLobbyDiff::AddPlayerToTeam(client.clone(), TeamName::Team1))?;
+            println!("Sending {:?} to {:?}", diff, client.kinode_id);
             Request::new()
-                .body(body)
-                .target(Address::new(&client.kinode_id, ("mcclient", "mcclient", "basilesex.os")))
+                .body(serde_json::to_vec(&diff)?)
+                .target(Address::new(
+                    &client.kinode_id,
+                    ("mcclient", "mcclient", "basilesex.os"),
+                ))
                 .send()?;
         }
         for client in self.lobby.team2.players.iter() {
-            let body = serde_json::to_vec(&GameLobbyDiff::AddPlayerToTeam(client.clone(), TeamName::Team2))?;
+            println!("Sending {:?} to {:?}", diff, client.kinode_id);
             Request::new()
-                .body(body)
-                .target(Address::new(&client.kinode_id, ("mcclient", "mcclient", "basilesex.os")))
+                .body(serde_json::to_vec(&diff)?)
+                .target(Address::new(
+                    &client.kinode_id,
+                    ("mcclient", "mcclient", "basilesex.os"),
+                ))
                 .send()?;
         }
         Ok(())

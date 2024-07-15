@@ -1,9 +1,10 @@
 use kinode_process_lib::{
-    await_message, call_init, get_blob, http, println, Address, Request, get_state, set_state, NodeId
+    await_message, call_init, get_blob, get_state, http, println, set_state, Address, NodeId,
+    Request,
 };
+use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use mcstructs::{JoinTeam, McClientToGamelordRequest, GameLobby, GameLobbyDiff};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -13,15 +14,15 @@ wit_bindgen::generate!({
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
-    pub gamelord: Option<NodeId>,
-    pub lobby: GameLobby
+    pub gamelord_address: Option<Address>,
+    pub lobby: GameLobby,
 }
 
 impl State {
     pub fn new(our: &Address) -> Self {
         State {
             our: our.clone(),
-            gamelord: None,
+            gamelord_address: None,
             lobby: GameLobby::new(),
         }
     }
@@ -41,22 +42,27 @@ impl State {
 fn handle_message(state: &mut State) -> anyhow::Result<()> {
     let message = await_message()?;
 
-    if message.source().node() == state.our.node() {
-        return handle_http_request(state, message.body())
-    }
-
-    if let Some(gamelord) = &state.gamelord {
-        if message.source().node() == gamelord {
+    if let Some(gamelord) = &state.gamelord_address {
+        if message.source() == gamelord {
             let deserialized = serde_json::from_slice::<GameLobbyDiff>(message.body())?;
             match deserialized.clone() {
+                GameLobbyDiff::Init(..) => {
+                    state.lobby = state.lobby.apply_diff(deserialized);
+                    state.save();
+                    println!("received init");
+                }
                 GameLobbyDiff::AddPlayerToTeam(..) => {
                     state.lobby = state.lobby.apply_diff(deserialized);
                     state.save();
-                    println!("state: {:?}", state.lobby);
+                    println!("received add player to team");
                 }
             }
-            return Ok(())
-        } 
+            return Ok(());
+        }
+    }
+
+    if message.source().node() == state.our.node() {
+        return handle_http_request(state, message.body());
     }
 
     Ok(())
@@ -75,19 +81,22 @@ fn handle_http_request(state: &mut State, body: &[u8]) -> anyhow::Result<()> {
     match path.as_str() {
         "/join_team" => {
             let ui_request: JoinTeam = serde_json::from_slice(&bytes)?;
-            println!("mcclient: {:?}", ui_request);
+            // println!("mcclient: {:#?}", ui_request);
 
-            let join_request =
-                serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
-            let _ = Request::to(Address::new(
+            let gamelord = Address::new(
                 ui_request.gamelord_id.clone(),
                 ("gamelord", "gamelord", "basilesex.os"),
-            ))
-            .expects_response(5)
-            .body(join_request)
-            .send_and_await_response(5);
+            );
+            let join_request =
+                serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
+            let _ = Request::to(gamelord.clone())
+                .body(join_request)
+                .send();
+            let _ = Request::to(gamelord.clone())
+                .body(serde_json::to_vec(&McClientToGamelordRequest::Init).unwrap())
+                .send();
 
-            state.gamelord = Some(ui_request.gamelord_id);
+            state.gamelord_address = Some(gamelord);
             state.save();
 
             http::send_response(
@@ -116,6 +125,12 @@ fn init(our: Address) {
     }
 
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
+
+    if let Some(gamelord_address) = state.clone().gamelord_address {
+        let _ = Request::to(gamelord_address)
+            .body(serde_json::to_vec(&McClientToGamelordRequest::Init).unwrap())
+            .send();
+    }
 
     loop {
         match handle_message(&mut state) {

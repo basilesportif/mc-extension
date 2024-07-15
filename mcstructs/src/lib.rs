@@ -1,4 +1,4 @@
-use kinode_process_lib::{Address, NodeId};
+use kinode_process_lib::{println, Address, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -46,6 +46,7 @@ pub struct JoinTeam {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum McClientToGamelordRequest {
+    Init, // asks for all gamelobby data on initialization (should it be done on UI refresh, or only on joining a team/restarting your kinode)
     JoinTeam(JoinTeam),
 }
 
@@ -113,12 +114,19 @@ impl GameLobby {
     }
     pub fn apply_diff(&mut self, diff: GameLobbyDiff) -> GameLobby {
         match diff {
+            GameLobbyDiff::Init(lobby) => {
+                *self = lobby;
+                println!("lobby after diff: {:#?}", self);
+                self.clone()
+            }
             GameLobbyDiff::AddPlayerToTeam(player, team) => {
                 if team == TeamName::Team1 {
                     self.team1.players.insert(player);
+                    println!("lobby after diff: {:#?}", self);
                     self.clone()
                 } else {
                     self.team2.players.insert(player);
+                    println!("lobby after diff: {:#?}", self);
                     self.clone()
                 }
             }
@@ -128,6 +136,7 @@ impl GameLobby {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum GameLobbyDiff {
+    Init(GameLobby),
     AddPlayerToTeam(Player, TeamName),
     // TODO
     // Message(ChatMessage),

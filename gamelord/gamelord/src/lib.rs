@@ -1,7 +1,7 @@
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, Address, Message, Response,
+    println, Address, Message, Request, Response,
 };
 use lazy_static::lazy_static;
 use std::sync::RwLock;
@@ -9,13 +9,10 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, EditLobby,
-    Region, State,
-};
-use mcstructs::{McClientToGamelordRequest, TeamName, Player, GameLobbyDiff, GameLobby};
+use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, EditLobby, Region, State};
+use mcstructs::{GameLobby, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GamelordRequestMinecraft {
@@ -26,7 +23,6 @@ enum GamelordRequestMinecraft {
 
 //GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
 //GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
-
 
 //GamelordResponseMinecraft
 //GamelordResponseUI (maybe not needed)
@@ -58,7 +54,7 @@ impl GamelordRequestMinecraft {
 enum GamelordResponseMinecraft {
     ValidateMove(bool, String),
     PlayerSpawnRequestAuthorized(bool, String, Cube),
-    PlayerSpawnRequestDenied(bool ,String),
+    PlayerSpawnRequestDenied(bool, String),
 }
 
 wit_bindgen::generate!({
@@ -66,36 +62,94 @@ wit_bindgen::generate!({
     world: "process-v0",
 });
 
+fn handle_mcclient_request(
+    state: &mut State,
+    request: &McClientToGamelordRequest,
+    message: &Message,
+) -> anyhow::Result<()> {
+    match request.clone() {
+        McClientToGamelordRequest::Init => {
+            for player in state.lobby.team1.players.iter() {
+                if player.kinode_id == message.source().node() {
+                    let diff =
+                        GameLobbyDiff::Init(state.lobby.clone().lobby_for_team(TeamName::Team1));
+                    println!("Sending {:?} to {:?}", diff, player.kinode_id);
+                    Request::new()
+                        .body(serde_json::to_vec(&diff)?)
+                        .target(Address::new(
+                            &player.kinode_id,
+                            ("mcclient", "mcclient", "basilesex.os"),
+                        ))
+                        .send()?;
+                }
+            }
+            for player in state.lobby.team2.players.iter() {
+                if player.kinode_id == message.source().node() {
+                    let diff =
+                        GameLobbyDiff::Init(state.lobby.clone().lobby_for_team(TeamName::Team1));
+                    println!("Sending {:?} to {:?}", diff, player.kinode_id);
+                    Request::new()
+                        .body(serde_json::to_vec(&diff)?)
+                        .target(Address::new(
+                            &player.kinode_id,
+                            ("mcclient", "mcclient", "basilesex.os"),
+                        ))
+                        .send()?;
+                }
+            }
+            return Ok(());
+        }
+        McClientToGamelordRequest::JoinTeam(join_team) => {
+            let player = Player {
+                kinode_id: message.source().node().to_string(),
+                minecraft_player_name: join_team.minecraft_id.to_string(),
+            };
+
+            let all_players: HashSet<Player> = state
+                .lobby
+                .team1
+                .players
+                .union(&state.lobby.team2.players)
+                .cloned()
+                .collect();
+            if all_players.contains(&player) {
+                println!("Player {} already exists in the game", player.kinode_id);
+                return Ok(());
+            }
+
+            match join_team.team_name {
+                TeamName::Team1 => state.lobby.team1.players.insert(player.clone()),
+                TeamName::Team2 => state.lobby.team2.players.insert(player.clone()),
+                _ => {
+                    println!("Invalid team name: {:?}", join_team.team_name);
+                    return Ok(());
+                }
+            };
+            state.save();
+            return state
+                .update_clients(GameLobbyDiff::AddPlayerToTeam(player, join_team.team_name));
+        }
+    }
+}
+
 //have everything handled here
 fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result<()> {
     println!("handle kinode message entered");
-    
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
-        let McClientToGamelordRequest::JoinTeam(join_team) = request;
-        let player = Player {
-            kinode_id: message.source().node().to_string(),
-            minecraft_player_name: join_team.minecraft_id.to_string(),
-        };
-        match join_team.team_name {
-            TeamName::Team1 => state.lobby.team1.players.insert(player.clone()),
-            TeamName::Team2 => state.lobby.team2.players.insert(player.clone()),
-            _ => {
-                println!("Invalid team name: {:?}", join_team.team_name);
-                return Ok(());
-            }
-        };
-        state.save();
-        state.update_clients(GameLobbyDiff::AddPlayerToTeam(player, join_team.team_name))?
+        return handle_mcclient_request(state, &request, message);
     }
-
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
             if state.active_players.contains_key(&minecraft_id) {
                 println!("Player {} is active in the game.", minecraft_id);
                 if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
-                    let (response_message, is_valid) =
-                        valid_position(&state.lobby, &state.world_config, &active_player.to_player(), &cube);
+                    let (response_message, is_valid) = valid_position(
+                        &state.lobby,
+                        &state.world_config,
+                        &active_player.to_player(),
+                        &cube,
+                    );
                     if !is_valid {
                         // If the position is not valid, check the cube ownership and permissions
                         if let Some(owner) = state.cube_to_owner.get(&cube) {
@@ -109,19 +163,21 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                                     "Active player {} moved to cube: {:?}",
                                     active_player.kinode_id, cube
                                 );
-                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                    true,
-                                    "Move allowed by owner permissions.".to_string(),
-                                ))
-                                .unwrap();
+                                let response =
+                                    serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
+                                        true,
+                                        "Move allowed by owner permissions.".to_string(),
+                                    ))
+                                    .unwrap();
                                 Response::new().body(response).send().unwrap();
                             } else {
                                 // If not allowed, send a negative response
-                                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                    false,
-                                    "Move not allowed by owner permissions.".to_string(),
-                                ))
-                                .unwrap();
+                                let response =
+                                    serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
+                                        false,
+                                        "Move not allowed by owner permissions.".to_string(),
+                                    ))
+                                    .unwrap();
                                 Response::new().body(response).send().unwrap();
                             }
                         } else {
@@ -131,21 +187,21 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                                 "Active player {} moved to unclaimed cube: {:?}",
                                 active_player.kinode_id, cube
                             );
-                            let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                true,
-                                "Cube unclaimed, allowed to pass.".to_string(),
-                            ))
-                            .unwrap();
+                            let response =
+                                serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
+                                    true,
+                                    "Cube unclaimed, allowed to pass.".to_string(),
+                                ))
+                                .unwrap();
                             Response::new().body(response).send().unwrap();
                         }
                     } else {
                         // If the initial position check is valid, proceed as before
                         active_player.current_cube = cube.clone();
                         println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
-                        let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                            is_valid,
-                            response_message,
-                        ))
+                        let response = serde_json::to_vec(
+                            &GamelordResponseMinecraft::ValidateMove(is_valid, response_message),
+                        )
                         .unwrap();
                         Response::new().body(response).send().unwrap();
                     }
@@ -162,7 +218,7 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             Ok(())
         }
         // this comes from MC-Driver
-        GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
+        GamelordRequestMinecraft::PlayerSpawnRequest { minecraft_id } => {
             println!("Gamelord request matched");
             println!(
                 "Player spawn request received for player: {:?}",
@@ -170,7 +226,8 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
             );
             println!("checked whether player is allowed beginning of function");
             if state.allowed_players.contains_key(&minecraft_id) {
-                let player = state.allowed_players
+                let player = state
+                    .allowed_players
                     .get(&minecraft_id)
                     .expect("Player should exist");
                 println!("player exists");
@@ -188,31 +245,35 @@ fn handle_kinode_message(state: &mut State, message: &Message) -> anyhow::Result
                 };
                 println!("active player created");
                 println!("active players inserted");
-                state.active_players.insert(player.minecraft_player_name().clone(), active_player);
+                state
+                    .active_players
+                    .insert(player.minecraft_player_name().clone(), active_player);
                 state.save();
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
-                    true,
-                    "Player added.".to_string(),
-                    spawn_cube.clone(),
-                ))
-                .unwrap();
+                let response =
+                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
+                        true,
+                        "Player added.".to_string(),
+                        spawn_cube.clone(),
+                    ))
+                    .unwrap();
                 Response::new().body(response).send().unwrap();
             } else {
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
-                    false,
-                    "Player not added.".to_string(),
-                ))
-                .unwrap();
+                let response =
+                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
+                        false,
+                        "Player not added.".to_string(),
+                    ))
+                    .unwrap();
                 Response::new().body(response).send().unwrap();
 
                 println!("Player {} is not allowed on the server", minecraft_id);
                 Response::new().body(b"Player not added.").send().unwrap();
             }
             Ok(())
-        },
+        }
         // Think about whether I need this
-        GamelordRequestMinecraft::PlayerLeaveRequest{player} => {
+        GamelordRequestMinecraft::PlayerLeaveRequest { player } => {
             if state.active_players.contains_key(player.kinode_id()) {
                 state.active_players.remove(player.kinode_id());
                 println!(
@@ -255,7 +316,8 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                 );
                             }
                             "/active_players" => {
-                                let response = serde_json::to_string(&state.active_players).unwrap();
+                                let response =
+                                    serde_json::to_string(&state.active_players).unwrap();
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -306,7 +368,8 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                                 let cube_id = cube.identifier();
                                                 cubes_transformed
                                                     .insert(cube_id.clone(), cube.clone());
-                                                state.cube_to_owner
+                                                state
+                                                    .cube_to_owner
                                                     .insert(cube.clone(), region.owner.clone());
                                             }
 
@@ -318,7 +381,9 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                                     .authorized_players
                                                     .clone(),
                                             };
-                                            state.world_config.insert(region.owner.clone(), new_region);
+                                            state
+                                                .world_config
+                                                .insert(region.owner.clone(), new_region);
                                         }
 
                                         state.save();
@@ -349,7 +414,8 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     Ok(player) => {
                                         println!("player: {:?}", player);
                                         let player_clone = player.clone(); // Clone player before insertion
-                                        state.allowed_players
+                                        state
+                                            .allowed_players
                                             .insert(player.minecraft_player_name().clone(), player);
                                         println!(
                                             "Player {} added to allowed players",
@@ -389,16 +455,16 @@ fn handle_http_request(state: &mut State, message: &Message) -> anyhow::Result<(
                                     .bytes;
                                 let edit_lobby = serde_json::from_slice::<EditLobby>(&bytes)?;
 
-                                println!("state before edit_lobby: {:#?}", state);
+                                // println!("state before edit_lobby: {:#?}", state);
                                 state.lobby.name = edit_lobby.name;
                                 state.lobby.minecraft_server_address =
                                     edit_lobby.minecraft_server_address;
                                 if edit_lobby.clear_teams {
                                     state.lobby.clear_teams();
-                                } else {
-                                    state.save()
+                                    // TODO - game ended update to everyone from teams
                                 }
-                                println!("state after editlobby: {:#?}", State::fetch().unwrap());
+                                state.save();
+                                // println!("state after editlobby: {:#?}", State::fetch().unwrap());
                                 http::send_response(
                                     http::StatusCode::OK,
                                     None,
@@ -443,7 +509,7 @@ fn handle_message(state: &mut State) -> anyhow::Result<()> {
     if is_http_request(&message) {
         // Check if it's an HTTP request
         println!("HTTP request received");
-         // Dedicated function to handle HTTP requests
+        // Dedicated function to handle HTTP requests
         handle_http_request(state, &message)?; // Dedicated function to handle HTTP requests
     } else if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
@@ -474,7 +540,7 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
-    println!("state on init: {:?}", state);
+    // println!("state on init: {:?}", state);
 
     loop {
         match handle_message(&mut state) {
