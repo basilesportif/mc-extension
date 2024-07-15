@@ -7,15 +7,6 @@ pub struct Player {
     pub kinode_id: NodeId,
     pub minecraft_player_name: String,
 }
-impl Player {
-    pub fn kinode_id(&self) -> &String {
-        &self.kinode_id
-    }
-
-    pub fn minecraft_player_name(&self) -> &String {
-        &self.minecraft_player_name
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TeamName {
@@ -46,8 +37,8 @@ pub struct JoinTeam {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum McClientToGamelordRequest {
-    Init, // asks for all gamelobby data on initialization (should it be done on UI refresh, or only on joining a team/restarting your kinode)
-    JoinTeam(JoinTeam),
+    Init,               // requests for all gamelobby data on initialization
+    JoinTeam(JoinTeam), // request to join team
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +76,7 @@ impl GameLobby {
             None
         }
     }
-    // team1 shouldn't seed team 2 chat, and vice versa
+    // team1 shouldn't see team 2 chat, and vice versa
     pub fn lobby_for_team(&self, team: TeamName) -> GameLobby {
         let mut lobby = self.clone();
         if team == TeamName::Team1 {
@@ -112,23 +103,40 @@ impl GameLobby {
         };
         self.clone()
     }
-    pub fn apply_diff(&mut self, diff: GameLobbyDiff) -> GameLobby {
+    pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> GameLobby {
         match diff {
             GameLobbyDiff::Init(lobby) => {
-                *self = lobby;
+                *self = lobby.clone();
                 println!("lobby after diff: {:#?}", self);
                 self.clone()
             }
-            GameLobbyDiff::AddPlayerToTeam(player, team) => {
-                if team == TeamName::Team1 {
-                    self.team1.players.insert(player);
-                    println!("lobby after diff: {:#?}", self);
-                    self.clone()
-                } else {
-                    self.team2.players.insert(player);
-                    println!("lobby after diff: {:#?}", self);
-                    self.clone()
+            GameLobbyDiff::AddPlayerToTeam { player, team } => {
+                let all_players: HashSet<Player> = self
+                    .team1
+                    .players
+                    .union(&self.team2.players)
+                    .cloned()
+                    .collect();
+                if all_players.contains(&player) {
+                    println!("Player {} already exists in the game", player.kinode_id);
+                    return self.clone();
                 }
+                match team {
+                    TeamName::Team1 => {
+                        self.team1.players.insert(player.clone());
+                        self.clone()
+                    }
+                    TeamName::Team2 => {
+                        self.team2.players.insert(player.clone());
+                        self.clone()
+                    }
+                }
+            }
+            GameLobbyDiff::EditLobby { name, minecraft_server_address } => {
+                self.name = name.clone();
+                self.minecraft_server_address = minecraft_server_address.clone();
+                // println!("lobby after diff: {:#?}", self);
+                self.clone()
             }
         }
     }
@@ -137,13 +145,12 @@ impl GameLobby {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum GameLobbyDiff {
     Init(GameLobby),
-    AddPlayerToTeam(Player, TeamName),
+    AddPlayerToTeam { player: Player, team: TeamName },
+    EditLobby { name: String, minecraft_server_address: String },
     // TODO
     // Message(ChatMessage),
     // FullMessageHistory(Vec<ChatMessage>),
     // RemovePlayerFromTeam(Player, TeamName),
-    // UpdateName(String),
-    // UpdateMinecraftServerAddress(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]

@@ -71,13 +71,6 @@ pub enum Owner {
     Unclaimed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EditLobby {
-    pub name: String,
-    pub minecraft_server_address: String,
-    pub clear_teams: bool,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
@@ -110,11 +103,11 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    pub fn update_clients(&self, diff: GameLobbyDiff) -> Result<(), anyhow::Error> {
+    pub fn update_clients(&self, diff: &GameLobbyDiff) -> Result<(), anyhow::Error> {
         for client in self.lobby.team1.players.iter() {
             println!("Sending {:?} to {:?}", diff, client.kinode_id);
             Request::new()
-                .body(serde_json::to_vec(&diff)?)
+                .body(serde_json::to_vec(diff)?)
                 .target(Address::new(
                     &client.kinode_id,
                     ("mcclient", "mcclient", "basilesex.os"),
@@ -124,7 +117,7 @@ impl State {
         for client in self.lobby.team2.players.iter() {
             println!("Sending {:?} to {:?}", diff, client.kinode_id);
             Request::new()
-                .body(serde_json::to_vec(&diff)?)
+                .body(serde_json::to_vec(diff)?)
                 .target(Address::new(
                     &client.kinode_id,
                     ("mcclient", "mcclient", "basilesex.os"),

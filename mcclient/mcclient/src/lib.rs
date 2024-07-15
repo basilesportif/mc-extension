@@ -1,7 +1,7 @@
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
-    NodeId, Request,
+    Request,
 };
 use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest};
 use serde::{Deserialize, Serialize};
@@ -40,56 +40,6 @@ impl State {
     }
 }
 
-fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
-    let message = await_message()?;
-
-    if let Some(gamelord) = &state.gamelord_address {
-        if message.source() == gamelord {
-            let deserialized = serde_json::from_slice::<GameLobbyDiff>(message.body())?;
-            match deserialized.clone() {
-                GameLobbyDiff::Init(..) => {
-                    state.lobby = state.lobby.apply_diff(deserialized);
-                    state.save();
-                    let blob = LazyLoadBlob {
-                        mime: Some("application/json".to_string()),
-                        bytes: serde_json::json!({
-                            "GameLobby": state.lobby
-                        })
-                        .to_string()
-                        .as_bytes()
-                        .to_vec(),
-                    };
-                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-                    println!("received init");
-                }
-                GameLobbyDiff::AddPlayerToTeam(..) => {
-                    state.lobby = state.lobby.apply_diff(deserialized.clone());
-                    state.save();
-                    let blob = LazyLoadBlob {
-                        mime: Some("application/json".to_string()),
-                        bytes: serde_json::json!({
-                            "AddPlayerToTeam": deserialized
-                        })
-                        .to_string()
-                        .as_bytes()
-                        .to_vec(),
-                    };
-
-                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-                    println!("received add player to team");
-                }
-            }
-            return Ok(());
-        }
-    }
-
-    if message.source().node() == state.our.node() {
-        return handle_http_request(state, ws_channel_id, message.body());
-    }
-
-    Ok(())
-}
-
 fn handle_http_request(
     state: &mut State,
     ws_channel_id: &mut Option<u32>,
@@ -99,6 +49,10 @@ fn handle_http_request(
 
     if let http::HttpServerRequest::WebSocketOpen { channel_id, .. } = http_request {
         *ws_channel_id = Some(channel_id);
+        send_ws_push(channel_id, WsMessageType::Text, LazyLoadBlob {
+            mime: Some("application/json".to_string()),
+            bytes: serde_json::to_vec(&state.lobby)?,
+        });
         return Ok(());
     }
 
@@ -143,23 +97,73 @@ fn handle_http_request(
     }
 }
 
+fn handle_gamelord_update(
+    state: &mut State,
+    ws_channel_id: &mut Option<u32>,
+    body: &[u8],
+) -> anyhow::Result<()> {
+    let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
+    state.lobby = state.lobby.apply_diff(&deserialized);
+    state.save();
+
+    match deserialized.clone() {
+        GameLobbyDiff::EditLobby {..} => {
+            let blob = LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(&deserialized)?,
+            };
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+        }
+        GameLobbyDiff::AddPlayerToTeam {..} => {
+            let blob = LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(&deserialized)?,
+            };
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+        }
+        GameLobbyDiff::Init(init) => {
+            let blob = LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(&deserialized)?,
+            };
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+        }
+    }
+    println!("received: {:#?}", deserialized);
+    Ok(())
+}
+
+fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
+    let message = await_message()?;
+
+    if let Some(gamelord) = &state.gamelord_address {
+        if message.source() == gamelord {
+            return handle_gamelord_update(state, ws_channel_id, message.body());
+        }
+    }
+
+    if message.source().node() == state.our.node() {
+        return handle_http_request(state, ws_channel_id, message.body());
+    }
+
+    Ok(())
+}
+
 call_init!(init);
 fn init(our: Address) {
     println!("start mcclient");
     let mut ws_channel_id: Option<u32> = None;
     bind_ws_path("/", true, false).unwrap();
 
-    let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
-
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-
     for path in ["/join_team"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
-
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
 
-    if let Some(gamelord_address) = state.clone().gamelord_address {
+    let mut state: State = State::fetch().unwrap_or_else(|| State::new(&our));
+
+    if let Some(gamelord_address) = state.gamelord_address.clone() {
         let _ = Request::to(gamelord_address)
             .body(serde_json::to_vec(&McClientToGamelordRequest::Init).unwrap())
             .send();

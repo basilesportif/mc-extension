@@ -1,8 +1,9 @@
+use alloy_primitives::hex::HEX_CHARS_LOWER;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
-    println, Address, Message, Request, Response, LazyLoadBlob
+    println, Address, LazyLoadBlob, Message, Request, Response,
 };
 use lazy_static::lazy_static;
 use std::sync::RwLock;
@@ -10,8 +11,8 @@ use std::sync::RwLock;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, EditLobby, Region, State};
-use mcstructs::{GameLobby, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
+use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, Region, State};
+use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -106,48 +107,33 @@ fn handle_mcclient_request(
                 kinode_id: message.source().node().to_string(),
                 minecraft_player_name: join_team.minecraft_id.to_string(),
             };
-
-            let all_players: HashSet<Player> = state
-                .lobby
-                .team1
-                .players
-                .union(&state.lobby.team2.players)
-                .cloned()
-                .collect();
-            if all_players.contains(&player) {
-                println!("Player {} already exists in the game", player.kinode_id);
-                return Ok(());
-            }
-
-            match join_team.team_name {
-                TeamName::Team1 => state.lobby.team1.players.insert(player.clone()),
-                TeamName::Team2 => state.lobby.team2.players.insert(player.clone()),
-                _ => {
-                    println!("Invalid team name: {:?}", join_team.team_name);
-                    return Ok(());
-                }
+            let diff = &GameLobbyDiff::AddPlayerToTeam {
+                player: player.clone(),
+                team: join_team.team_name.clone(),
             };
+            state.lobby.apply_diff(diff);
             state.save();
-
             let blob = LazyLoadBlob {
                 mime: Some("application/json".to_string()),
-                bytes: serde_json::json!({
-                    "JoinTeam": state.lobby
-                })
-                .to_string()
-                .as_bytes()
-                .to_vec(),
+                bytes: serde_json::to_vec(diff)?,
             };
             send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
 
             return state
-                .update_clients(GameLobbyDiff::AddPlayerToTeam(player, join_team.team_name));
+                .update_clients(&GameLobbyDiff::AddPlayerToTeam {
+                    player: player.clone(),
+                    team: join_team.team_name.clone(),
+                });
         }
     }
 }
 
 //have everything handled here
-fn handle_kinode_message(state: &mut State, ws_channel_id: &mut Option<u32>, message: &Message) -> anyhow::Result<()> {
+fn handle_kinode_message(
+    state: &mut State,
+    ws_channel_id: &mut Option<u32>,
+    message: &Message,
+) -> anyhow::Result<()> {
     println!("handle kinode message entered");
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
@@ -253,15 +239,15 @@ fn handle_kinode_message(state: &mut State, ws_channel_id: &mut Option<u32>, mes
                 };
                 println!("available cubes found");
                 let active_player = ActivePlayer {
-                    kinode_id: player.kinode_id().clone(),
-                    minecraft_player_name: player.minecraft_player_name().clone(),
+                    kinode_id: player.kinode_id.clone(),
+                    minecraft_player_name: player.minecraft_player_name.clone(),
                     current_cube: spawn_cube.clone(),
                 };
                 println!("active player created");
                 println!("active players inserted");
                 state
                     .active_players
-                    .insert(player.minecraft_player_name().clone(), active_player);
+                    .insert(player.minecraft_player_name.clone(), active_player);
                 state.save();
                 //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
                 let response =
@@ -288,17 +274,17 @@ fn handle_kinode_message(state: &mut State, ws_channel_id: &mut Option<u32>, mes
         }
         // Think about whether I need this
         GamelordRequestMinecraft::PlayerLeaveRequest { player } => {
-            if state.active_players.contains_key(player.kinode_id()) {
-                state.active_players.remove(player.kinode_id());
+            if state.active_players.contains_key(&player.kinode_id) {
+                state.active_players.remove(&player.kinode_id);
                 println!(
                     "Player with kinode_id {} has left the game.",
-                    player.kinode_id()
+                    player.kinode_id
                 );
                 state.save();
             } else {
                 println!(
                     "Player with kinode_id {} is not in the active players list.",
-                    player.kinode_id()
+                    player.kinode_id
                 );
             }
             Ok(())
@@ -310,18 +296,22 @@ fn is_http_request(message: &Message) -> bool {
     match serde_json::from_slice::<http::HttpServerRequest>(message.body()) {
         Ok(http::HttpServerRequest::WebSocketOpen { .. }) => true,
         Ok(http::HttpServerRequest::Http(..)) => true,
+        Ok(http::HttpServerRequest::WebSocketClose { .. }) => true,
+        Ok(http::HttpServerRequest::WebSocketPush { .. }) => true,
         _ => false,
     }
 }
-fn handle_http_request(state: &mut State, ws_channel_id: &mut Option<u32>, message: &Message) -> anyhow::Result<()> {
-    let our_http_request =
-        serde_json::from_slice::<http::HttpServerRequest>(message.body())?;
-    println!("HERHE");
+fn handle_http_request(
+    state: &mut State,
+    ws_channel_id: &mut Option<u32>,
+    message: &Message,
+) -> anyhow::Result<()> {
+    let our_http_request = serde_json::from_slice::<http::HttpServerRequest>(message.body())?;
     match our_http_request {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             *ws_channel_id = Some(channel_id);
             return Ok(());
-            }
+        }
         http::HttpServerRequest::Http(http_request) => {
             match http_request.method().unwrap() {
                 http::Method::GET => {
@@ -436,10 +426,10 @@ fn handle_http_request(state: &mut State, ws_channel_id: &mut Option<u32>, messa
                                         let player_clone = player.clone(); // Clone player before insertion
                                         state
                                             .allowed_players
-                                            .insert(player.minecraft_player_name().clone(), player);
+                                            .insert(player.minecraft_player_name.clone(), player);
                                         println!(
                                             "Player {} added to allowed players",
-                                            player_clone.minecraft_player_name()
+                                            player_clone.minecraft_player_name
                                         );
                                         state.save();
                                         http::send_response(
@@ -469,27 +459,66 @@ fn handle_http_request(state: &mut State, ws_channel_id: &mut Option<u32>, messa
                                     b"World Deleted".to_vec(),
                                 );
                             }
+                            "/api/clearTeams" => {
+                                state.lobby.clear_teams();
+                                state.save();
+                                let blob = LazyLoadBlob {
+                                    mime: Some("application/json".to_string()),
+                                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
+                                };
+                                send_ws_push(
+                                    ws_channel_id.unwrap_or(0),
+                                    WsMessageType::Text,
+                                    blob,
+                                );
+
+                                http::send_response(
+                                    http::StatusCode::OK,
+                                    None,
+                                    b"Teams Cleared".to_vec(),
+                                );
+                            }
                             "/api/editLobby" => {
                                 let bytes = get_blob()
                                     .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
                                     .bytes;
-                                let edit_lobby = serde_json::from_slice::<EditLobby>(&bytes)?;
+                                println!("bruuh here");
+                                let edit_lobby = serde_json::from_slice::<GameLobbyDiff>(&bytes)?;
 
-                                // println!("state before edit_lobby: {:#?}", state);
-                                state.lobby.name = edit_lobby.name;
-                                state.lobby.minecraft_server_address =
-                                    edit_lobby.minecraft_server_address;
-                                if edit_lobby.clear_teams {
-                                    state.lobby.clear_teams();
-                                    // TODO - game ended update to everyone from teams
-                                }
-                                state.save();
-                                // println!("state after editlobby: {:#?}", State::fetch().unwrap());
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    b"Lobby updated.".to_vec(),
-                                );
+                                println!("i think here");
+                                if let GameLobbyDiff::EditLobby { name, minecraft_server_address } =
+                                    edit_lobby.clone()
+                                {
+                                    println!("but not here");
+                                    // println!("state before edit_lobby: {:#?}", state);
+                                    state.lobby.apply_diff(&edit_lobby);
+                                    state.save();
+                                    println!("here?");
+
+                                    let blob = LazyLoadBlob {
+                                        mime: Some("application/json".to_string()),
+                                        bytes: serde_json::to_vec(&edit_lobby)?,
+                                    };
+                                    send_ws_push(
+                                        ws_channel_id.unwrap_or(0),
+                                        WsMessageType::Text,
+                                        blob,
+                                    );
+                                    println!("here2?");
+
+                                    let _ = state.update_clients(&GameLobbyDiff::EditLobby {
+                                        name: name.clone(),
+                                        minecraft_server_address: minecraft_server_address.clone(),
+                                    });
+                                    println!("here3?");
+
+                                    // println!("state after editlobby: {:#?}", State::fetch().unwrap());
+                                    http::send_response(
+                                        http::StatusCode::OK,
+                                        None,
+                                        b"Lobby updated.".to_vec(),
+                                    );
+                                } else {println!("WTF WHY HERE");}
                             }
                             _ => http::send_response(
                                 http::StatusCode::NOT_FOUND,
@@ -554,6 +583,7 @@ fn init(our: Address) {
         "/api/addPlayer",
         "/api/deleteWorld",
         "/api/editLobby",
+        "api/clearTeams",
         "/lobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");

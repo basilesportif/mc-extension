@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from "react";
 
 function App() {
+  const [lobby, setLobby] = useState({
+    name: '',
+    minecraft_server_address: '',
+    team1: [],
+    team2: []
+  });
+
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
   });
@@ -58,7 +65,22 @@ function App() {
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      console.log("websocket message received:", data);
+      switch (Object.keys(data)[0]) {
+        case 'EditLobby':
+          console.log('Lobby edited:', data.EditLobby);
+          setLobby(prevLobby => ({
+            ...prevLobby,
+            name: data.EditLobby.name,
+            minecraft_server_address: data.EditLobby.minecraft_server_address,
+          }));
+
+        // case 'Init':
+        //   console.log('Game lobby:', data.Init);
+        //   setLobby(data.Init);
+        default:
+          console.log('Unknown websocket message:', data);
+      }
+
     };
   };
 
@@ -84,6 +106,28 @@ function App() {
           Join Team2
         </button>
       </form>
+      <div>
+        <h2>Game Lobby Information</h2>
+        <p><strong>Server Name:</strong> {lobby.name}</p>
+        <p><strong>Minecraft Server Address:</strong> {lobby.minecraft_server_address}</p>
+        <h3>Teams</h3>
+        <div>
+          <h4>Team 1</h4>
+          <ul>
+            {lobby.team1.map((player, index) => (
+              <li key={index}>{player.minecraft_player_name}</li>
+            )) || 'No players'}
+          </ul>
+        </div>
+        <div>
+          <h4>Team 2</h4>
+          <ul>
+            {lobby.team2.map((player, index) => (
+              <li key={index}>{player.minecraft_player_name}</li>
+            )) || 'No players'}
+          </ul>
+        </div>
+      </div>
       <pre id="response-output"></pre>
     </div>
   );

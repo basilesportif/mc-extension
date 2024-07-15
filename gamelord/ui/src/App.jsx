@@ -12,17 +12,17 @@ function App() {
   useEffect(() => {
     document.getElementById("playerForm").addEventListener("submit", addPlayer);
     getLobby();
-    setActiveTab("tab1");
+    setActiveTab("tab2");
     webSocket();
   }, []);
 
   useEffect(() => {
     // Remove 'active' class from all tabs
-    document.querySelectorAll('.tab-content').forEach(tab => {
-      tab.classList.remove('active');
+    document.querySelectorAll(".tab-content").forEach((tab) => {
+      tab.classList.remove("active");
     });
     // Add 'active' class to the selected tab
-    document.getElementById(activeTab).classList.add('active');
+    document.getElementById(activeTab).classList.add("active");
   }, [activeTab]);
 
   async function addPlayer() {
@@ -150,19 +150,43 @@ function App() {
       });
   }
 
+  const clearTeams = () => {
+    const url = "/gamelord:gamelord:basilesex.os/api/clearTeams";
+
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+      .then((response) => {
+        if (response.ok) {
+          return response.text();
+        } else {
+          throw new Error("Failed to edit lobby");
+        }
+      })
+      .then((result) => {
+        document.getElementById("response-output-tab2").innerText = result;
+      })
+      .catch((error) => {
+        console.error("Error editing lobby:", error);
+        document.getElementById(
+          "response-output-tab2"
+        ).innerText = `Error: ${error.message}`;
+      });
+  };
+
   const editLobby = () => {
-    const lobbyName = document.getElementById("lobbyName").value || lobby.name  ;
-    const minecraftServerAddress = document.getElementById(
-      "minecraftServerAddress"
-    ).value || lobby.minecraft_server_address;
-    const clearTeams = document.getElementById("clearTeams").checked;
+    const lobbyName = document.getElementById("lobbyName").value || lobby.name;
+    const minecraftServerAddress =
+      document.getElementById("minecraftServerAddress").value ||
+      lobby.minecraft_server_address;
 
     const url = "/gamelord:gamelord:basilesex.os/api/editLobby";
 
     const data = {
-      name: lobbyName,
-      minecraft_server_address: minecraftServerAddress,
-      clear_teams: clearTeams,
+      "EditLobby":[lobbyName, minecraftServerAddress]
     };
     console.log(data);
 
@@ -190,7 +214,7 @@ function App() {
           "response-output-tab2"
         ).innerText = `Error: ${error.message}`;
       });
-  }
+  };
 
   function getLobby() {
     const url = "/gamelord:gamelord:basilesex.os/lobby";
@@ -243,7 +267,34 @@ function App() {
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      console.log("websocket message received:", data);
+      switch (Object.keys(data)[0]) {
+        case 'EditLobby':
+          console.log('Lobby edited:', data.EditLobby);
+          setLobby(prevLobby => ({
+            ...prevLobby,
+            name: data.EditLobby.name,
+            minecraft_server_address: data.EditLobby.minecraft_server_address,
+          }));
+        case 'AddPlayerToTeam':
+          console.log('Player added to team:', data.AddPlayerToTeam);
+          if (data.AddPlayerToTeam.team === 'team1') {
+            setLobby(prevLobby => ({
+              ...prevLobby,
+              team1: [...prevLobby.team1, data.AddPlayerToTeam.player]
+            }));
+          } else {
+            setLobby(prevLobby => ({
+              ...prevLobby,
+              team2: [...prevLobby.team2, data.AddPlayerToTeam.player]
+            }));
+          }
+
+        // case 'Init':
+        //   console.log('Game lobby:', data.Init);
+        //   setLobby(data.Init);
+        default:
+          console.log('Unknown websocket message:', data);
+      }
     };
   };
 
@@ -334,14 +385,6 @@ function App() {
                 />
               </div>
               <div className="form-group"></div>
-              <div className="form-group">
-                <div className="form-group">
-                  <label htmlFor="clearTeams">
-                    <input type="checkbox" id="clearTeams" name="clearTeams" />
-                    Clear Teams
-                  </label>
-                </div>
-              </div>
               <button type="button" onClick={() => editLobby()}>
                 Submit Changes
               </button>
@@ -365,6 +408,9 @@ function App() {
                 ))}
               </ul>
             </div>
+            <button type="button" onClick={() => clearTeams()}>
+              Clear Teams
+            </button>
           </div>
         </div>
         <pre id="response-output-tab2"></pre>
