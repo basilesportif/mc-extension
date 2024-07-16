@@ -41,6 +41,11 @@ pub enum McClientToGamelordRequest {
     JoinTeam(JoinTeam), // request to join team
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WsPush {
+    GetInit,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameLobby {
     pub name: String,

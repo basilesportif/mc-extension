@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { applyDiff } from "./shared";
-
+let ws;
 function App() {
   const [lobby, setLobby] = useState({
     name: "",
@@ -19,12 +19,14 @@ function App() {
     },
   });
   const [activeTab, setActiveTab] = useState("tab1");
+  const [wsReady, setWsReady] = useState(false);
 
   useEffect(() => {
     document.getElementById("playerForm").addEventListener("submit", addPlayer);
-    getLobby();
     setActiveTab("tab2");
-    webSocket();
+    if (!wsReady) {
+      webSocket();
+    }
   }, []);
 
   useEffect(() => {
@@ -201,7 +203,7 @@ function App() {
     const url = "/gamelord:gamelord:basilesex.os/api/editLobby";
 
     const data = {
-      "EditLobby":[lobbyName, minecraftServerAddress]
+      EditLobby: [lobbyName, minecraftServerAddress],
     };
     // console.log(data);
 
@@ -231,54 +233,18 @@ function App() {
       });
   };
 
-  function getLobby() {
-    const url = "/gamelord:gamelord:basilesex.os/lobby";
-
-    fetch(url)
-      .then((response) => {
-        if (response.ok) {
-          return response.json();
-        } else {
-          throw new Error("Failed to get lobby data");
-        }
-      })
-      .then((data) => {
-        // console.log("Lobby data retrieved successfully:", data);
-
-        // Update the lobby information in the UI
-        document.getElementById("lobbyName").placeholder =
-          "Game Name: " + data.name;
-        document.getElementById("minecraftServerAddress").placeholder =
-          "MC Server: " + data.minecraft_server_address;
-
-        setLobby({
-          name: data.name,
-          minecraft_server_address: data.minecraft_server_address,
-          team1: data.team1,
-          team2: data.team2,
-        });
-
-        document.getElementById("response-output-tab2").innerText =
-          "Lobby data updated successfully";
-      })
-      .catch((error) => {
-        console.error("Error getting lobby data:", error);
-        document.getElementById(
-          "response-output-tab2"
-        ).innerText = `Error: ${error.message}`;
-      });
-  }
-
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host =
       window.location.port === "5173" ? "localhost:8080" : window.location.host;
-    const ws = new WebSocket(
-      `${protocol}//${host}/gamelord:gamelord:basilesex.os/`
-    );
+    if (!wsReady) {
+      ws = new WebSocket(`${protocol}//${host}/gamelord:gamelord:basilesex.os/`);
+    }
 
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);
+      setWsReady(true);
+      ws.send(JSON.stringify("GetInit"));
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);

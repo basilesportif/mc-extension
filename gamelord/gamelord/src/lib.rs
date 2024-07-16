@@ -8,8 +8,11 @@ use kinode_process_lib::{
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, Region, State, GamelordRequestMinecraft, GamelordResponseMinecraft};
-use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
+use gamelord_types::{
+    ActivePlayer, ConfigurationRegion, Cube, GamelordRequestMinecraft, GamelordResponseMinecraft,
+    Region, State,
+};
+use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, WsPush};
 use std::collections::HashMap;
 
 wit_bindgen::generate!({
@@ -98,7 +101,6 @@ fn edit_lobby(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Res
         .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
         .bytes;
     let edit_lobby = serde_json::from_slice::<GameLobbyDiff>(&bytes)?;
-
     if let GameLobbyDiff::EditLobby {
         name,
         minecraft_server_address,
@@ -379,6 +381,34 @@ fn handle_http_request(
             *ws_channel_id = Some(channel_id);
             return Ok(());
         }
+        http::HttpServerRequest::WebSocketClose { .. } => {
+            *ws_channel_id = None;
+            return Ok(());
+        }
+        // not used yet, wip
+        http::HttpServerRequest::WebSocketPush {
+            channel_id,
+            message_type,
+        } => {
+            let Some(blob) = get_blob() else {
+                return Ok(());
+            };
+            let ws_push  = serde_json::from_slice::<WsPush>(&blob.bytes)?;
+            if let WsPush::GetInit = ws_push {
+                send_ws_push(
+                    ws_channel_id.unwrap_or(0),
+                    WsMessageType::Text,
+                    LazyLoadBlob {
+                        mime: Some("application/json".to_string()),
+                        bytes: serde_json::to_vec(&GameLobbyDiff::Init(
+                            state.lobby.clone(),
+                        ))?,
+                    },
+                );
+            }
+
+            return Ok(());
+        }
         http::HttpServerRequest::Http(http_request) => {
             let _resp = if let Ok(path) = http_request.path() {
                 println!("HTTP request path: {:?}", path);
@@ -389,11 +419,6 @@ fn handle_http_request(
                     }
                     "/active_players" => {
                         let response = serde_json::to_string(&state.active_players).unwrap();
-                        http::send_response(http::StatusCode::OK, None, response.into_bytes());
-                    }
-                    "/lobby" => {
-                        let lobby = state.lobby.clone();
-                        let response = serde_json::to_string(&lobby).unwrap();
                         http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
                     "/api/loadWorld" => load_world(state),
@@ -474,7 +499,6 @@ fn init(our: Address) {
         "/api/deleteWorld",
         "/api/editLobby",
         "api/clearTeams",
-        "/lobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
