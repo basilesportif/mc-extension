@@ -1,8 +1,7 @@
-use alloy_consensus::Sealed;
-use kinode_process_lib::{get_state, set_state, Address, NodeId, Request, println};
+use kinode_process_lib::{get_state, set_state, Address, Request, println};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::hash::{Hash, Hasher};
 
 use mcstructs::{GameLobby, GameLobbyDiff, Player, Team, TeamName};
@@ -126,6 +125,49 @@ impl State {
         }
         Ok(())
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum GamelordRequestMinecraft {
+    ValidateMove { minecraft_id: String, cube: Cube },
+    PlayerSpawnRequest { minecraft_id: String },
+    PlayerLeaveRequest { player: Player },
+}
+
+//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
+//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
+
+//GamelordResponseMinecraft
+//GamelordResponseUI (maybe not needed)
+impl GamelordRequestMinecraft {
+    pub fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
+        let json_str = String::from_utf8_lossy(bytes);
+        println!("Attempting to parse JSON: {}", json_str);
+
+        match serde_json::from_str::<GamelordRequestMinecraft>(&json_str) {
+            Ok(request) => {
+                println!("Successfully parsed GamelordRequest: {:?}", request);
+                Ok(request)
+            }
+            Err(e) => {
+                println!("Error parsing GamelordRequest: {:?}", e);
+                println!("Error occurred at position: {}", e.column());
+                if let Some(line) = json_str.lines().nth(e.line() - 1) {
+                    println!("Problematic line: {}", line);
+                    println!("                  {}^", " ".repeat(e.column() - 1));
+                }
+                Err(e)
+            }
+        }
+    }
+}
+
+//have to figure this out, since these are responses read by mcdriver, so have to update on that side
+#[derive(Serialize, Deserialize, Debug)]
+pub enum GamelordResponseMinecraft {
+    ValidateMove(bool, String),
+    PlayerSpawnRequestAuthorized(bool, String, Cube),
+    PlayerSpawnRequestDenied(bool, String),
 }
 
 /*

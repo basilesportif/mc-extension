@@ -1,63 +1,16 @@
-use alloy_primitives::hex::HEX_CHARS_LOWER;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
-use lazy_static::lazy_static;
-use std::sync::RwLock;
 
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, Region, State};
+use gamelord_types::{ActivePlayer, ConfigurationRegion, Cube, Region, State, GamelordRequestMinecraft, GamelordResponseMinecraft};
 use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-
-#[derive(Serialize, Deserialize, Debug)]
-enum GamelordRequestMinecraft {
-    ValidateMove { minecraft_id: String, cube: Cube },
-    PlayerSpawnRequest { minecraft_id: String },
-    PlayerLeaveRequest { player: Player },
-}
-
-//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
-//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
-
-//GamelordResponseMinecraft
-//GamelordResponseUI (maybe not needed)
-impl GamelordRequestMinecraft {
-    fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
-        let json_str = String::from_utf8_lossy(bytes);
-        println!("Attempting to parse JSON: {}", json_str);
-
-        match serde_json::from_str::<GamelordRequestMinecraft>(&json_str) {
-            Ok(request) => {
-                println!("Successfully parsed GamelordRequest: {:?}", request);
-                Ok(request)
-            }
-            Err(e) => {
-                println!("Error parsing GamelordRequest: {:?}", e);
-                println!("Error occurred at position: {}", e.column());
-                if let Some(line) = json_str.lines().nth(e.line() - 1) {
-                    println!("Problematic line: {}", line);
-                    println!("                  {}^", " ".repeat(e.column() - 1));
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
-//have to figure this out, since these are responses read by mcdriver, so have to update on that side
-#[derive(Serialize, Deserialize, Debug)]
-enum GamelordResponseMinecraft {
-    ValidateMove(bool, String),
-    PlayerSpawnRequestAuthorized(bool, String, Cube),
-    PlayerSpawnRequestDenied(bool, String),
-}
+use std::collections::HashMap;
 
 wit_bindgen::generate!({
     path: "target/wit",
