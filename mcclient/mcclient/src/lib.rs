@@ -47,8 +47,9 @@ fn handle_http_request(
 ) -> anyhow::Result<()> {
     let http_request = http::HttpServerRequest::from_bytes(body)?;
 
-    if let http::HttpServerRequest::WebSocketOpen { channel_id, .. } = http_request {
-        *ws_channel_id = Some(channel_id);
+    match http_request {
+        http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
+            *ws_channel_id = Some(channel_id);
         send_ws_push(
             channel_id,
             WsMessageType::Text,
@@ -56,10 +57,17 @@ fn handle_http_request(
                 mime: Some("application/json".to_string()),
                 bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
             },
-        );
-        return Ok(());
+            );
+            return Ok(());
+        }
+        http::HttpServerRequest::WebSocketClose { .. } => {
+            *ws_channel_id = None;
+            return Ok(());
+        }
+        _ => {}
     }
 
+    println!("http request: {:#?}", http_request);
     let http_request = http_request
         .request()
         .ok_or_else(|| anyhow::anyhow!("Failed to parse http request"))?;
