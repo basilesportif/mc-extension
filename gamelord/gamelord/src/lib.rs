@@ -379,6 +379,17 @@ fn handle_http_request(
     match our_http_request {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             *ws_channel_id = Some(channel_id);
+            send_ws_push(
+                ws_channel_id.unwrap_or(0),
+                WsMessageType::Text,
+                LazyLoadBlob {
+                    mime: Some("application/json".to_string()),
+                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(
+                        state.lobby.clone(),
+                    ))?,
+                },
+            );
+
             return Ok(());
         }
         http::HttpServerRequest::WebSocketClose { .. } => {
@@ -393,19 +404,20 @@ fn handle_http_request(
             let Some(blob) = get_blob() else {
                 return Ok(());
             };
-            let ws_push  = serde_json::from_slice::<WsPush>(&blob.bytes)?;
-            if let WsPush::GetInit = ws_push {
-                send_ws_push(
-                    ws_channel_id.unwrap_or(0),
-                    WsMessageType::Text,
-                    LazyLoadBlob {
-                        mime: Some("application/json".to_string()),
-                        bytes: serde_json::to_vec(&GameLobbyDiff::Init(
-                            state.lobby.clone(),
-                        ))?,
-                    },
-                );
-            }
+            // dont need this, implemented on ws open
+            // let ws_push  = serde_json::from_slice::<WsPush>(&blob.bytes)?;
+            // if let WsPush::GetInit = ws_push {
+            //     send_ws_push(
+            //         ws_channel_id.unwrap_or(0),
+            //         WsMessageType::Text,
+            //         LazyLoadBlob {
+            //             mime: Some("application/json".to_string()),
+            //             bytes: serde_json::to_vec(&GameLobbyDiff::Init(
+            //                 state.lobby.clone(),
+            //             ))?,
+            //         },
+            //     );
+            // }
 
             return Ok(());
         }

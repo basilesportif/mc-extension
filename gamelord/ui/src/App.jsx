@@ -244,7 +244,7 @@ function App() {
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);
       setWsReady(true);
-      ws.send(JSON.stringify("GetInit"));
+      // ws.send(JSON.stringify("GetInit"));
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
