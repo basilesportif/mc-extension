@@ -148,7 +148,7 @@ function setupPointerLockControls() {
       resetCamera();
     }
   });
-}
+
 
 function onCubeSizeChange(event) {
   cubeSize = parseInt(event.target.value);
