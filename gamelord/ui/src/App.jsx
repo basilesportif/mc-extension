@@ -327,7 +327,7 @@ function App() {
                   type="text"
                   id="lobbyName"
                   name="lobbyName"
-                  placeholder="Enter Lobby Name"
+                  placeholder={`Current Name: ${lobby.name}` || "Enter Lobby Name"}
                 />
               </div>
               <div className="form-group">
@@ -335,7 +335,7 @@ function App() {
                   type="text"
                   id="minecraftServerAddress"
                   name="minecraftServerAddress"
-                  placeholder="Enter Minecraft Server Address"
+                  placeholder={`Current Server: ${lobby.minecraft_server_address}` || "Enter Minecraft Server Address"}
                 />
               </div>
               <div className="form-group"></div>
