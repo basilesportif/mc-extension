@@ -11,5 +11,3 @@ mc-driver/pkg/*.wasm
 /.vscode/settings.json
 /package-lock.json
 /ui/ExportedMinecraftworld/*
-
-

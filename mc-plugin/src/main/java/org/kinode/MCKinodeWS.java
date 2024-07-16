@@ -123,7 +123,7 @@ public class MCKinodeWS extends WebSocketClient {
                 + "\"channel_id\": 1,"
                 + "\"message_type\": \"Text\","
                 + "\"body\": {"
-                + "\"CubeTransitionRequest\": {"
+                + "\"ValidateMove\": {"
                 + "\"minecraft_id\": \"" + playerName + "\","
                 + "\"cube\": {"
                 + "\"center\": [" + x + ", " + y + ", " + z + "],"
@@ -136,32 +136,46 @@ public class MCKinodeWS extends WebSocketClient {
         System.out.println("Sent ValidateMove message: " + message);
 
         onMessageResponse = (response) -> {
-            // Remove " from the response and convert it to a string
-            String cleanedResponse = response.trim().replace("\"", "");
-            System.err.println("cleaned responses: " + cleanedResponse);
-            if ("TransitionSilentResponse".equals(cleanedResponse)) {
-                MCKinodePlugin.getInstance().getLogger().info("Entering non-enemy territory");
-                Player player = Bukkit.getPlayer(playerName);
-                if (player != null) {
-                    player.sendMessage("You are entering non-enemy territory");
-                }
-            } else {
-                try {
-                    JSONObject jsonResponse = new JSONObject(response);
-                    if (jsonResponse.has("TransitionTriggeredResponse")) {
-                        JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
-                        JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
-                        MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
+            JSONObject jsonResponse = new JSONObject(response);
+            boolean success;
+            String messageResponse;
+
+            if (jsonResponse.has("ValidateMove")) {
+                JSONArray responseArray = jsonResponse.getJSONArray("ValidateMove");
+                success = responseArray.getBoolean(0);
+                messageResponse = responseArray.getString(1);
+
+                if (success) {
+                    MCKinodePlugin.getInstance().getLogger().info("Move allowed: " + messageResponse);
+                    Player player = Bukkit.getPlayer(playerName);
+                    player.sendMessage("Move allowed: " + messageResponse);
+                } else {
+                    MCKinodePlugin.getInstance().getLogger().info("Move invalid: " + messageResponse);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
                         Player player = Bukkit.getPlayer(playerName);
                         if (player != null) {
-                            player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
+                            player.sendMessage("Move not allowed: " + messageResponse);
+                            
+                            // Get the player's current location
+                            Location currentLocation = player.getLocation();
+                            
+                            // Calculate a new position 15 blocks behind the player
+                            Vector direction = currentLocation.getDirection().normalize().multiply(-10);  // Reverse direction and move 15 blocks back
+                            Location newLocation = currentLocation.add(direction);
+                            
+                            // Ensure the new location is safe (not inside a block)
+                            while (newLocation.getBlock().getType().isSolid() && newLocation.getY() < 256) {
+                                newLocation.add(0, 1, 0);  // Move up until we find a non-solid block
+                            }
+                            
+                            // Teleport the player to the new location
+                            player.teleport(newLocation);
+                            player.sendMessage("You've been moved back to a safe location.");
                         }
-                    } else {
-                        System.err.println("Unexpected JSON response format: " + response);
-                    }
-                } catch (JSONException e) {
-                    System.err.println("Unexpected response format: " + response);
+                    });
                 }
+            } else {
+                System.err.println("Unexpected response format: " + response);
             }
         };
         

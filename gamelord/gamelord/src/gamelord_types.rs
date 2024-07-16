@@ -1,19 +1,17 @@
 use alloy_consensus::Sealed;
-use kinode_process_lib::{get_state, set_state, Address, NodeId};
+use kinode_process_lib::{get_state, set_state, Address, NodeId, Request, println};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{GameLobby, Team, TeamName, Player};
+use mcstructs::{GameLobby, GameLobbyDiff, Player, Team, TeamName};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
     pub kinode_id: String,
     pub minecraft_player_name: String,
     pub current_cube: Cube,
-    // determines what team the player is on
-    pub team: TeamName
 }
 impl ActivePlayer {
     pub fn to_player(&self) -> Player {
@@ -28,15 +26,6 @@ impl ActivePlayer {
 pub struct Cube {
     pub center: (i32, i32, i32),
     pub side_length: i32,
-
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Effect{
-    Slowness
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CubeEffectList{
-    effects: Vec<Effect>
 }
 
 impl Cube {
@@ -62,12 +51,18 @@ impl Hash for Cube {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
-    pub cubes: HashMap<Cube, CubeEffectList>,
+    pub cubes: HashMap<u64, Cube>,
+    pub owner: Owner,
+    pub everyone_allowed: bool,
+    pub authorized_players: Vec<String>,
 }
-
-pub type OwnerToRegion = HashMap<TeamName, Region>;
-// 
-pub type CubeToOwner = HashMap<Cube, Vec<TeamName>>;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConfigurationRegion {
+    pub cubes: Vec<Cube>,
+    pub owner: Owner,
+    pub everyone_allowed: bool,
+    pub authorized_players: Vec<String>,
+}
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
@@ -76,19 +71,12 @@ pub enum Owner {
     Unclaimed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EditLobby {
-    pub name: String,
-    pub minecraft_server_address: String,
-    pub clear_teams: bool
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
     pub lobby: GameLobby,
-    pub world_config: OwnerToRegion,
-    pub cube_to_owner: CubeToOwner,
+    pub world_config: HashMap<Owner, Region>,
+    pub cube_to_owner: HashMap<Cube, Owner>,
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
 }
@@ -97,21 +85,7 @@ impl State {
     pub fn new(our: &Address) -> Self {
         State {
             our: our.clone(),
-            lobby: GameLobby {
-                name: "Game 1".to_string(),
-                minecraft_server_address: "".to_string(),
-                team1: Team {
-                    name: TeamName::Team1,
-                    players: HashSet::new(),
-                    chat: "".to_string(),
-
-                },
-                team2: Team {
-                    name: TeamName::Team2,
-                    players: HashSet::new(),
-                    chat: "".to_string(),
-                },
-            },
+            lobby: GameLobby::new(),
             world_config: HashMap::new(),
             cube_to_owner: HashMap::new(),
             active_players: HashMap::new(),
@@ -129,18 +103,28 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
-    pub fn clear_teams(&mut self) -> Self {
-        self.lobby.team1 = Team {
-            name: TeamName::Team1,
-            players: HashSet::new(),
-            chat: "".to_string(),
-        };
-        self.lobby.team2 = Team {
-            name: TeamName::Team2,
-            players: HashSet::new(),
-            chat: "".to_string(),
-        };
-        self.clone()
+    pub fn update_clients(&self, diff: &GameLobbyDiff) -> Result<(), anyhow::Error> {
+        for client in self.lobby.team1.players.iter() {
+            println!("Sending {:?} to {:?}", diff, client.kinode_id);
+            Request::new()
+                .body(serde_json::to_vec(diff)?)
+                .target(Address::new(
+                    &client.kinode_id,
+                    ("mcclient", "mcclient", "basilesex.os"),
+                ))
+                .send()?;
+        }
+        for client in self.lobby.team2.players.iter() {
+            println!("Sending {:?} to {:?}", diff, client.kinode_id);
+            Request::new()
+                .body(serde_json::to_vec(diff)?)
+                .target(Address::new(
+                    &client.kinode_id,
+                    ("mcclient", "mcclient", "basilesex.os"),
+                ))
+                .send()?;
+        }
+        Ok(())
     }
 }
 
