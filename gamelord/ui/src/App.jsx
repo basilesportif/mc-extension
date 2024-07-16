@@ -1,11 +1,22 @@
 import React, { useEffect, useState } from "react";
+import { applyDiff } from "./shared";
 
 function App() {
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
-    team1: [],
-    team2: [],
+    team1: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
+    team2: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
   });
   const [activeTab, setActiveTab] = useState("tab1");
 
@@ -15,6 +26,10 @@ function App() {
     setActiveTab("tab2");
     webSocket();
   }, []);
+
+  useEffect(() => {
+    console.log("LOBBY:", lobby);
+  }, [lobby]);
 
   useEffect(() => {
     // Remove 'active' class from all tabs
@@ -188,7 +203,7 @@ function App() {
     const data = {
       "EditLobby":[lobbyName, minecraftServerAddress]
     };
-    console.log(data);
+    // console.log(data);
 
     fetch(url, {
       method: "POST",
@@ -205,7 +220,7 @@ function App() {
         }
       })
       .then((result) => {
-        console.log("Lobby edited successfully:", result);
+        // console.log("Lobby edited successfully:", result);
         document.getElementById("response-output-tab2").innerText = result;
       })
       .catch((error) => {
@@ -228,7 +243,7 @@ function App() {
         }
       })
       .then((data) => {
-        console.log("Lobby data retrieved successfully:", data);
+        // console.log("Lobby data retrieved successfully:", data);
 
         // Update the lobby information in the UI
         document.getElementById("lobbyName").placeholder =
@@ -239,8 +254,8 @@ function App() {
         setLobby({
           name: data.name,
           minecraft_server_address: data.minecraft_server_address,
-          team1: data.team1.players,
-          team2: data.team2.players,
+          team1: data.team1,
+          team2: data.team2,
         });
 
         document.getElementById("response-output-tab2").innerText =
@@ -267,34 +282,7 @@ function App() {
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      switch (Object.keys(data)[0]) {
-        case 'EditLobby':
-          console.log('Lobby edited:', data.EditLobby);
-          setLobby(prevLobby => ({
-            ...prevLobby,
-            name: data.EditLobby.name,
-            minecraft_server_address: data.EditLobby.minecraft_server_address,
-          }));
-        case 'AddPlayerToTeam':
-          console.log('Player added to team:', data.AddPlayerToTeam);
-          if (data.AddPlayerToTeam.team === 'team1') {
-            setLobby(prevLobby => ({
-              ...prevLobby,
-              team1: [...prevLobby.team1, data.AddPlayerToTeam.player]
-            }));
-          } else {
-            setLobby(prevLobby => ({
-              ...prevLobby,
-              team2: [...prevLobby.team2, data.AddPlayerToTeam.player]
-            }));
-          }
-
-        // case 'Init':
-        //   console.log('Game lobby:', data.Init);
-        //   setLobby(data.Init);
-        default:
-          console.log('Unknown websocket message:', data);
-      }
+      applyDiff(data, setLobby);
     };
   };
 
@@ -395,17 +383,25 @@ function App() {
             <div>
               <h3>Team 1</h3>
               <ul>
-                {lobby.team1.map((player, index) => (
-                  <li key={index}>{player.kinode_id}</li>
-                ))}
+                {lobby.team1?.players?.length > 0 ? (
+                  lobby.team1.players.map((player, index) => (
+                    <li key={index}>{player.kinode_id}</li>
+                  ))
+                ) : (
+                  <li>No players in Team 1</li>
+                )}
               </ul>
             </div>
             <div>
               <h3>Team 2</h3>
               <ul>
-                {lobby.team2.map((player, index) => (
-                  <li key={index}>{player.kinode_id}</li>
-                ))}
+                {lobby.team2?.players?.length > 0 ? (
+                  lobby.team2.players.map((player, index) => (
+                    <li key={index}>{player.kinode_id}</li>
+                  ))
+                ) : (
+                  <li>No players in Team 2</li>
+                )}
               </ul>
             </div>
             <button type="button" onClick={() => clearTeams()}>

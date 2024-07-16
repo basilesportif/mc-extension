@@ -49,10 +49,14 @@ fn handle_http_request(
 
     if let http::HttpServerRequest::WebSocketOpen { channel_id, .. } = http_request {
         *ws_channel_id = Some(channel_id);
-        send_ws_push(channel_id, WsMessageType::Text, LazyLoadBlob {
-            mime: Some("application/json".to_string()),
-            bytes: serde_json::to_vec(&state.lobby)?,
-        });
+        send_ws_push(
+            channel_id,
+            WsMessageType::Text,
+            LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
+            },
+        );
         return Ok(());
     }
 
@@ -103,33 +107,19 @@ fn handle_gamelord_update(
     body: &[u8],
 ) -> anyhow::Result<()> {
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
-    state.lobby = state.lobby.apply_diff(&deserialized);
+    state.lobby = match state.lobby.apply_diff(&deserialized) {
+        Ok(lobby) => lobby,
+        Err(e) => {
+            println!("mcclient: error applying diff: {}", e);
+            return Ok(());
+        }
+    };
     state.save();
-
-    match deserialized.clone() {
-        GameLobbyDiff::EditLobby {..} => {
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(&deserialized)?,
-            };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-        }
-        GameLobbyDiff::AddPlayerToTeam {..} => {
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(&deserialized)?,
-            };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-        }
-        GameLobbyDiff::Init(init) => {
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(&deserialized)?,
-            };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-        }
-    }
-    println!("received: {:#?}", deserialized);
+    let blob = LazyLoadBlob {
+        mime: Some("application/json".to_string()),
+        bytes: serde_json::to_vec(&deserialized)?,
+    };
+    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
     Ok(())
 }
 

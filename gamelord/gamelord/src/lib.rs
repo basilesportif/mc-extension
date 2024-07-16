@@ -111,19 +111,29 @@ fn handle_mcclient_request(
                 player: player.clone(),
                 team: join_team.team_name.clone(),
             };
-            state.lobby.apply_diff(diff);
-            state.save();
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(diff)?,
+            println!("diff: {:?}", diff);
+            match state.lobby.apply_diff(diff) {
+                Ok(lobby) => {
+                    state.lobby = lobby;
+                    state.save();
+                    let blob = LazyLoadBlob {
+                        mime: Some("application/json".to_string()),
+                        bytes: serde_json::to_vec(diff)?,
+                    };
+                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+        
+                    return state
+                        .update_clients(&GameLobbyDiff::AddPlayerToTeam {
+                            player: player.clone(),
+                            team: join_team.team_name.clone(),
+                        });
+        
+                }
+                Err(e) => {
+                    println!("mcclient: error applying diff: {}", e);
+                    return Ok(());
+                }
             };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-
-            return state
-                .update_clients(&GameLobbyDiff::AddPlayerToTeam {
-                    player: player.clone(),
-                    team: join_team.team_name.clone(),
-                });
         }
     }
 }
@@ -576,7 +586,7 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-
+    // let _ = http::serve_ui(&our, "../mcstructs/ui", true, false, vec!["/"]);
     for path in [
         "/api/loadWorld",
         "/world_config",

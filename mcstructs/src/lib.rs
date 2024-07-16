@@ -103,12 +103,12 @@ impl GameLobby {
         };
         self.clone()
     }
-    pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> GameLobby {
+    pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> Result<GameLobby, String> {
         match diff {
             GameLobbyDiff::Init(lobby) => {
                 *self = lobby.clone();
                 println!("lobby after diff: {:#?}", self);
-                self.clone()
+                Ok(self.clone())
             }
             GameLobbyDiff::AddPlayerToTeam { player, team } => {
                 let all_players: HashSet<Player> = self
@@ -117,18 +117,18 @@ impl GameLobby {
                     .union(&self.team2.players)
                     .cloned()
                     .collect();
-                if all_players.contains(&player) {
+                if all_players.iter().any(|p| p.kinode_id == player.kinode_id) {
                     println!("Player {} already exists in the game", player.kinode_id);
-                    return self.clone();
+                    return Err("Player already exists in the game".to_string());
                 }
                 match team {
                     TeamName::Team1 => {
                         self.team1.players.insert(player.clone());
-                        self.clone()
+                        Ok(self.clone())
                     }
                     TeamName::Team2 => {
                         self.team2.players.insert(player.clone());
-                        self.clone()
+                        Ok(self.clone())
                     }
                 }
             }
@@ -136,7 +136,7 @@ impl GameLobby {
                 self.name = name.clone();
                 self.minecraft_server_address = minecraft_server_address.clone();
                 // println!("lobby after diff: {:#?}", self);
-                self.clone()
+                Ok(self.clone())
             }
         }
     }
