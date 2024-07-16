@@ -3,7 +3,7 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
     Request,
 };
-use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest};
+use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, WsPush};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -50,18 +50,41 @@ fn handle_http_request(
     match http_request {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             *ws_channel_id = Some(channel_id);
-        send_ws_push(
-            channel_id,
-            WsMessageType::Text,
-            LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
-            },
+            send_ws_push(
+                channel_id,
+                WsMessageType::Text,
+                LazyLoadBlob {
+                    mime: Some("application/json".to_string()),
+                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
+                },
             );
             return Ok(());
         }
         http::HttpServerRequest::WebSocketClose { .. } => {
             *ws_channel_id = None;
+            return Ok(());
+        }
+        http::HttpServerRequest::WebSocketPush { .. } => {
+            let Some(blob) = get_blob() else {
+                return Ok(());
+            };
+            let ws_push = serde_json::from_slice::<WsPush>(&blob.bytes)?;
+            match ws_push {
+                WsPush::GetInit => {
+                    // do nothing
+                }
+                WsPush::SendMessage(message) => {
+                    println!("mcclient: received message: {}", message);
+                    if let Some(gamelord) = &state.gamelord_address {
+                        let msg_request: Vec<u8> = serde_json::to_vec(
+                            &McClientToGamelordRequest::SendMessage(message.clone()),
+                        )?;
+                        let _ = Request::to(gamelord.clone()).body(msg_request).send();
+                    } else {
+                        return Err(anyhow::anyhow!("mcclient: no gamelord address"));
+                    }
+                }
+            }
             return Ok(());
         }
         _ => {}
@@ -114,6 +137,7 @@ fn handle_gamelord_update(
     ws_channel_id: &mut Option<u32>,
     body: &[u8],
 ) -> anyhow::Result<()> {
+    println!("received update");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
     state.lobby = match state.lobby.apply_diff(&deserialized) {
         Ok(lobby) => lobby,
@@ -122,6 +146,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
+    println!("state: {:?}", state.lobby);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),

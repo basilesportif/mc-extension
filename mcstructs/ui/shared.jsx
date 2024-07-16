@@ -1,4 +1,5 @@
 // warning: edit this file in mcstructs, not mcclient or gamelord
+//
 // note: doesn't live update with `npm run dev`
 // 
 // here goes logic for applying diffs to lobby/state
@@ -46,6 +47,9 @@ export function applyDiff(data, setLobby) {
     case "Init":
       console.log("INIT", data.Init);
       setLobby(data.Init);
+      break;
+    case "Message":
+      console.log("Message", data.Message);
       break;
     default:
       console.log("Unknown websocket message:", data);

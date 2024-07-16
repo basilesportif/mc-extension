@@ -1,10 +1,10 @@
-use kinode_process_lib::{get_state, set_state, Address, Request, println};
+use kinode_process_lib::{get_state, println, set_state, Address, Request};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{GameLobby, GameLobbyDiff, Player, Team, TeamName};
+use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Team, TeamName};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -103,25 +103,39 @@ impl State {
         set_state(&serialized_state);
     }
     pub fn update_clients(&self, diff: &GameLobbyDiff) -> Result<(), anyhow::Error> {
-        for client in self.lobby.team1.players.iter() {
-            println!("Sending {:?} to {:?}", diff, client.kinode_id);
-            Request::new()
-                .body(serde_json::to_vec(diff)?)
-                .target(Address::new(
-                    &client.kinode_id,
-                    ("mcclient", "mcclient", "basilesex.os"),
-                ))
-                .send()?;
+        fn update_players(
+            players: HashSet<Player>,
+            diff: &GameLobbyDiff,
+        ) -> Result<(), anyhow::Error> {
+            for client in players.iter() {
+                Request::new()
+                    .body(serde_json::to_vec(diff)?)
+                    .target(Address::new(
+                        &client.kinode_id,
+                        ("mcclient", "mcclient", "basilesex.os"),
+                    ))
+                    .send()?;
+            }
+            Ok(())
         }
-        for client in self.lobby.team2.players.iter() {
-            println!("Sending {:?} to {:?}", diff, client.kinode_id);
-            Request::new()
-                .body(serde_json::to_vec(diff)?)
-                .target(Address::new(
-                    &client.kinode_id,
-                    ("mcclient", "mcclient", "basilesex.os"),
-                ))
-                .send()?;
+
+        match diff {
+            GameLobbyDiff::Message(ChatMessage { from, .. }) => {
+                let team = self.lobby.player_in_team(&from);
+                match team {
+                    Some(TeamName::Team1) => {
+                        update_players(self.lobby.team1.players.clone(), diff);
+                    }
+                    Some(TeamName::Team2) => {
+                        update_players(self.lobby.team2.players.clone(), diff);
+                    }
+                    None => {}
+                }
+            }
+            _ => {
+                update_players(self.lobby.team1.players.clone(), diff);
+                update_players(self.lobby.team2.players.clone(), diff);
+            }
         }
         Ok(())
     }

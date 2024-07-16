@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { applyDiff } from "./shared";
+import "./App.css"; // use for styling the chat
+import {
+  MainContainer,
+  ChatContainer,
+  MessageList,
+  Message,
+  MessageInput,
+} from "@chatscope/chat-ui-kit-react";
+let ws;
 
 function App() {
   const [lobby, setLobby] = useState({
@@ -75,8 +84,8 @@ function App() {
         : window.location.port === "5175"
         ? "localhost:8081"
         : window.location.host;
-    
-    const ws = new WebSocket(
+
+    ws = new WebSocket(
       `${protocol}//${host}/mcclient:mcclient:basilesex.os/`
     );
 
@@ -90,10 +99,46 @@ function App() {
     };
   };
 
+  const onSend = (message) => {
+    console.log("sending:", message);
+    ws.send(JSON.stringify({ SendMessage: message }));
+  };
+
   return (
     <div>
-      <h1>McClient</h1>
-      <h2>Join Team</h2>
+      <h2>McClient</h2>
+      <div style={{ position: "relative" }}>
+        <MainContainer>
+          <ChatContainer>
+            <MessageList>
+              <Message
+                model={{
+                  message: "Hello my friend",
+                  sentTime: "just now",
+                  sender: "Joe",
+                }}
+              >
+                <Message.Header sender="Emily" sentTime="just now" />
+              </Message>
+              <Message
+                model={{
+                  message: "Hello my friend",
+                  sentTime: "just now",
+                  sender: "Joe",
+                }}
+              >
+                <Message.Header sender="Emily" sentTime="just now" />
+              </Message>
+            </MessageList>
+            <MessageInput
+              placeholder="Type message here"
+              attachButton={false}
+              onSend={onSend}
+            />
+          </ChatContainer>
+        </MainContainer>
+      </div>
+      <h3>Join Team</h3>
       <form id="playerForm">
         <input
           type="text"
@@ -113,24 +158,17 @@ function App() {
         </button>
       </form>
       <div>
-        <h2>Game Lobby Information</h2>
-        <p>
-          <strong>Server Name:</strong> {lobby.name}
-        </p>
-        <p>
-          <strong>Minecraft Server Address:</strong>{" "}
-          {lobby.minecraft_server_address}
-        </p>
-        <h3>Teams</h3>
+        <p>Server Name: {lobby.name}</p>
+        <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
         <div>
           <h4>Team 1</h4>
           <ul>
             {lobby.team1?.players?.length > 0 ? (
               lobby.team1.players.map((player, index) => (
-                <li key={index}>{player.kinode_id}</li>
+                <p key={index}>{player.kinode_id}</p>
               ))
             ) : (
-              <li>No players in Team 1</li>
+              <p>No players in Team 1</p>
             )}
           </ul>
         </div>
@@ -139,10 +177,10 @@ function App() {
           <ul>
             {lobby.team2?.players?.length > 0 ? (
               lobby.team2.players.map((player, index) => (
-                <li key={index}>{player.kinode_id}</li>
+                <p key={index}>{player.kinode_id}</p>
               ))
             ) : (
-              <li>No players in Team 2</li>
+              <p>No players in Team 2</p>
             )}
           </ul>
         </div>

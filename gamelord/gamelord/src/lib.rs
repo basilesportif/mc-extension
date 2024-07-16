@@ -4,6 +4,7 @@ use kinode_process_lib::{
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
+use chrono::Utc;
 
 mod utilities;
 use utilities::valid_position;
@@ -12,7 +13,7 @@ use gamelord_types::{
     ActivePlayer, ConfigurationRegion, Cube, GamelordRequestMinecraft, GamelordResponseMinecraft,
     Region, State,
 };
-use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, WsPush};
+use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, WsPush, ChatMessage};
 use std::collections::HashMap;
 
 wit_bindgen::generate!({
@@ -203,6 +204,40 @@ fn handle_mcclient_request(
                 }
             };
         }
+        McClientToGamelordRequest::SendMessage(chat_message) => {
+            let sender_kinode_id = message.source().node().to_string();
+            let sender_team = state.lobby.kinode_id_in_team(&sender_kinode_id);
+            let last_msg =
+                if let Some(sender_team) = sender_team {
+                    match sender_team {
+                        TeamName::Team1 => state.lobby.team1.messages.last(),
+                        TeamName::Team2 => state.lobby.team2.messages.last(),
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("Sender is not in a team"));
+                };
+            let id: u64 = if let Some(msg) = last_msg {
+                msg.id + 1
+            } else {
+                0
+            };
+            let diff = GameLobbyDiff::Message({
+                ChatMessage {
+                    id,
+                    time: Utc::now().timestamp() as u64,
+                    from: state.lobby.kinode_id_to_player(&sender_kinode_id).unwrap(),
+                    msg: chat_message.clone(),
+                }
+            });
+            println!("diff: {:?}", diff);
+            if let Ok(lobby) = state.lobby.apply_diff(&diff) {
+                state.lobby = lobby;
+                state.save();
+                println!("updated clients");
+                return state.update_clients(&diff);
+            }
+            return Ok(());
+        }
     }
 }
 
@@ -384,9 +419,7 @@ fn handle_http_request(
                 WsMessageType::Text,
                 LazyLoadBlob {
                     mime: Some("application/json".to_string()),
-                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(
-                        state.lobby.clone(),
-                    ))?,
+                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
                 },
             );
 
