@@ -2,7 +2,8 @@
   "java.compile.nullAnalysis.mode": "automatic",
   "rust-analyzer.linkedProjects": [
     "gamelord/gamelord/Cargo.toml",
-    "mcdriver/mcdriver/Cargo.toml"
+    "mcdriver/mcdriver/Cargo.toml",
+    "mcclient/mcclient/Cargo.toml",
   ]
 
 }

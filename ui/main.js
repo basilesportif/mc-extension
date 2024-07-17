@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -29,6 +30,7 @@ let sky, sun;
 
 document.addEventListener('DOMContentLoaded', () => {
   init();
+  loadMinecraftWorld();
   animate();
 });
 
@@ -50,14 +52,16 @@ function setupScene() {
   scene.fog = new THREE.FogExp2(0x87CEEB, 0.00025); // Add fog with the same color
 }
 
-  // Camera
+function setupCamera() {
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 50, 200);
+}
 
-  // Renderer
+function setupRenderer() {
   renderer = new THREE.WebGLRenderer();
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
+}
 
 function setupSky() {
   sky = new Sky();
@@ -119,21 +123,28 @@ function setupPointerLockControls() {
   document.addEventListener('keyup', onKeyUp);
 }
 
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0x404040);
-  scene.add(ambientLight);
+function setupLighting() {
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
   directionalLight.position.set(1, 1, 1).normalize();
-  scene.add(directionalLight);
+  scene.add(ambientLight, directionalLight, hemisphereLight);
+}
 
-  createCubes();
-  createAxes();
+function createAxes() {
+  const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  const largeNumber = 10000;
+  const axes = ['x', 'y', 'z'].map(axis => {
+    const points = [new THREE.Vector3(), new THREE.Vector3()];
+    points[0][axis] = -largeNumber;
+    points[1][axis] = largeNumber;
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geometry, material);
+  });
+  scene.add(...axes);
+}
 
-  const axesHelper = new THREE.AxesHelper(200);
-  axesHelper.setColors(0xffffff, 0xffffff, 0xffffff);
-  scene.add(axesHelper);
-
-  // Event listeners
+function setupEventListeners() {
   window.addEventListener('resize', onWindowResize, false);
   window.addEventListener('mousemove', onMouseMove, false);
   window.addEventListener('click', onMouseClick, false);
@@ -148,15 +159,14 @@ function setupPointerLockControls() {
       resetCamera();
     }
   });
-
+}
 
 function onCubeSizeChange(event) {
   cubeSize = parseInt(event.target.value);
-  createCubes();
+  createCubesBasedOnMinecraftWorld();
 }
 
 function clearSelection() {
-  // Clear the regions array
   regions.length = 0;
   if (selectedObject) {
     selectedObject.material.color.set(0xffffff); // Reset selection color
@@ -170,18 +180,12 @@ function clearSelection() {
 function addRegion() {
   if (!selectedObject) return alert('No object selected!');
   const owner = prompt('Enter region owner:');
-  if (!owner) {
-    alert('Owner name is required!');
-    return;
-  }
-
+  if (!owner) return alert('Owner name is required!');
   const everyoneAllowed = confirm('Do you authorize all players to roam freely in your region? Click "OK" for Yes and "Cancel" for No.');
-
   let region = regions.find(r => r.owner === owner);
   const newCube = { center: [selectedObject.position.x, selectedObject.position.y, selectedObject.position.z], side_length: 16 };
   if (!regionColors.has(owner)) regionColors.set(owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
   if (region) {
-    // Only add cubes that are not already in the region
     const existingCenters = new Set(region.cubes.map(c => c.center.join(',')));
     if (!existingCenters.has(newCube.center.join(','))) {
       region.cubes.push(newCube);
@@ -194,8 +198,8 @@ function addRegion() {
   selectedObject = null;
   updateRegionList();
   colorRegionCubes(region);
-  console.log('Region added:', JSON.stringify(region, null, 2));
 }
+
 function generateWorldConfig() {
   const json = JSON.stringify(regions, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -205,20 +209,15 @@ function generateWorldConfig() {
   a.download = 'world_config.json';
   a.click();
   URL.revokeObjectURL(url);
-  console.log('World config generated and downloaded');
 }
 
 function loadConfig(event) {
   const file = event.target.files[0];
-  if (!file) {
-    return;
-  }
-
+  if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(e) {
-    const content = e.target.result;
-    const loadedRegions = JSON.parse(content);
-    regions.length = 0; // Clear existing regions
+  reader.onload = e => {
+    const loadedRegions = JSON.parse(e.target.result);
+    regions.length = 0;
     regions.push(...loadedRegions);
     updateRegionList();
   };
@@ -226,59 +225,40 @@ function loadConfig(event) {
 }
 
 function colorRegionCubes(region) {
-  let color;
-  if (regionColors.has(region.owner)) {
-    color = regionColors.get(region.owner);
-  } else {
-    color = new THREE.Color(Math.random(), Math.random(), Math.random());
-    regionColors.set(region.owner, color);
-  }
-
+  const color = regionColors.get(region.owner) || new THREE.Color(Math.random(), Math.random(), Math.random());
+  regionColors.set(region.owner, color);
   region.cubes.forEach(cubeData => {
     const cube = minecraftWorld.children.find(c => c.position.x === cubeData.center[0] && c.position.y === cubeData.center[1] && c.position.z === cubeData.center[2]);
     if (cube) {
       cube.material.color.set(color);
-      cube.material.opacity = 0.7;
+      cube.material.opacity = 0.2;
     }
   });
-
-  // Update world info
   updateWorldInfo();
 }
+
 function updateRegionList() {
   const regionList = document.getElementById('regionList');
   regionList.innerHTML = '';
-
   const ownerCubeCount = new Map();
-
   regions.forEach(region => {
     const cubeCount = region.cubes.length;
     ownerCubeCount.set(region.owner, (ownerCubeCount.get(region.owner) || 0) + cubeCount);
-    
-    // Ensure a color is assigned to the owner if it doesn't exist
-    if (!regionColors.has(region.owner)) {
-      regionColors.set(region.owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
-    }
+    if (!regionColors.has(region.owner)) regionColors.set(region.owner, new THREE.Color(Math.random(), Math.random(), Math.random()));
   });
-
   ownerCubeCount.forEach((cubeCount, owner) => {
     const color = regionColors.get(owner);
     const regionItem = document.createElement('div');
     regionItem.className = 'region-item';
-
     const colorBox = document.createElement('div');
     colorBox.className = 'region-color';
     colorBox.style.backgroundColor = color.getStyle();
-
     const ownerText = document.createElement('span');
     ownerText.textContent = `${owner} (${cubeCount} cubes)`;
-
     regionItem.appendChild(colorBox);
     regionItem.appendChild(ownerText);
     regionList.appendChild(regionItem);
   });
-
-  // Update world info
   updateWorldInfo();
 }
 
@@ -286,8 +266,7 @@ function updateWorldInfo() {
   const totalCubes = minecraftWorld ? minecraftWorld.children.length : 0;
   const usedCubes = regions.reduce((sum, region) => sum + region.cubes.length, 0);
   const availableCubes = totalCubes - usedCubes;
-  const worldSize = `${gridSize * cubeSize} x ${height * cubeSize} x ${gridSize * cubeSize}`;
-
+  const worldSize = `${totalCubes} cubes`;
   document.getElementById('cubeCount').textContent = `Cubes Available: ${availableCubes}`;
   document.getElementById('worldSize').textContent = `World Size: ${worldSize}`;
 }
@@ -303,7 +282,7 @@ function onMouseMove(event) {
   mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
 }
 
-function onMouseClick(event) {
+function onMouseClick() {
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObject(minecraftWorld, true);
   if (intersects.length > 0) {
