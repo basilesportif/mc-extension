@@ -58,6 +58,14 @@ fn handle_http_request(
                     bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
                 },
             );
+            send_ws_push(
+                channel_id,
+                WsMessageType::Text,
+                LazyLoadBlob {
+                    mime: Some("application/json".to_string()),
+                    bytes: serde_json::to_vec(&serde_json::json!({"OurNode": state.our.node()}))?,
+                },
+            );
             return Ok(());
         }
         http::HttpServerRequest::WebSocketClose { .. } => {

@@ -27,6 +27,7 @@ function App() {
       players: [],
     },
   });
+  const [ourNode, setOurNode] = useState(null);
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
@@ -35,6 +36,14 @@ function App() {
   useEffect(() => {
     webSocket();
   }, []);
+
+  useEffect(() => {
+    console.log("lobby", lobby);
+  }, [lobby]);
+
+  useEffect(() => {
+    console.log("ourNode", ourNode);
+  }, [ourNode]);
 
   async function joinTeam(team_name) {
     console.log("join team");
@@ -85,9 +94,7 @@ function App() {
         ? "localhost:8081"
         : window.location.host;
 
-    ws = new WebSocket(
-      `${protocol}//${host}/mcclient:mcclient:basilesex.os/`
-    );
+    ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
 
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);
@@ -96,6 +103,9 @@ function App() {
       const data = JSON.parse(event.data);
       console.log("data", data);
       applyDiff(data, setLobby);
+      if (data.OurNode) {
+        setOurNode(data.OurNode);
+      }
     };
   };
 
@@ -111,24 +121,21 @@ function App() {
         <MainContainer>
           <ChatContainer>
             <MessageList>
-              <Message
-                model={{
-                  message: "Hello my friend",
-                  sentTime: "just now",
-                  sender: "Joe",
-                }}
-              >
-                <Message.Header sender="Emily" sentTime="just now" />
-              </Message>
-              <Message
-                model={{
-                  message: "Hello my friend",
-                  sentTime: "just now",
-                  sender: "Joe",
-                }}
-              >
-                <Message.Header sender="Emily" sentTime="just now" />
-              </Message>
+              {lobby.team1.messages.map((message, index) => (
+                <Message
+                  model={{
+                    key: message.id,
+                    message: message.msg,
+                    sentTime: message.sent_time,
+                    sender: message.from.kinode_id,
+                  }}
+                >
+                  <Message.Header
+                    sender={message.from.kinode_id}
+                    sentTime={message.sent_time}
+                  />
+                </Message>
+              ))}
             </MessageList>
             <MessageInput
               placeholder="Type message here"
