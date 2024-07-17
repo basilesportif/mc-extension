@@ -15,6 +15,7 @@ const ThreeJsScene = () => {
   const cubesRef = useRef([]);
   const animationFrameRef = useRef(null);
   const containerRef = useRef(null);
+  const skyRef = useRef(null);
 
   const [isInteractive, setIsInteractive] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
@@ -32,7 +33,16 @@ const ThreeJsScene = () => {
   const [direction] = useState(new THREE.Vector3());
   const [prevTime, setPrevTime] = useState(performance.now());
   const [initialized, setInitialized] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [shouldLoadWorld, setShouldLoadWorld] = useState(true);
 
+  const [moveForward, setMoveForward] = useState(false);
+  const [moveBackward, setMoveBackward] = useState(false);
+  const [moveLeft, setMoveLeft] = useState(false);
+  const [moveRight, setMoveRight] = useState(false);
+  const [moveUp, setMoveUp] = useState(false);
+  const [moveDown, setMoveDown] = useState(false);
 
   const setupRenderer = useCallback(() => {
     if (!rendererRef.current && containerRef.current) {
@@ -58,95 +68,109 @@ const ThreeJsScene = () => {
     }
   }, []);
 
-  const enterMovementMode = async () => {
-    if (!initialized) {
-      await init(); // Ensure initialization is complete before entering movement mode
+  const onPointerLockChange = useCallback(() => {
+    const isLocked = document.pointerLockElement === containerRef.current;
+    setIsLocked(isLocked);
+    setIsInteractive(isLocked);
+    setIsMoving(isLocked);
+    setShowMenu(!isLocked);
+    if (!isLocked) {
+      setMovement({
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        up: false,
+        down: false
+      });
     }
-    setIsInteractive(true);
-    setIsMoving(true);
-    setShowMenu(false);
-    if (controlsRef.current) {
-      controlsRef.current.lock();
+  }, []);
+
+  const onPointerLockError = useCallback(() => {
+    console.error('PointerLock Error');
+  }, []);
+
+  const enterMovementMode = useCallback((event) => {
+    if (controlsRef.current && document.pointerLockElement !== containerRef.current) {
+      containerRef.current.requestPointerLock();
+      setShowInstructions(false);
+      setIsLocked(true);
     }
-  };
+  }, []);
 
   const exitMovementMode = useCallback(() => {
-    setIsInteractive(false);
-    setIsMoving(false);
-    setShowMenu(true);
     if (controlsRef.current) {
       controlsRef.current.unlock();
     }
+    setShowInstructions(true);
+    setIsInteractive(false);
+    setIsMoving(false);
+    setMovement({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    });
+    setShouldLoadWorld(false);
+    setIsLocked(false);
   }, []);
 
   const handleKeyDown = useCallback((event) => {
+    if (!isLocked) return;
     switch (event.code) {
-      case 'KeyW':
-        setMovement(prev => ({ ...prev, forward: true }));
-        break;
-      case 'KeyS':
-        setMovement(prev => ({ ...prev, backward: true }));
-        break;
-      case 'KeyA':
-        setMovement(prev => ({ ...prev, left: true }));
-        break;
-      case 'KeyD':
-        setMovement(prev => ({ ...prev, right: true }));
-        break;
-      case 'Space':
-        setMovement(prev => ({ ...prev, up: true }));
-        break;
-      case 'ShiftLeft':
-        setMovement(prev => ({ ...prev, down: true }));
-        break;
+      case 'ArrowUp':
+      case 'KeyW': setMoveForward(true); break;
+      case 'ArrowLeft':
+      case 'KeyA': setMoveLeft(true); break;
+      case 'ArrowDown':
+      case 'KeyS': setMoveBackward(true); break;
+      case 'ArrowRight':
+      case 'KeyD': setMoveRight(true); break;
+      case 'Space': setMoveUp(true); break;
+      case 'ShiftLeft': setMoveDown(true); break;
       case 'Escape':
         exitMovementMode();
+        event.preventDefault();
         break;
       default:
         break;
     }
-  }, [exitMovementMode]);
+  }, [isLocked, exitMovementMode]);
 
   const handleKeyUp = useCallback((event) => {
+    if (!isLocked) return;
     switch (event.code) {
-      case 'KeyW':
-        setMovement(prev => ({ ...prev, forward: false }));
-        break;
-      case 'KeyS':
-        setMovement(prev => ({ ...prev, backward: false }));
-        break;
-      case 'KeyA':
-        setMovement(prev => ({ ...prev, left: false }));
-        break;
-      case 'KeyD':
-        setMovement(prev => ({ ...prev, right: false }));
-        break;
-      case 'Space':
-        setMovement(prev => ({ ...prev, up: false }));
-        break;
-      case 'ShiftLeft':
-        setMovement(prev => ({ ...prev, down: false }));
-        break;
+      case 'ArrowUp':
+      case 'KeyW': setMoveForward(false); break;
+      case 'ArrowLeft':
+      case 'KeyA': setMoveLeft(false); break;
+      case 'ArrowDown':
+      case 'KeyS': setMoveBackward(false); break;
+      case 'ArrowRight':
+      case 'KeyD': setMoveRight(false); break;
+      case 'Space': setMoveUp(false); break;
+      case 'ShiftLeft': setMoveDown(false); break;
       default:
         break;
     }
-  }, []);
+  }, [isLocked]);
 
   useEffect(() => {
+    const handleKeyDownListener = (event) => handleKeyDown(event);
     const handleKeyUpListener = (event) => handleKeyUp(event);
-    window.addEventListener('keyup', handleKeyUpListener);
+
+    if (isLocked) {
+      window.addEventListener('keydown', handleKeyDownListener);
+      window.addEventListener('keyup', handleKeyUpListener);
+    }
 
     return () => {
+      window.removeEventListener('keydown', handleKeyDownListener);
       window.removeEventListener('keyup', handleKeyUpListener);
     };
-  }, [handleKeyUp]);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleKeyDown]);
+  }, [isLocked, handleKeyDown, handleKeyUp]);
 
   const handleMouseClick = useCallback((event) => {
     const { clientX, clientY } = event;
@@ -178,10 +202,8 @@ const ThreeJsScene = () => {
     }
   }, [selectedCube]);
 
- 
-
-  const handleMovement = () => {
-    if (!isMoving) return;
+  const handleMovement = useCallback(() => {
+    if (!isLocked || !controlsRef.current) return;
 
     const currentTime = performance.now();
     const delta = (currentTime - prevTime) / 1000;
@@ -190,52 +212,48 @@ const ThreeJsScene = () => {
     velocity.z -= velocity.z * 10.0 * delta;
     velocity.y -= velocity.y * 10.0 * delta;
 
-    direction.z = Number(movement.forward) - Number(movement.backward);
-    direction.x = Number(movement.right) - Number(movement.left);
-    direction.y = Number(movement.up) - Number(movement.down);
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.y = Number(moveUp) - Number(moveDown);
     direction.normalize();
 
-    const speed = 5.0;
-    if (movement.forward || movement.backward) velocity.z -= direction.z * speed * delta;
-    if (movement.left || movement.right) velocity.x -= direction.x * speed * delta;
-    if (movement.up || movement.down) velocity.y += direction.y * speed * delta;
-
+    const speed = 400.0;
+    if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+    if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
+    // remember to try without the if statement
     if (controlsRef.current) {
       controlsRef.current.moveRight(-velocity.x * delta);
       controlsRef.current.moveForward(-velocity.z * delta);
-      const newPosition = controlsRef.current.getObject().position.clone();
-      newPosition.y += velocity.y * delta;
-      controlsRef.current.getObject().position.copy(newPosition);
+      controlsRef.current.getObject().position.y += velocity.y * delta;
     }
 
-    handlePlayerPosition(delta);
+    // Keep the sky centered on the camera
+    if (skyRef.current) {
+      skyRef.current.position.copy(controlsRef.current.getObject().position);
+    }
 
     setPrevTime(currentTime);
-  };
+  }, [isLocked, moveForward, moveBackward, moveLeft, moveRight, moveUp, moveDown, prevTime]);
 
-  const handlePlayerPosition = (delta) => {
-    if (controlsRef.current && controlsRef.current.getObject()) {
-      if (controlsRef.current.getObject().position.y < 0) {
-        velocity.y = 0;
-        const newPosition = controlsRef.current.getObject().position.clone();
-        newPosition.y = 0;
-        controlsRef.current.getObject().position.copy(newPosition);
-      }
-      velocity.y -= 9.8 * delta;
-    } else {
-      velocity.y -= 9.8 * delta;
-    }
-  };
-
-  const handleAnimationFrame = () => {
-    animationFrameRef.current = requestAnimationFrame(handleAnimationFrame);
+  const handleAnimationFrame = useCallback(() => {
     handleMovement();
     if (rendererRef.current && sceneRef.current && cameraRef.current) {
       rendererRef.current.render(sceneRef.current, cameraRef.current);
     }
-  };
+    animationFrameRef.current = requestAnimationFrame(handleAnimationFrame);
+  }, [handleMovement]);
 
- // Empty dependency array means this effect runs once on mount
+  useEffect(() => {
+    if (initialized) {
+      handleAnimationFrame();
+    }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [initialized, handleAnimationFrame]);
 
   const init = async () => {
     if (sceneRef.current) {
@@ -247,7 +265,7 @@ const ThreeJsScene = () => {
       console.log('Initializing Three.js scene...');
       setupScene();
       setupCamera();
-      setupRenderer(); // Ensure renderer is set up
+      setupRenderer();
       setupSky();
       setupLighting();
       createAxes();
@@ -255,10 +273,9 @@ const ThreeJsScene = () => {
       console.log('Loading Minecraft world...');
       await loadMinecraftWorld();
       
-      setupPointerLockControls();
-      
       console.log('Three.js scene initialized.');
       setInitialized(true);
+      setupPointerLockControls();
     } catch (error) {
       console.error('Error initializing scene:', error);
       // Handle the error appropriately (e.g., show user message)
@@ -277,6 +294,7 @@ const ThreeJsScene = () => {
     const sky = new Sky();
     sky.scale.setScalar(450000);
     sceneRef.current.add(sky);
+    skyRef.current = sky;
 
     const sun = new THREE.Vector3();
     const effectController = {
@@ -304,9 +322,27 @@ const ThreeJsScene = () => {
   };
 
   const setupPointerLockControls = () => {
-    if (cameraRef.current && rendererRef.current) {
-      const controls = new PointerLockControls(cameraRef.current, rendererRef.current.domElement);
+    if (cameraRef.current && containerRef.current) {
+      const controls = new PointerLockControls(cameraRef.current, containerRef.current);
       controlsRef.current = controls;
+
+      controls.addEventListener('lock', () => {
+        setShowInstructions(false);
+        setIsLocked(true);
+      });
+
+      controls.addEventListener('unlock', () => {
+        setShowInstructions(true);
+        setIsLocked(false);
+        setMoveForward(false);
+        setMoveBackward(false);
+        setMoveLeft(false);
+        setMoveRight(false);
+        setMoveUp(false);
+        setMoveDown(false);
+      });
+
+      sceneRef.current.add(controls.getObject());
       console.log('PointerLockControls set up.');
     }
   };
@@ -337,6 +373,12 @@ const ThreeJsScene = () => {
 
   const loadMinecraftWorld = () => {
     return new Promise((resolve, reject) => {
+      if (!shouldLoadWorld) {
+        // If the user has exited the interactive mode, don't load the world
+        resolve();
+        return;
+      }
+
       console.log('Loading MTL file...');
       const objLoader = new OBJLoader();
       const mtlLoader = new MTLLoader();
@@ -393,20 +435,83 @@ const ThreeJsScene = () => {
     return 'block';
   };
 
+  useEffect(() => {
+    if (!initialized) {
+      init();
+    }
+  }, [initialized]);
+
+  useEffect(() => {
+    const handlePointerLockChange = () => {
+      const isLocked = document.pointerLockElement === containerRef.current;
+      setIsLocked(isLocked);
+      setIsInteractive(isLocked);
+      setIsMoving(isLocked);
+      if (!isLocked) {
+        setShowInstructions(true);
+        setMovement({
+          forward: false,
+          backward: false,
+          left: false,
+          right: false,
+          up: false,
+          down: false
+        });
+      }
+    };
+
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+
+    return () => {
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (initialized) {
+      document.addEventListener('pointerlockchange', onPointerLockChange);
+      document.addEventListener('pointerlockerror', onPointerLockError);
+
+      if (controlsRef.current) {
+        sceneRef.current.add(controlsRef.current.getObject());
+      }
+
+      handleAnimationFrame();
+    }
+
+    return () => {
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      document.removeEventListener('pointerlockerror', onPointerLockError);
+      cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, [initialized, onPointerLockChange, onPointerLockError]);
+
+  useEffect(() => {
+    if (initialized && containerRef.current) {
+      const handleUserInteraction = (event) => {
+        if (event.target === containerRef.current && !isLocked) {
+          enterMovementMode(event);
+        }
+      };
+
+      containerRef.current.addEventListener('click', handleUserInteraction);
+
+      return () => {
+        if (containerRef.current) {
+          containerRef.current.removeEventListener('click', handleUserInteraction);
+        }
+      };
+    }
+  }, [initialized, isLocked, enterMovementMode]);
+
   return (
     <div 
       ref={containerRef} 
       style={{ width: '100%', height: '100%', position: 'relative' }}
-      onClick={async () => {
-        if (isInteractive && !isMoving) {
-          await enterMovementMode();
-        } else if (showMenu) {
-          setShowMenu(false);
-          await enterMovementMode();
-        }
-      }}
+      onClick={enterMovementMode}
+      tabIndex="0"
     >
-      {showMenu && (
+      {showInstructions && (
         <div 
           style={{
             position: 'absolute',
@@ -423,13 +528,12 @@ const ThreeJsScene = () => {
             fontSize: '24px',
             cursor: 'pointer',
           }}
-          onClick={enterMovementMode}
         >
-          <div>{isInteractive ? 'Click to Resume' : 'Click to Start'}</div>
+          <div>Click to Start</div>
           <div style={{ fontSize: '18px', marginTop: '20px' }}>
-            WASD to move, Space to go up, Shift to go down
+            WASD or Arrow keys to move, Space to go up, Shift to go down
             <br />
-            Mouse to look around, ESC to stop, Click to resume
+            Mouse to look around, ESC to exit, Click to resume
           </div>
         </div>
       )}

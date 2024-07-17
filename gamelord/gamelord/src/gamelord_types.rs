@@ -4,7 +4,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Team, TeamName};
+use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, TeamName};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
