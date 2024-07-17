@@ -9,54 +9,8 @@ use chrono::Utc;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, Cube, CubeEffectList, TeamNameToRegion, State};
-use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-
-#[derive(Serialize, Deserialize, Debug)]
-enum GamelordRequestMinecraft {
-    CubeTransitionRequest { minecraft_id: String, cube: Cube },
-    PlayerSpawnRequest { minecraft_id: String },
-    PlayerLeaveRequest { minecraft_id: String },
-}
-
-//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
-//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
-
-//GamelordResponseMinecraft
-//GamelordResponseUI (maybe not needed)
-impl GamelordRequestMinecraft {
-    fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
-        let json_str = String::from_utf8_lossy(bytes);
-        println!("Attempting to parse JSON: {}", json_str);
-
-        match serde_json::from_str::<GamelordRequestMinecraft>(&json_str) {
-            Ok(request) => {
-                println!("Successfully parsed GamelordRequest: {:?}", request);
-                Ok(request)
-            }
-            Err(e) => {
-                println!("Error parsing GamelordRequest: {:?}", e);
-                println!("Error occurred at position: {}", e.column());
-                if let Some(line) = json_str.lines().nth(e.line() - 1) {
-                    println!("Problematic line: {}", line);
-                    println!("                  {}^", " ".repeat(e.column() - 1));
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
-//have to figure this out, since these are responses read by mcdriver, so have to update on that side
-#[derive(Serialize, Deserialize, Debug)]
-enum GamelordResponseMinecraft {
-    TransitionTriggeredResponse(CubeEffectList),
-    TransitionSilentResponse,
-    PlayerSpawnRequestAuthorized(bool, String, Cube),
-    PlayerSpawnRequestDenied(bool ,String),
-}
+use gamelord_types::{ActivePlayer, Cube, CubeEffectList, TeamNameToRegion, State, GamelordRequestMinecraft, GamelordResponseMinecraft};
+use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, ChatMessage,};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -64,34 +18,21 @@ wit_bindgen::generate!({
 });
 
 fn load_world(state: &mut State) {
-    // Directly access the body (assuming it's already fully available)
     let body = get_blob().unwrap_or_default();
     println!("body: {:?}", body);
     let body_str = String::from_utf8_lossy(&body.bytes);
     println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
-    match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
-        Ok(regions) => {
-            state.world_config.clear();
+    match serde_json::from_str::<TeamNameToRegion>(&body_str) {
+        Ok(new_world_config) => {
+            state.world_config = new_world_config;
             state.cube_to_owner.clear();
-
-            // Process each ConfigurationRegion
-            for region in regions {
-                let mut cubes_transformed = HashMap::new();
-                for cube in &region.cubes {
-                    let cube_id = cube.identifier();
-                    cubes_transformed.insert(cube_id.clone(), cube.clone());
-                    state
-                        .cube_to_owner
-                        .insert(cube.clone(), region.owner.clone());
+            // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
+            for (owner, region) in state.world_config.iter() {
+                for cube in region.cubes.keys() {
+                    state.cube_to_owner.entry(cube.clone())
+                        .and_modify(|owners| owners.push(owner.clone()))
+                        .or_insert_with(|| vec![owner.clone()]);
                 }
-
-                let new_region = Region {
-                    cubes: cubes_transformed,
-                    owner: region.owner.clone(),
-                    everyone_allowed: region.everyone_allowed,
-                    authorized_players: region.authorized_players.clone(),
-                };
-                state.world_config.insert(region.owner.clone(), new_region);
             }
             state.save();
 

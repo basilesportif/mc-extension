@@ -147,9 +147,9 @@ impl State {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum GamelordRequestMinecraft {
-    ValidateMove { minecraft_id: String, cube: Cube },
+    CubeTransitionRequest { minecraft_id: String, cube: Cube },
     PlayerSpawnRequest { minecraft_id: String },
-    PlayerLeaveRequest { player: Player },
+    PlayerLeaveRequest { minecraft_id: String },
 }
 
 //GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
@@ -183,11 +183,11 @@ impl GamelordRequestMinecraft {
 //have to figure this out, since these are responses read by mcdriver, so have to update on that side
 #[derive(Serialize, Deserialize, Debug)]
 pub enum GamelordResponseMinecraft {
-    ValidateMove(bool, String),
+    TransitionTriggeredResponse(CubeEffectList),
+    TransitionSilentResponse,
     PlayerSpawnRequestAuthorized(bool, String, Cube),
-    PlayerSpawnRequestDenied(bool, String),
+    PlayerSpawnRequestDenied(bool ,String),
 }
-
 /*
     data:
 - players in the game

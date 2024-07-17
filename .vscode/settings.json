@@ -4,6 +4,7 @@
     "gamelord/gamelord/Cargo.toml",
     "mcdriver/mcdriver/Cargo.toml",
     "mcclient/mcclient/Cargo.toml",
+    "mcstructs/mcstructs/Cargo.toml"
   ]
 
 }

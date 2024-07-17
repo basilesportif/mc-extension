@@ -235,6 +235,8 @@ const ThreeJsScene = () => {
     }
   };
 
+ // Empty dependency array means this effect runs once on mount
+
   const init = async () => {
     if (sceneRef.current) {
       console.log('Scene already initialized.');
