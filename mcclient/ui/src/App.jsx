@@ -81,6 +81,17 @@ function App() {
     }
   }
 
+  const nodeInTeam = (node, lobby) => {
+    if (lobby.team1.players.some((p) => p.kinode_id === node)) {
+      return "team1";
+    } else if (lobby.team2.players.some((p) => p.kinode_id === node)) {
+      return "team2";
+    } else {
+      return null;
+    }
+  };
+  
+
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     // jurij's dev setup
@@ -121,21 +132,45 @@ function App() {
         <MainContainer>
           <ChatContainer>
             <MessageList>
-              {lobby.team1.messages.map((message, index) => (
-                <Message
-                  model={{
-                    key: message.id,
-                    message: message.msg,
-                    sentTime: message.sent_time,
-                    sender: message.from.kinode_id,
-                  }}
-                >
-                  <Message.Header
-                    sender={message.from.kinode_id}
-                    sentTime={message.sent_time}
-                  />
-                </Message>
-              ))}
+              {nodeInTeam(ourNode, lobby) === "team1" ? (
+                lobby.team1.messages.map((message, index) => (
+                  <Message
+                    key={message.id}
+                    model={{
+                      message: message.msg,
+                      sentTime: message.time,
+                      sender: message.from.kinode_id,
+                    }}
+                  >
+                    <Message.Header
+                      sender={message.from.kinode_id}
+                      sentTime={message.time}
+                    />
+                  </Message>
+                ))
+              ) : nodeInTeam(ourNode, lobby) === "team2" ? (
+                lobby.team2.messages.map((message, index) => (
+                  <Message
+                    key={message.id}
+                    model={{
+                      message: message.msg,
+                      sentTime: message.time,
+                      sender: message.from.kinode_id,
+                    }}
+                  >
+                    <Message.Header
+                      sender={message.from.kinode_id}
+                      sentTime={message.time}
+                    />
+                  </Message>
+                ))
+              ) : (
+                <Message model={{
+                  message: "You are not in a team yet. Join a team to see messages.",
+                  sentTime: "",
+                  sender: "System"
+                }} />
+              )}
             </MessageList>
             <MessageInput
               placeholder="Type message here"

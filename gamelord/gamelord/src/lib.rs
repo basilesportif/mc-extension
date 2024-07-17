@@ -207,20 +207,16 @@ fn handle_mcclient_request(
         McClientToGamelordRequest::SendMessage(chat_message) => {
             let sender_kinode_id = message.source().node().to_string();
             let sender_team = state.lobby.kinode_id_in_team(&sender_kinode_id);
-            let last_msg =
+            let last_msg_id =
                 if let Some(sender_team) = sender_team {
                     match sender_team {
-                        TeamName::Team1 => state.lobby.team1.messages.last(),
-                        TeamName::Team2 => state.lobby.team2.messages.last(),
+                        TeamName::Team1 => state.lobby.team1.last_message_id,
+                        TeamName::Team2 => state.lobby.team2.last_message_id,
                     }
                 } else {
                     return Err(anyhow::anyhow!("Sender is not in a team"));
                 };
-            let id: u64 = if let Some(msg) = last_msg {
-                msg.id + 1
-            } else {
-                0
-            };
+            let id = last_msg_id + 1;
             let diff = GameLobbyDiff::Message({
                 ChatMessage {
                     id,

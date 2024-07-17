@@ -175,9 +175,11 @@ impl GameLobby {
                     match team {
                         TeamName::Team1 => {
                             self.team1.messages.push(message.clone());
+                            self.team1.last_message_id = message.id;
                         }
                         TeamName::Team2 => {
                             self.team2.messages.push(message.clone());
+                            self.team2.last_message_id = message.id;
                         }
                     }
                 } else {
