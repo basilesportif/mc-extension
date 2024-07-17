@@ -81,17 +81,17 @@ impl State {
                 let team = self.lobby.player_in_team(&from);
                 match team {
                     Some(TeamName::Team1) => {
-                        update_players(self.lobby.team1.players.clone(), diff);
+                        let _ = update_players(self.lobby.team1.players.clone(), diff);
                     }
                     Some(TeamName::Team2) => {
-                        update_players(self.lobby.team2.players.clone(), diff);
+                        let _ = update_players(self.lobby.team2.players.clone(), diff);
                     }
                     None => {}
                 }
             }
             _ => {
-                update_players(self.lobby.team1.players.clone(), diff);
-                update_players(self.lobby.team2.players.clone(), diff);
+                let _ = update_players(self.lobby.team1.players.clone(), diff);
+                let _ = update_players(self.lobby.team2.players.clone(), diff);
             }
         }
         Ok(())

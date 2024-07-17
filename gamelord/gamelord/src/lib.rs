@@ -448,6 +448,9 @@ fn handle_http_request(
                         http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
                     }
                     "/api/clearTeams" => {
+                        // need to update clients with lobby with empty teams before actually clearing teams, 
+                        // because it sends update to team members
+                        let _ = state.update_clients(&GameLobbyDiff::Init(state.lobby.clone().clear_teams()));
                         state.lobby.clear_teams();
                         state.save();
                         let blob = LazyLoadBlob {
@@ -455,7 +458,6 @@ fn handle_http_request(
                             bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
                         };
                         send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-
                         http::send_response(http::StatusCode::OK, None, b"Teams Cleared".to_vec());
                     }
                     "/api/editLobby" => edit_lobby(state, ws_channel_id).unwrap_or(()),
