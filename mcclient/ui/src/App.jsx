@@ -9,6 +9,7 @@ import {
   MessageInput,
 } from "@chatscope/chat-ui-kit-react";
 let ws;
+import Msg from "./components/Msg";
 
 function App() {
   const [lobby, setLobby] = useState({
@@ -178,36 +179,23 @@ function App() {
       <div
         style={{
           position: "relative",
-          marginLeft: "20px",
-          marginRight: "20px",
         }}
       >
-        <MainContainer style={{ width: "100%" }}>
+        <MainContainer style={{ width: "100%", height: "50vh" }}>
           <ChatContainer>
-            <MessageList>
+            <MessageList style={{ height: '30vh', overflowY: 'auto', display: 'flex', flexDirection: 'column-reverse' }}>
               {nodeInTeam(ourNode, lobby) === "team1" ? (
                 lobby.team1.messages.map((message, index) => (
-                  <Message key={message.id} model={{ message: message.msg }}>
-                    <Message.Header
-                      sender={message.from.kinode_id}
-                      sentTime={new Date(message.time * 1000).toLocaleString()}
-                    />
-                  </Message>
+                  <Msg key={message.id} message={message} />
                 ))
               ) : nodeInTeam(ourNode, lobby) === "team2" ? (
                 lobby.team2.messages.map((message, index) => (
-                  <Message 
-                    key={message.id}
-                    model={{ message: message.msg }}
-                    sender={message.from.kinode_id}
-                    sentTime={new Date(message.time * 1000).toLocaleString()}
-                  />
+                  <Msg key={message.id} message={message} />
                 ))
               ) : (
                 <Message
                   model={{
-                    message:
-                      "You are not in a team yet. Join a team to see messages.",
+                    message: "You are not in a team yet. Join a team to see messages.",
                     sentTime: "",
                     sender: "System",
                   }}
@@ -215,8 +203,10 @@ function App() {
               )}
             </MessageList>
             <MessageInput
+              style={{ border: '1px solid #ccc' }}
               placeholder="Type message here"
               attachButton={false}
+              sendButton={false}
               onSend={onSend}
             />
           </ChatContainer>
