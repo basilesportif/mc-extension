@@ -9,5 +9,13 @@
 mc-driver/pkg/*.wasm
 */node_modules
 /.vscode/settings.json
-/package-lock.json
 /ui/ExportedMinecraftworld/*
+/mcclient/ui/node_modules
+/mcclient/ui/public/*
+/mcclient/ExportedMinecraftworld/*
+/mcclient/public/*
+/mcclient/pkg/ui/tex
+/mcclient/pkg/ui/minecraft.mtl
+/mcclient/pkg/ui/minecraft.obj
+/mcclient/pkg/ui/assets
+

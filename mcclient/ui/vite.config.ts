@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from 'path';
 
 // BASE_URL is process_name:package_name:publisher_node.
 // It represents the URL where the UI will be served from.
@@ -21,6 +22,7 @@ export default defineConfig({
       external: ["/our.js"],
     },
   },
+  publicDir: 'public',
   server: {
     open: true,
     proxy: {
@@ -36,11 +38,10 @@ export default defineConfig({
         rewrite: (path) => path.replace(BASE_URL, ""),
       },
       // This route will match all other HTTP requests to the backend: when your ui makes a request to BASE_URL, it will be proxied to your node.
-      [`^${BASE_URL}/(?!(@vite/client|src/.*|node_modules/.*|@react-refresh|$))`]:
-        {
-          target: PROXY_URL,
-          changeOrigin: true,
-        },
+      [`^${BASE_URL}/(?!(@vite/client|src/.*|node_modules/.*|@react-refresh|__uno.css|$))`]: {
+        target: PROXY_URL,
+        changeOrigin: true,
+      },
     },
   },
 });
