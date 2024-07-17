@@ -14,7 +14,8 @@ mc-driver/pkg/*.wasm
 /mcclient/ui/public/*
 /mcclient/ExportedMinecraftworld/*
 /mcclient/public/*
-/mcclient/pkg/tex
-/mcclient/pkg/minecraft.mtl
-/mcclient/pkg/minecraft.obj
+/mcclient/pkg/ui/tex
+/mcclient/pkg/ui/minecraft.mtl
+/mcclient/pkg/ui/minecraft.obj
+/mcclient/pkg/ui/assets
 

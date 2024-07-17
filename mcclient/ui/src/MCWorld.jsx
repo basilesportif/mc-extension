@@ -60,8 +60,6 @@ const ThreeJsScene = () => {
 
   const enterMovementMode = async () => {
     if (!initialized) {
-      console.log('Initializing Three.js scene...');
-      setupRenderer(); // Set up the renderer first
       await init(); // Ensure initialization is complete before entering movement mode
     }
     setIsInteractive(true);
@@ -73,6 +71,7 @@ const ThreeJsScene = () => {
   };
 
   const exitMovementMode = useCallback(() => {
+    setIsInteractive(false);
     setIsMoving(false);
     setShowMenu(true);
     if (controlsRef.current) {
@@ -141,6 +140,13 @@ const ThreeJsScene = () => {
       window.removeEventListener('keyup', handleKeyUpListener);
     };
   }, [handleKeyUp]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   const handleMouseClick = useCallback((event) => {
     const { clientX, clientY } = event;
@@ -230,17 +236,30 @@ const ThreeJsScene = () => {
   };
 
   const init = async () => {
-    if (!sceneRef.current) {
+    if (sceneRef.current) {
+      console.log('Scene already initialized.');
+      return;
+    }
+
+    try {
+      console.log('Initializing Three.js scene...');
       setupScene();
       setupCamera();
+      setupRenderer(); // Ensure renderer is set up
       setupSky();
       setupLighting();
       createAxes();
+      
       console.log('Loading Minecraft world...');
       await loadMinecraftWorld();
+      
       setupPointerLockControls();
+      
       console.log('Three.js scene initialized.');
       setInitialized(true);
+    } catch (error) {
+      console.error('Error initializing scene:', error);
+      // Handle the error appropriately (e.g., show user message)
     }
   };
 
