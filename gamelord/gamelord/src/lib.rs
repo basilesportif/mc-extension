@@ -9,12 +9,8 @@ use chrono::Utc;
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{
-    ActivePlayer, ConfigurationRegion, Cube, GamelordRequestMinecraft, GamelordResponseMinecraft,
-    Region, State,
-};
-use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, WsPush, ChatMessage};
-use std::collections::HashMap;
+use gamelord_types::{ActivePlayer, Cube, CubeEffectList, TeamNameToRegion, State, GamelordRequestMinecraft, GamelordResponseMinecraft};
+use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, ChatMessage,};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -22,34 +18,21 @@ wit_bindgen::generate!({
 });
 
 fn load_world(state: &mut State) {
-    // Directly access the body (assuming it's already fully available)
     let body = get_blob().unwrap_or_default();
     println!("body: {:?}", body);
     let body_str = String::from_utf8_lossy(&body.bytes);
     println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
-    match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
-        Ok(regions) => {
-            state.world_config.clear();
+    match serde_json::from_str::<TeamNameToRegion>(&body_str) {
+        Ok(new_world_config) => {
+            state.world_config = new_world_config;
             state.cube_to_owner.clear();
-
-            // Process each ConfigurationRegion
-            for region in regions {
-                let mut cubes_transformed = HashMap::new();
-                for cube in &region.cubes {
-                    let cube_id = cube.identifier();
-                    cubes_transformed.insert(cube_id.clone(), cube.clone());
-                    state
-                        .cube_to_owner
-                        .insert(cube.clone(), region.owner.clone());
+            // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
+            for (owner, region) in state.world_config.iter() {
+                for cube in region.cubes.keys() {
+                    state.cube_to_owner.entry(cube.clone())
+                        .and_modify(|owners| owners.push(owner.clone()))
+                        .or_insert_with(|| vec![owner.clone()]);
                 }
-
-                let new_region = Region {
-                    cubes: cubes_transformed,
-                    owner: region.owner.clone(),
-                    everyone_allowed: region.everyone_allowed,
-                    authorized_players: region.authorized_players.clone(),
-                };
-                state.world_config.insert(region.owner.clone(), new_region);
             }
             state.save();
 
@@ -249,151 +232,105 @@ fn handle_kinode_message(
         return handle_mcclient_request(state, ws_channel_id, &request, message);
     }
     match GamelordRequestMinecraft::parse(message.body())? {
-        GamelordRequestMinecraft::ValidateMove { minecraft_id, cube } => {
-            if state.active_players.contains_key(&minecraft_id) {
-                println!("Player {} is active in the game.", minecraft_id);
-                if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
-                    let (response_message, is_valid) = valid_position(
-                        &state.lobby,
-                        &state.world_config,
-                        &active_player.to_player(),
-                        &cube,
-                    );
-                    if !is_valid {
-                        // If the position is not valid, check the cube ownership and permissions
-                        if let Some(owner) = state.cube_to_owner.get(&cube) {
-                            let region = state.world_config.get(owner).unwrap();
-                            if region.everyone_allowed
-                                || region.authorized_players.contains(&active_player.kinode_id)
-                            {
-                                // If everyone is allowed or the player is an authorized player, consider the move valid
-                                active_player.current_cube = cube.clone();
-                                println!(
-                                    "Active player {} moved to cube: {:?}",
-                                    active_player.kinode_id, cube
-                                );
-                                let response =
-                                    serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                        true,
-                                        "Move allowed by owner permissions.".to_string(),
+        GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
+            // we get information about what team the player is in based on Active players
+            if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
+                println!("Player {} is active in the game on team {:?}.", minecraft_id, active_player.team);
+                
+                // Update the player's current cube
+                active_player.current_cube = cube.clone();
+                
+                let world_config = &state.world_config;
+                let cube_to_owner = &state.cube_to_owner;
+
+                if let Some(owners) = cube_to_owner.get(&cube) {
+                    if !owners.contains(&active_player.team) {
+                        // Cube is owned by enemy team(s)
+                        for owner in owners {
+                            if let Some(team_cubes) = world_config.get(owner) {
+                                if let Some(cube_effects) = team_cubes.cubes.get(&cube) {
+                                    println!("Cube effects for enemy owner {:?}: {:?}", owner, cube_effects);
+                                    // Send cube effects to mcdriver
+                                    let response = serde_json::to_vec(&GamelordResponseMinecraft::TransitionTriggeredResponse(
+                                        cube_effects.clone()
                                     ))
-                                    .unwrap();
-                                Response::new().body(response).send().unwrap();
-                            } else {
-                                // If not allowed, send a negative response
-                                let response =
-                                    serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                        false,
-                                        "Move not allowed by owner permissions.".to_string(),
-                                    ))
-                                    .unwrap();
-                                Response::new().body(response).send().unwrap();
+                                    .expect("failed to parse gamelord cube transition response");
+                                    Response::new().body(response).send().unwrap();
+                                    return Ok(());
+                                }
                             }
-                        } else {
-                            // If no owner found, allow the move and update the active player's current cube
-                            active_player.current_cube = cube.clone();
-                            println!(
-                                "Active player {} moved to unclaimed cube: {:?}",
-                                active_player.kinode_id, cube
-                            );
-                            let response =
-                                serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                                    true,
-                                    "Cube unclaimed, allowed to pass.".to_string(),
-                                ))
-                                .unwrap();
-                            Response::new().body(response).send().unwrap();
                         }
-                    } else {
-                        // If the initial position check is valid, proceed as before
-                        active_player.current_cube = cube.clone();
-                        println!("Active player {} moved to cube: {:?}", minecraft_id, cube);
-                        let response = serde_json::to_vec(
-                            &GamelordResponseMinecraft::ValidateMove(is_valid, response_message),
-                        )
-                        .unwrap();
-                        Response::new().body(response).send().unwrap();
                     }
                 }
+                // If we reach here, either the cube is not owned, or it's owned by the player's team
+                println!("Cube not in enemy region, you are clear");
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse)
+                    .expect("failed to parse gamelord cube transition response");
+                Response::new().body(response).send().unwrap();
+                Ok(())
             } else {
                 println!("Player {} is not active in the game.", minecraft_id);
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::ValidateMove(
-                    false,
-                    "Player not active in the game.".to_string(),
-                ))
-                .unwrap();
-                Response::new().body(response).send().unwrap();
+                Err(anyhow::anyhow!("Player not found in active players"))
             }
-            Ok(())
         }
-        // this comes from MC-Driver
-        GamelordRequestMinecraft::PlayerSpawnRequest { minecraft_id } => {
-            println!("Gamelord request matched");
-            println!(
-                "Player spawn request received for player: {:?}",
-                minecraft_id
-            );
-            println!("checked whether player is allowed beginning of function");
-            if state.allowed_players.contains_key(&minecraft_id) {
-                let player = state
-                    .allowed_players
-                    .get(&minecraft_id)
-                    .expect("Player should exist");
-                println!("player exists");
-                //let available_cubes = world_config.get("gamelord").map_or_else(|| Vec::new(), |region| region.cubes.values().cloned().collect());
-                // for now its the first one, let's set the first available cube as the players 'spawn' point
-                let spawn_cube = Cube {
-                    center: (0, 0, 0),
-                    side_length: 50,
-                };
-                println!("available cubes found");
-                let active_player = ActivePlayer {
-                    kinode_id: player.kinode_id.clone(),
-                    minecraft_player_name: player.minecraft_player_name.clone(),
-                    current_cube: spawn_cube.clone(),
-                };
-                println!("active player created");
-                println!("active players inserted");
-                state
-                    .active_players
-                    .insert(player.minecraft_player_name.clone(), active_player);
-                state.save();
-                //println!("Player {} is the owner of a region with available cubes: {:?}", player.kinode_id(), available_cubes);
-                let response =
-                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
-                        true,
-                        "Player added.".to_string(),
-                        spawn_cube.clone(),
-                    ))
-                    .unwrap();
-                Response::new().body(response).send().unwrap();
+        
+        // this comes from MC-Driver 
+        // TO DO, connect this to the team registration interface for checking
+        GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
+            println!("Player spawn request received for player: {:?}", minecraft_id);
+            
+            let team_name = if state.lobby.team1.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+                TeamName::Team1
+            } else if state.lobby.team2.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+                TeamName::Team2
             } else {
-                let response =
-                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
-                        false,
-                        "Player not added.".to_string(),
-                    ))
-                    .unwrap();
+                println!("Player {} is not assigned to a team", minecraft_id);
+                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
+                    false,
+                    "Player is not assigned to a team.".to_string(),
+                )).expect("Failed to serialize response");
                 Response::new().body(response).send().unwrap();
+                return Ok(());
+            };
 
-                println!("Player {} is not allowed on the server", minecraft_id);
-                Response::new().body(b"Player not added.").send().unwrap();
-            }
+            // Hardcoded spawn cube
+            let spawn_cube = Cube {
+                center: (0, 0, 0),
+                side_length: 50,
+            };
+
+            let active_player = ActivePlayer {
+                kinode_id: minecraft_id.clone(),
+                minecraft_player_name: minecraft_id.clone(),
+                current_cube: spawn_cube.clone(),
+                team: team_name.clone(),
+            };
+
+            state.active_players.insert(minecraft_id.clone(), active_player);
+
+            println!("Player {} added to active players on team {:?}", minecraft_id, &team_name);
+
+            let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
+                true,
+                format!("Player added to team {:?}.", &team_name),
+                spawn_cube,
+            )).expect("Failed to serialize response");
+            Response::new().body(response).send().unwrap();
             Ok(())
-        }
+        },
         // Think about whether I need this
-        GamelordRequestMinecraft::PlayerLeaveRequest { player } => {
-            if state.active_players.contains_key(&player.kinode_id) {
-                state.active_players.remove(&player.kinode_id);
+        GamelordRequestMinecraft::PlayerLeaveRequest{minecraft_id} => {
+            if state.active_players.contains_key(&minecraft_id) {
+                state.active_players.remove(&minecraft_id);
                 println!(
                     "Player with kinode_id {} has left the game.",
-                    player.kinode_id
+                    &minecraft_id
                 );
                 state.save();
             } else {
                 println!(
                     "Player with kinode_id {} is not in the active players list.",
-                    player.kinode_id
+                    &minecraft_id
                 );
             }
             Ok(())

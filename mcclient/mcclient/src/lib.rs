@@ -44,6 +44,7 @@ fn handle_http_request(
     state: &mut State,
     ws_channel_id: &mut Option<u32>,
     body: &[u8],
+    our: &Address,
 ) -> anyhow::Result<()> {
     let http_request = http::HttpServerRequest::from_bytes(body)?;
 
@@ -135,8 +136,11 @@ fn handle_http_request(
                 b"{\"message\": \"success\"}".to_vec(),
             );
             Ok(())
-        }
-        _ => Ok(()),
+        },
+        _ => {
+            println!("mcclient: unknown http request: {:?}", path);
+            Ok(())
+        },
     }
 }
 
@@ -164,7 +168,7 @@ fn handle_gamelord_update(
     Ok(())
 }
 
-fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
+fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>, our: &Address) -> anyhow::Result<()> {
     let message = await_message()?;
 
     if let Some(gamelord) = &state.gamelord_address {
@@ -174,7 +178,7 @@ fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow:
     }
 
     if message.source().node() == state.our.node() {
-        return handle_http_request(state, ws_channel_id, message.body());
+        return handle_http_request(state, ws_channel_id, message.body(), our);
     }
 
     Ok(())
@@ -187,10 +191,10 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-    for path in ["/join_team"] {
+    for path in ["/join_team",] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
-    http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
+    //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
 
     let mut state: State = State::fetch().unwrap_or_else(|| State::new(&our));
 
@@ -201,7 +205,7 @@ fn init(our: Address) {
     }
 
     loop {
-        match handle_message(&mut state, &mut ws_channel_id) {
+        match handle_message(&mut state, &mut ws_channel_id, &our) {
             Ok(_) => {}
             Err(e) => {
                 println!("mcclient: error: {:?}", e);

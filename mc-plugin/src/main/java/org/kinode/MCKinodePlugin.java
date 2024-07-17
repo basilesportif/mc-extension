@@ -30,7 +30,7 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
     // Define a fixed reference point for the "world center"
 
-    private static final Location WORLD_CENTER = new Location(null, 50, 50, 50);
+    private static final Location WORLD_CENTER = new Location(null, 0, 0, 0);
 
     // Add a field to track the last cube the player was in
     private String prevCube = "";
@@ -112,7 +112,7 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     }
 
     private void setInitialCube(Player player, int playerX, int playerY, int playerZ) {
-        int cubeSize = 50;
+        int cubeSize = 16;
 
         // Adjust player's coordinates relative to the world center
         int adjustedX = playerX - WORLD_CENTER.getBlockX();
@@ -138,7 +138,7 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     }
 
     private void checkAndUpdateCube(Player player, int playerX, int playerY, int playerZ) {
-        int cubeSize = 50;
+        int cubeSize = 16;
 
         // Adjust player's coordinates relative to the world center
         int adjustedX = playerX - WORLD_CENTER.getBlockX();
@@ -160,8 +160,8 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
         // Check if the player has moved to a new cube
         if (!currentCube.equals(prevCube)) {
-            //getLogger().info("Player has moved to a new cube: " + currentCube);
-            //player.sendMessage("You are now in a new cube: " + currentCube);
+            getLogger().info("Player has moved to a new cube: " + currentCube);
+            player.sendMessage("You are now in a new cube: " + currentCube);
             prevCube = currentCube; // Update the previous cube tracker            // Send ValidateMove message
             if (client != null && client.isConnected()) {
                 client.sendValidateMoveMessage(player.getName(), centerX, centerY, centerZ);
