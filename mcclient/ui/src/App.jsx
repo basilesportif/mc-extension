@@ -90,7 +90,6 @@ function App() {
       return null;
     }
   };
-  
 
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -128,58 +127,6 @@ function App() {
   return (
     <div>
       <h2>McClient</h2>
-      <div style={{ position: "relative" }}>
-        <MainContainer>
-          <ChatContainer>
-            <MessageList>
-              {nodeInTeam(ourNode, lobby) === "team1" ? (
-                lobby.team1.messages.map((message, index) => (
-                  <Message
-                    key={message.id}
-                    model={{
-                      message: message.msg,
-                      sentTime: message.time,
-                      sender: message.from.kinode_id,
-                    }}
-                  >
-                    <Message.Header
-                      sender={message.from.kinode_id}
-                      sentTime={message.time}
-                    />
-                  </Message>
-                ))
-              ) : nodeInTeam(ourNode, lobby) === "team2" ? (
-                lobby.team2.messages.map((message, index) => (
-                  <Message
-                    key={message.id}
-                    model={{
-                      message: message.msg,
-                      sentTime: message.time,
-                      sender: message.from.kinode_id,
-                    }}
-                  >
-                    <Message.Header
-                      sender={message.from.kinode_id}
-                      sentTime={message.time}
-                    />
-                  </Message>
-                ))
-              ) : (
-                <Message model={{
-                  message: "You are not in a team yet. Join a team to see messages.",
-                  sentTime: "",
-                  sender: "System"
-                }} />
-              )}
-            </MessageList>
-            <MessageInput
-              placeholder="Type message here"
-              attachButton={false}
-              onSend={onSend}
-            />
-          </ChatContainer>
-        </MainContainer>
-      </div>
       <h3>Join Team</h3>
       <form id="playerForm">
         <input
@@ -228,6 +175,53 @@ function App() {
         </div>
       </div>
       <pre id="response-output"></pre>
+      <div
+        style={{
+          position: "relative",
+          marginLeft: "20px",
+          marginRight: "20px",
+        }}
+      >
+        <MainContainer style={{ width: "100%" }}>
+          <ChatContainer>
+            <MessageList>
+              {nodeInTeam(ourNode, lobby) === "team1" ? (
+                lobby.team1.messages.map((message, index) => (
+                  <Message key={message.id} model={{ message: message.msg }}>
+                    <Message.Header
+                      sender={message.from.kinode_id}
+                      sentTime={new Date(message.time * 1000).toLocaleString()}
+                    />
+                  </Message>
+                ))
+              ) : nodeInTeam(ourNode, lobby) === "team2" ? (
+                lobby.team2.messages.map((message, index) => (
+                  <Message 
+                    key={message.id}
+                    model={{ message: message.msg }}
+                    sender={message.from.kinode_id}
+                    sentTime={new Date(message.time * 1000).toLocaleString()}
+                  />
+                ))
+              ) : (
+                <Message
+                  model={{
+                    message:
+                      "You are not in a team yet. Join a team to see messages.",
+                    sentTime: "",
+                    sender: "System",
+                  }}
+                />
+              )}
+            </MessageList>
+            <MessageInput
+              placeholder="Type message here"
+              attachButton={false}
+              onSend={onSend}
+            />
+          </ChatContainer>
+        </MainContainer>
+      </div>
     </div>
   );
 }
