@@ -1,10 +1,8 @@
 use kinode_process_lib::{get_state, println, set_state, Address, Request};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 
-use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Team, TeamName};
+use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -22,49 +20,6 @@ impl ActivePlayer {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
-pub struct Cube {
-    pub center: (i32, i32, i32),
-    pub side_length: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Effect{
-    Slowness
-}
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CubeEffectList{
-    effects: Vec<Effect>
-}
-
-impl Cube {
-    pub fn identifier(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
-    }
-}
-
-impl PartialEq for Cube {
-    fn eq(&self, other: &Self) -> bool {
-        self.center == other.center && self.side_length == other.side_length
-    }
-}
-
-impl Hash for Cube {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.center.hash(state);
-        self.side_length.hash(state);
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Region {
-    pub cubes: HashMap<Cube, CubeEffectList>,
-}
-
-pub type TeamNameToRegion = HashMap<TeamName, Region>;
-// 
 pub type CubeToOwner = HashMap<Cube, Vec<TeamName>>;
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
@@ -78,7 +33,6 @@ pub enum Owner {
 pub struct State {
     pub our: Address,
     pub lobby: GameLobby,
-    pub world_config: TeamNameToRegion,
     pub cube_to_owner: CubeToOwner,
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
@@ -89,7 +43,6 @@ impl State {
         State {
             our: our.clone(),
             lobby: GameLobby::new(),
-            world_config: HashMap::new(),
             cube_to_owner: HashMap::new(),
             active_players: HashMap::new(),
             allowed_players: HashMap::new(),
@@ -152,11 +105,6 @@ pub enum GamelordRequestMinecraft {
     PlayerLeaveRequest { minecraft_id: String },
 }
 
-//GamelordRequestMinecraft {ValidateMove, PlayerSpawnRequest, PlayerLeaveRequest}
-//GamelordRequestUI {GenerateWorld, I assume add player but that depends on UI}
-
-//GamelordResponseMinecraft
-//GamelordResponseUI (maybe not needed)
 impl GamelordRequestMinecraft {
     pub fn parse(bytes: &[u8]) -> Result<GamelordRequestMinecraft, serde_json::Error> {
         let json_str = String::from_utf8_lossy(bytes);
