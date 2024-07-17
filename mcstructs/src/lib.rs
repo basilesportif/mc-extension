@@ -48,6 +48,7 @@ pub enum McClientToGamelordRequest {
     Init,               // requests for all gamelobby data on initialization
     JoinTeam(JoinTeam), // request to join team
     SendMessage(String),// sends message to chat to which they belong
+    WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -191,6 +192,10 @@ impl GameLobby {
                 }
                 Ok(self.clone())
             }
+            GameLobbyDiff::WorldConfigFull(world_config) => {
+                self.world_config = world_config.clone();
+                Ok(self.clone())
+            }
         }
     }
 }
@@ -201,6 +206,8 @@ pub enum GameLobbyDiff {
     AddPlayerToTeam { player: Player, team: TeamName },
     EditLobby { name: String, minecraft_server_address: String },
     Message(ChatMessage),
+    WorldConfigFull(TeamNameToRegion),
+    // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),
 }
 

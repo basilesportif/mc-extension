@@ -130,6 +130,7 @@ fn handle_mcclient_request(
 ) -> anyhow::Result<()> {
     match request.clone() {
         McClientToGamelordRequest::Init => {
+            // sends init only to requestor (loops just look dumb)
             for player in state.lobby.team1.players.iter() {
                 if player.kinode_id == message.source().node() {
                     let diff =
@@ -219,6 +220,11 @@ fn handle_mcclient_request(
                 return state.update_clients(&diff);
             }
             return Ok(());
+        }
+        McClientToGamelordRequest::WorldConfigFull(world_config) => {
+            state.lobby.world_config = world_config.clone();
+            state.save();
+            return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
     }
 }
