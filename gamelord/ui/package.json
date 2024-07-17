@@ -9,7 +9,11 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "copy": "mkdir -p ../pkg/ui && rm -rf ../pkg/ui/* && cp -r dist/* ../pkg/ui/",
-    "build:copy": "npm run build && npm run copy"
+    "build:copy": "npm run build && npm run copy",
+    "copy-shared": "cp -r ../../mcstructs/ui/shared.jsx src/",
+    "prebuild": "npm run copy-shared",
+    "prestart": "npm run copy-shared",
+    "predev": "npm run copy-shared"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -17,6 +21,7 @@
     "react-router-dom": "^6.24.0"
   },
   "devDependencies": {
+    "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

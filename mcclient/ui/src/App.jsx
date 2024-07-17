@@ -1,12 +1,33 @@
 import React, { useEffect, useState } from "react";
+import { applyDiff } from "./shared";
+import "./App.css"; // use for styling the chat
+import {
+  MainContainer,
+  ChatContainer,
+  MessageList,
+  Message,
+  MessageInput,
+} from "@chatscope/chat-ui-kit-react";
+let ws;
 
 function App() {
   const [lobby, setLobby] = useState({
-    name: '',
-    minecraft_server_address: '',
-    team1: [],
-    team2: []
+    name: "",
+    minecraft_server_address: "",
+    team1: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
+    team2: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
   });
+  const [ourNode, setOurNode] = useState(null);
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
@@ -15,6 +36,14 @@ function App() {
   useEffect(() => {
     webSocket();
   }, []);
+
+  useEffect(() => {
+    console.log("lobby", lobby);
+  }, [lobby]);
+
+  useEffect(() => {
+    console.log("ourNode", ourNode);
+  }, [ourNode]);
 
   async function joinTeam(team_name) {
     console.log("join team");
@@ -52,42 +81,106 @@ function App() {
     }
   }
 
+  const nodeInTeam = (node, lobby) => {
+    if (lobby.team1.players.some((p) => p.kinode_id === node)) {
+      return "team1";
+    } else if (lobby.team2.players.some((p) => p.kinode_id === node)) {
+      return "team2";
+    } else {
+      return null;
+    }
+  };
+  
+
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    // jurij's dev setup
+    // 5173 - 8080
+    // 5174 - 8080
+    // 5175 - 8081
     const host =
-      window.location.port === "5173" ? "localhost:8080" : window.location.host;
-    const ws = new WebSocket(
-      `${protocol}//${host}/mcclient:mcclient:basilesex.os/`
-    );
+      window.location.port === "5173" || window.location.port === "5174"
+        ? "localhost:8080"
+        : window.location.port === "5175"
+        ? "localhost:8081"
+        : window.location.host;
+
+    ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
 
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      switch (Object.keys(data)[0]) {
-        case 'EditLobby':
-          console.log('Lobby edited:', data.EditLobby);
-          setLobby(prevLobby => ({
-            ...prevLobby,
-            name: data.EditLobby.name,
-            minecraft_server_address: data.EditLobby.minecraft_server_address,
-          }));
-
-        // case 'Init':
-        //   console.log('Game lobby:', data.Init);
-        //   setLobby(data.Init);
-        default:
-          console.log('Unknown websocket message:', data);
+      console.log("data", data);
+      applyDiff(data, setLobby);
+      if (data.OurNode) {
+        setOurNode(data.OurNode);
       }
-
     };
+  };
+
+  const onSend = (message) => {
+    console.log("sending:", message);
+    ws.send(JSON.stringify({ SendMessage: message }));
   };
 
   return (
     <div>
-      <h1>McClient</h1>
-      <h2>Join Team</h2>
+      <h2>McClient</h2>
+      <div style={{ position: "relative" }}>
+        <MainContainer>
+          <ChatContainer>
+            <MessageList>
+              {nodeInTeam(ourNode, lobby) === "team1" ? (
+                lobby.team1.messages.map((message, index) => (
+                  <Message
+                    key={message.id}
+                    model={{
+                      message: message.msg,
+                      sentTime: message.time,
+                      sender: message.from.kinode_id,
+                    }}
+                  >
+                    <Message.Header
+                      sender={message.from.kinode_id}
+                      sentTime={message.time}
+                    />
+                  </Message>
+                ))
+              ) : nodeInTeam(ourNode, lobby) === "team2" ? (
+                lobby.team2.messages.map((message, index) => (
+                  <Message
+                    key={message.id}
+                    model={{
+                      message: message.msg,
+                      sentTime: message.time,
+                      sender: message.from.kinode_id,
+                    }}
+                  >
+                    <Message.Header
+                      sender={message.from.kinode_id}
+                      sentTime={message.time}
+                    />
+                  </Message>
+                ))
+              ) : (
+                <Message model={{
+                  message: "You are not in a team yet. Join a team to see messages.",
+                  sentTime: "",
+                  sender: "System"
+                }} />
+              )}
+            </MessageList>
+            <MessageInput
+              placeholder="Type message here"
+              attachButton={false}
+              onSend={onSend}
+            />
+          </ChatContainer>
+        </MainContainer>
+      </div>
+      <h3>Join Team</h3>
       <form id="playerForm">
         <input
           type="text"
@@ -107,24 +200,30 @@ function App() {
         </button>
       </form>
       <div>
-        <h2>Game Lobby Information</h2>
-        <p><strong>Server Name:</strong> {lobby.name}</p>
-        <p><strong>Minecraft Server Address:</strong> {lobby.minecraft_server_address}</p>
-        <h3>Teams</h3>
+        <p>Server Name: {lobby.name}</p>
+        <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
         <div>
           <h4>Team 1</h4>
           <ul>
-            {lobby.team1.map((player, index) => (
-              <li key={index}>{player.minecraft_player_name}</li>
-            )) || 'No players'}
+            {lobby.team1?.players?.length > 0 ? (
+              lobby.team1.players.map((player, index) => (
+                <p key={index}>{player.kinode_id}</p>
+              ))
+            ) : (
+              <p>No players in Team 1</p>
+            )}
           </ul>
         </div>
         <div>
           <h4>Team 2</h4>
           <ul>
-            {lobby.team2.map((player, index) => (
-              <li key={index}>{player.minecraft_player_name}</li>
-            )) || 'No players'}
+            {lobby.team2?.players?.length > 0 ? (
+              lobby.team2.players.map((player, index) => (
+                <p key={index}>{player.kinode_id}</p>
+              ))
+            ) : (
+              <p>No players in Team 2</p>
+            )}
           </ul>
         </div>
       </div>

@@ -1,4 +1,4 @@
-use kinode_process_lib::{println, Address, NodeId};
+use kinode_process_lib::{println, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -26,6 +26,12 @@ impl Team {
     pub fn team_has_player(&self, player: &Player) -> bool {
         self.players.contains(player)
     }
+    pub fn team_has_kinode_id(&self, kinode_id: &NodeId) -> bool {
+        self.players.iter().any(|p| p.kinode_id == *kinode_id)
+    }
+    pub fn kinode_id_to_player(&self, kinode_id: &NodeId) -> Option<Player> {
+        self.players.iter().find(|p| p.kinode_id == *kinode_id).cloned()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -39,6 +45,13 @@ pub struct JoinTeam {
 pub enum McClientToGamelordRequest {
     Init,               // requests for all gamelobby data on initialization
     JoinTeam(JoinTeam), // request to join team
+    SendMessage(String),// sends message to chat to which they belong
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WsPush {
+    GetInit,
+    SendMessage(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +89,24 @@ impl GameLobby {
             None
         }
     }
+    pub fn kinode_id_in_team(&self, kinode_id: &NodeId) -> Option<TeamName> {
+        if self.team1.team_has_kinode_id(kinode_id) {
+            Some(TeamName::Team1)
+        } else if self.team2.team_has_kinode_id(kinode_id) {
+            Some(TeamName::Team2)
+        } else {
+            None
+        }
+    }
+    pub fn kinode_id_to_player(&self, kinode_id: &NodeId) -> Option<Player> {
+        if self.team1.team_has_kinode_id(kinode_id) {
+            self.team1.kinode_id_to_player(kinode_id)
+        } else if self.team2.team_has_kinode_id(kinode_id) {
+            self.team2.kinode_id_to_player(kinode_id)
+        } else {
+            None
+        }
+    }
     // team1 shouldn't see team 2 chat, and vice versa
     pub fn lobby_for_team(&self, team: TeamName) -> GameLobby {
         let mut lobby = self.clone();
@@ -103,12 +134,12 @@ impl GameLobby {
         };
         self.clone()
     }
-    pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> GameLobby {
+    pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> Result<GameLobby, String> {
         match diff {
             GameLobbyDiff::Init(lobby) => {
                 *self = lobby.clone();
                 println!("lobby after diff: {:#?}", self);
-                self.clone()
+                Ok(self.clone())
             }
             GameLobbyDiff::AddPlayerToTeam { player, team } => {
                 let all_players: HashSet<Player> = self
@@ -117,18 +148,18 @@ impl GameLobby {
                     .union(&self.team2.players)
                     .cloned()
                     .collect();
-                if all_players.contains(&player) {
+                if all_players.iter().any(|p| p.kinode_id == player.kinode_id) {
                     println!("Player {} already exists in the game", player.kinode_id);
-                    return self.clone();
+                    return Err("Player already exists in the game".to_string());
                 }
                 match team {
                     TeamName::Team1 => {
                         self.team1.players.insert(player.clone());
-                        self.clone()
+                        Ok(self.clone())
                     }
                     TeamName::Team2 => {
                         self.team2.players.insert(player.clone());
-                        self.clone()
+                        Ok(self.clone())
                     }
                 }
             }
@@ -136,7 +167,25 @@ impl GameLobby {
                 self.name = name.clone();
                 self.minecraft_server_address = minecraft_server_address.clone();
                 // println!("lobby after diff: {:#?}", self);
-                self.clone()
+                Ok(self.clone())
+            }
+            GameLobbyDiff::Message(message) => {
+                let team = self.player_in_team(&message.from);
+                if let Some(team) = team {
+                    match team {
+                        TeamName::Team1 => {
+                            self.team1.messages.push(message.clone());
+                            self.team1.last_message_id = message.id;
+                        }
+                        TeamName::Team2 => {
+                            self.team2.messages.push(message.clone());
+                            self.team2.last_message_id = message.id;
+                        }
+                    }
+                } else {
+                    return Err("Player not in team".to_string());
+                }
+                Ok(self.clone())
             }
         }
     }
@@ -147,9 +196,7 @@ pub enum GameLobbyDiff {
     Init(GameLobby),
     AddPlayerToTeam { player: Player, team: TeamName },
     EditLobby { name: String, minecraft_server_address: String },
-    // TODO
-    // Message(ChatMessage),
-    // FullMessageHistory(Vec<ChatMessage>),
+    Message(ChatMessage),
     // RemovePlayerFromTeam(Player, TeamName),
 }
 
@@ -158,7 +205,6 @@ pub struct ChatMessage {
     pub id: u64,
     pub time: u64,
     pub from: Player,
-    pub to: TeamName,
     pub msg: String,
 }
 

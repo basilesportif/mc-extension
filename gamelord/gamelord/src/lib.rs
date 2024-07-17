@@ -1,10 +1,11 @@
-use alloy_primitives::hex::HEX_CHARS_LOWER;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
+use chrono::Utc;
+
 mod utilities;
 use utilities::valid_position;
 mod gamelord_types;
@@ -62,6 +63,120 @@ wit_bindgen::generate!({
     world: "process-v0",
 });
 
+fn load_world(state: &mut State) {
+    // Directly access the body (assuming it's already fully available)
+    let body = get_blob().unwrap_or_default();
+    println!("body: {:?}", body);
+    let body_str = String::from_utf8_lossy(&body.bytes);
+    println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
+    match serde_json::from_str::<Vec<ConfigurationRegion>>(&body_str) {
+        Ok(regions) => {
+            state.world_config.clear();
+            state.cube_to_owner.clear();
+
+            // Process each ConfigurationRegion
+            for region in regions {
+                let mut cubes_transformed = HashMap::new();
+                for cube in &region.cubes {
+                    let cube_id = cube.identifier();
+                    cubes_transformed.insert(cube_id.clone(), cube.clone());
+                    state
+                        .cube_to_owner
+                        .insert(cube.clone(), region.owner.clone());
+                }
+
+                let new_region = Region {
+                    cubes: cubes_transformed,
+                    owner: region.owner.clone(),
+                    everyone_allowed: region.everyone_allowed,
+                    authorized_players: region.authorized_players.clone(),
+                };
+                state.world_config.insert(region.owner.clone(), new_region);
+            }
+            state.save();
+
+            println!("World loaded from request");
+            http::send_response(http::StatusCode::OK, None, b"World Loaded".to_vec());
+        }
+        Err(e) => {
+            println!("Failed to parse world data: {:?}", e);
+            http::send_response(
+                http::StatusCode::BAD_REQUEST,
+                None,
+                b"Invalid world data".to_vec(),
+            );
+        }
+    }
+}
+
+fn add_player(state: &mut State) {
+    let body = get_blob().unwrap_or_default();
+    println!("body: {:?}", body);
+    let body_str = String::from_utf8_lossy(&body.bytes);
+    println!("body_str: {:?}", body_str);
+    match serde_json::from_str::<Player>(&body_str) {
+        Ok(player) => {
+            println!("player: {:?}", player);
+            let player_clone = player.clone(); // Clone player before insertion
+            state
+                .allowed_players
+                .insert(player.minecraft_player_name.clone(), player);
+            println!(
+                "Player {} added to allowed players",
+                player_clone.minecraft_player_name
+            );
+            state.save();
+            http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
+        }
+        Err(e) => {
+            println!("Failed to parse player data: {:?}", e);
+            http::send_response(
+                http::StatusCode::BAD_REQUEST,
+                None,
+                b"Invalid player data".to_vec(),
+            );
+        }
+    }
+}
+
+fn edit_lobby(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
+    let bytes = get_blob()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
+        .bytes;
+    let edit_lobby = serde_json::from_slice::<GameLobbyDiff>(&bytes)?;
+    if let GameLobbyDiff::EditLobby {
+        name,
+        minecraft_server_address,
+    } = edit_lobby.clone()
+    {
+        if let Err(e) = state.lobby.apply_diff(&edit_lobby) {
+            return Err(anyhow::anyhow!("Failed to apply lobby diff: {}", e));
+        }
+        state.save();
+
+        let blob = LazyLoadBlob {
+            mime: Some("application/json".to_string()),
+            bytes: serde_json::to_vec(&edit_lobby)?,
+        };
+        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+
+        let _ = state.update_clients(&GameLobbyDiff::EditLobby {
+            name: name.clone(),
+            minecraft_server_address: minecraft_server_address.clone(),
+        });
+
+        http::send_response(http::StatusCode::OK, None, b"Lobby updated.".to_vec());
+        return Ok(());
+    } else {
+        http::send_response(
+            http::StatusCode::BAD_REQUEST,
+            None,
+            b"Invalid lobby update request.".to_vec(),
+        );
+        return Err(anyhow::anyhow!("Invalid lobby update request."));
+    }
+}
+
 fn handle_mcclient_request(
     state: &mut State,
     ws_channel_id: &mut Option<u32>,
@@ -109,19 +224,57 @@ fn handle_mcclient_request(
                 player: player.clone(),
                 team: join_team.team_name.clone(),
             };
-            state.lobby.apply_diff(diff);
-            state.save();
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(diff)?,
-            };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+            println!("diff: {:?}", diff);
+            match state.lobby.apply_diff(diff) {
+                Ok(lobby) => {
+                    state.lobby = lobby;
+                    state.save();
+                    let blob = LazyLoadBlob {
+                        mime: Some("application/json".to_string()),
+                        bytes: serde_json::to_vec(diff)?,
+                    };
+                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
 
-            return state
-                .update_clients(&GameLobbyDiff::AddPlayerToTeam {
-                    player: player.clone(),
-                    team: join_team.team_name.clone(),
-                });
+                    return state.update_clients(&GameLobbyDiff::AddPlayerToTeam {
+                        player: player.clone(),
+                        team: join_team.team_name.clone(),
+                    });
+                }
+                Err(e) => {
+                    println!("mcclient: error applying diff: {}", e);
+                    return Ok(());
+                }
+            };
+        }
+        McClientToGamelordRequest::SendMessage(chat_message) => {
+            let sender_kinode_id = message.source().node().to_string();
+            let sender_team = state.lobby.kinode_id_in_team(&sender_kinode_id);
+            let last_msg_id =
+                if let Some(sender_team) = sender_team {
+                    match sender_team {
+                        TeamName::Team1 => state.lobby.team1.last_message_id,
+                        TeamName::Team2 => state.lobby.team2.last_message_id,
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("Sender is not in a team"));
+                };
+            let id = last_msg_id + 1;
+            let diff = GameLobbyDiff::Message({
+                ChatMessage {
+                    id,
+                    time: Utc::now().timestamp() as u64,
+                    from: state.lobby.kinode_id_to_player(&sender_kinode_id).unwrap(),
+                    msg: chat_message.clone(),
+                }
+            });
+            println!("diff: {:?}", diff);
+            if let Ok(lobby) = state.lobby.apply_diff(&diff) {
+                state.lobby = lobby;
+                state.save();
+                println!("updated clients");
+                return state.update_clients(&diff);
+            }
+            return Ok(());
         }
     }
 }
@@ -244,15 +397,6 @@ fn handle_kinode_message(
     }
 }
 
-fn is_http_request(message: &Message) -> bool {
-    match serde_json::from_slice::<http::HttpServerRequest>(message.body()) {
-        Ok(http::HttpServerRequest::WebSocketOpen { .. }) => true,
-        Ok(http::HttpServerRequest::Http(..)) => true,
-        Ok(http::HttpServerRequest::WebSocketClose { .. }) => true,
-        Ok(http::HttpServerRequest::WebSocketPush { .. }) => true,
-        _ => false,
-    }
-}
 fn handle_http_request(
     state: &mut State,
     ws_channel_id: &mut Option<u32>,
@@ -262,241 +406,113 @@ fn handle_http_request(
     match our_http_request {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             *ws_channel_id = Some(channel_id);
+            send_ws_push(
+                ws_channel_id.unwrap_or(0),
+                WsMessageType::Text,
+                LazyLoadBlob {
+                    mime: Some("application/json".to_string()),
+                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
+                },
+            );
+
+            return Ok(());
+        }
+        http::HttpServerRequest::WebSocketClose { .. } => {
+            *ws_channel_id = None;
+            return Ok(());
+        }
+        // not used yet, wip
+        http::HttpServerRequest::WebSocketPush {
+            channel_id,
+            message_type,
+        } => {
+            let Some(blob) = get_blob() else {
+                return Ok(());
+            };
+            // dont need this, implemented on ws open
+            // let ws_push  = serde_json::from_slice::<WsPush>(&blob.bytes)?;
+            // if let WsPush::GetInit = ws_push {
+            //     send_ws_push(
+            //         ws_channel_id.unwrap_or(0),
+            //         WsMessageType::Text,
+            //         LazyLoadBlob {
+            //             mime: Some("application/json".to_string()),
+            //             bytes: serde_json::to_vec(&GameLobbyDiff::Init(
+            //                 state.lobby.clone(),
+            //             ))?,
+            //         },
+            //     );
+            // }
+
             return Ok(());
         }
         http::HttpServerRequest::Http(http_request) => {
-            match http_request.method().unwrap() {
-                http::Method::GET => {
-                    if let Ok(path) = http_request.path() {
-                        match path.as_str() {
-                            "/world_config" => {
-                                let response = serde_json::to_string(&state.world_config).unwrap();
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    response.into_bytes(),
-                                );
-                            }
-                            "/active_players" => {
-                                let response =
-                                    serde_json::to_string(&state.active_players).unwrap();
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    response.into_bytes(),
-                                );
-                            }
-                            "/lobby" => {
-                                let lobby = state.lobby.clone();
-                                let response = serde_json::to_string(&lobby).unwrap();
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    response.into_bytes(),
-                                );
-                            }
-                            _ => http::send_response(
-                                http::StatusCode::NOT_FOUND,
-                                None,
-                                b"Not Found".to_vec(),
-                            ),
-                        }
-                    } else {
-                        http::send_response(
-                            http::StatusCode::INTERNAL_SERVER_ERROR,
-                            None,
-                            b"Internal Server Error".to_vec(),
-                        );
+            let _resp = if let Ok(path) = http_request.path() {
+                println!("HTTP request path: {:?}", path);
+                match path.as_str() {
+                    "/world_config" => {
+                        let response = serde_json::to_string(&state.world_config).unwrap();
+                        http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
-                }
-                http::Method::POST => {
-                    if let Ok(path) = http_request.path() {
-                        match path.as_str() {
-                            "/api/loadWorld" => {
-                                // Directly access the body (assuming it's already fully available)
-                                let body = get_blob().unwrap_or_default();
-                                println!("body: {:?}", body);
-                                let body_str = String::from_utf8_lossy(&body.bytes);
-                                println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
-                                match serde_json::from_str::<TeamNameToRegion>(&body_str) {
-                                    Ok(new_world_config) => {
-                                        state.world_config = new_world_config;
-                                        state.cube_to_owner.clear();
-                                        // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
-                                        for (owner, region) in state.world_config.iter() {
-                                            for cube in region.cubes.keys() {
-                                                state.cube_to_owner.entry(cube.clone())
-                                                    .and_modify(|owners| owners.push(owner.clone()))
-                                                    .or_insert_with(|| vec![owner.clone()]);
-                                            }
-                                        }
-
-                                        state.save();
-
-                                        println!("World loaded from request");
-                                        http::send_response(
-                                            http::StatusCode::OK,
-                                            None,
-                                            b"World Loaded".to_vec(),
-                                        );
-                                    }
-
-                                    Err(e) => {
-                                        println!("Failed to parse world data: {:?}", e);
-                                        http::send_response(
-                                            http::StatusCode::BAD_REQUEST,
-                                            None,
-                                            b"Invalid world data".to_vec(),
-                                        );
-                                    }
-                                }
-                            }
-                            "/api/addPlayer" => {
-                                let body = get_blob().unwrap_or_default();
-                                println!("body: {:?}", body);
-                                let body_str = String::from_utf8_lossy(&body.bytes);
-                                println!("body_str: {:?}", body_str);
-                                match serde_json::from_str::<Player>(&body_str) {
-                                    Ok(player) => {
-                                        println!("player: {:?}", player);
-                                        let player_clone = player.clone(); // Clone player before insertion
-                                        state
-                                            .allowed_players
-                                            .insert(player.minecraft_player_name.clone(), player);
-                                        println!(
-                                            "Player {} added to allowed players",
-                                            player_clone.minecraft_player_name
-                                        );
-                                        state.save();
-                                        http::send_response(
-                                            http::StatusCode::OK,
-                                            None,
-                                            b"Player Added".to_vec(),
-                                        );
-                                    }
-                                    Err(e) => {
-                                        println!("Failed to parse player data: {:?}", e);
-                                        http::send_response(
-                                            http::StatusCode::BAD_REQUEST,
-                                            None,
-                                            b"Invalid player data".to_vec(),
-                                        );
-                                    }
-                                }
-                            }
-                            "/api/deleteWorld" => {
-                                state.world_config.clear();
-                                state.cube_to_owner.clear();
-                                state.save();
-                                println!("World deleted from request");
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    b"World Deleted".to_vec(),
-                                );
-                            }
-                            "/api/clearTeams" => {
-                                state.lobby.clear_teams();
-                                state.save();
-                                let blob = LazyLoadBlob {
-                                    mime: Some("application/json".to_string()),
-                                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
-                                };
-                                send_ws_push(
-                                    ws_channel_id.unwrap_or(0),
-                                    WsMessageType::Text,
-                                    blob,
-                                );
-
-                                http::send_response(
-                                    http::StatusCode::OK,
-                                    None,
-                                    b"Teams Cleared".to_vec(),
-                                );
-                            }
-                            "/api/editLobby" => {
-                                let bytes = get_blob()
-                                    .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
-                                    .bytes;
-                                println!("bruuh here");
-                                let edit_lobby = serde_json::from_slice::<GameLobbyDiff>(&bytes)?;
-
-                                println!("i think here");
-                                if let GameLobbyDiff::EditLobby { name, minecraft_server_address } =
-                                    edit_lobby.clone()
-                                {
-                                    println!("but not here");
-                                    // println!("state before edit_lobby: {:#?}", state);
-                                    state.lobby.apply_diff(&edit_lobby);
-                                    state.save();
-                                    println!("here?");
-
-                                    let blob = LazyLoadBlob {
-                                        mime: Some("application/json".to_string()),
-                                        bytes: serde_json::to_vec(&edit_lobby)?,
-                                    };
-                                    send_ws_push(
-                                        ws_channel_id.unwrap_or(0),
-                                        WsMessageType::Text,
-                                        blob,
-                                    );
-                                    println!("here2?");
-
-                                    let _ = state.update_clients(&GameLobbyDiff::EditLobby {
-                                        name: name.clone(),
-                                        minecraft_server_address: minecraft_server_address.clone(),
-                                    });
-                                    println!("here3?");
-
-                                    // println!("state after editlobby: {:#?}", State::fetch().unwrap());
-                                    http::send_response(
-                                        http::StatusCode::OK,
-                                        None,
-                                        b"Lobby updated.".to_vec(),
-                                    );
-                                } else {println!("WTF WHY HERE");}
-                            }
-                            _ => http::send_response(
-                                http::StatusCode::NOT_FOUND,
-                                None,
-                                b"Not Found".to_vec(),
-                            ),
-                        }
-                    } else {
-                        http::send_response(
-                            http::StatusCode::INTERNAL_SERVER_ERROR,
-                            None,
-                            b"Internal Server Error".to_vec(),
-                        );
+                    "/active_players" => {
+                        let response = serde_json::to_string(&state.active_players).unwrap();
+                        http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
+                    "/api/loadWorld" => load_world(state),
+                    "/api/addPlayer" => add_player(state),
+                    "/api/deleteWorld" => {
+                        state.world_config.clear();
+                        state.cube_to_owner.clear();
+                        state.save();
+                        println!("World deleted from request");
+                        http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
+                    }
+                    "/api/clearTeams" => {
+                        state.lobby.clear_teams();
+                        state.save();
+                        let blob = LazyLoadBlob {
+                            mime: Some("application/json".to_string()),
+                            bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
+                        };
+                        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+
+                        http::send_response(http::StatusCode::OK, None, b"Teams Cleared".to_vec());
+                    }
+                    "/api/editLobby" => edit_lobby(state, ws_channel_id).unwrap_or(()),
+                    _ => http::send_response(
+                        http::StatusCode::NOT_FOUND,
+                        None,
+                        b"Not Found".to_vec(),
+                    ),
                 }
-                _ => http::send_response(
-                    http::StatusCode::METHOD_NOT_ALLOWED,
+            } else {
+                http::send_response(
+                    http::StatusCode::INTERNAL_SERVER_ERROR,
                     None,
-                    b"Method Not Allowed".to_vec(),
-                ),
-            }
+                    b"Internal Server Error".to_vec(),
+                );
+            };
         }
-        _ => {
-            // Handle other cases or errors
-        }
+        _ => http::send_response(
+            http::StatusCode::METHOD_NOT_ALLOWED,
+            None,
+            b"Method Not Allowed".to_vec(),
+        ),
     }
     Ok(())
 }
 
 fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
     let message = await_message()?;
-    // println!(
-    //     "handle_message: {:?}",
-    //     String::from_utf8_lossy(message.body())
-    // );
 
-    if is_http_request(&message) {
-        // Check if it's an HTTP request
-        println!("HTTP request received");
-        // Dedicated function to handle HTTP requests
-        handle_http_request(state, ws_channel_id, &message)?; // Dedicated function to handle HTTP requests
-    } else if message.is_local(&message.source()) {
+    if let "http_server:distro:sys" | "http_client:distro:sys" =
+        message.source().process.to_string().as_str()
+    {
+        println!("HTTP request received.");
+        return handle_http_request(state, ws_channel_id, &message);
+    }
+
+    if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
         handle_kinode_message(state, ws_channel_id, &message)?;
     } else {
@@ -512,7 +528,7 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-
+    // let _ = http::serve_ui(&our, "../mcstructs/ui", true, false, vec!["/"]);
     for path in [
         "/api/loadWorld",
         "/world_config",
@@ -520,7 +536,6 @@ fn init(our: Address) {
         "/api/deleteWorld",
         "/api/editLobby",
         "api/clearTeams",
-        "/lobby",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }

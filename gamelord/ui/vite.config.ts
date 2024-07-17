@@ -1,8 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// BASE_URL is process_name:package_name:publisher_node.
-// It represents the URL where the UI will be served from.
 // If your node is running on localhost, you will access the UI at http://localhost:3000/process_name:package_name:publisher_node.
 // import manifest from '../pkg/manifest.json'
 // import metadata from '../pkg/metadata.json'

@@ -9,9 +9,15 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "copy": "mkdir -p ../pkg/ui && rm -rf ../pkg/ui/* && cp -r dist/* ../pkg/ui/",
-    "build:copy": "npm run build && npm run copy"
+    "build:copy": "npm run build && npm run copy",
+    "copy-shared": "cp -r ../../mcstructs/ui/shared.jsx src/",
+    "prebuild": "npm run copy-shared",
+    "prestart": "npm run copy-shared",
+    "predev": "npm run copy-shared"
   },
   "dependencies": {
+    "@chatscope/chat-ui-kit-react": "^2.0.3",
+    "@chatscope/chat-ui-kit-styles": "^1.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.24.0"

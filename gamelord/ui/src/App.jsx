@@ -1,20 +1,37 @@
 import React, { useEffect, useState } from "react";
-
+import { applyDiff } from "./shared";
+let ws;
 function App() {
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
-    team1: [],
-    team2: [],
+    team1: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
+    team2: {
+      last_message_id: 0,
+      messages: [],
+      name: "",
+      players: [],
+    },
   });
   const [activeTab, setActiveTab] = useState("tab1");
+  const [wsReady, setWsReady] = useState(false);
 
   useEffect(() => {
     document.getElementById("playerForm").addEventListener("submit", addPlayer);
-    getLobby();
     setActiveTab("tab2");
-    webSocket();
+    if (!wsReady) {
+      webSocket();
+    }
   }, []);
+
+  useEffect(() => {
+    console.log("LOBBY:", lobby);
+  }, [lobby]);
 
   useEffect(() => {
     // Remove 'active' class from all tabs
@@ -186,9 +203,9 @@ function App() {
     const url = "/gamelord:gamelord:basilesex.os/api/editLobby";
 
     const data = {
-      "EditLobby":[lobbyName, minecraftServerAddress]
+      EditLobby: [lobbyName, minecraftServerAddress],
     };
-    console.log(data);
+    // console.log(data);
 
     fetch(url, {
       method: "POST",
@@ -205,7 +222,7 @@ function App() {
         }
       })
       .then((result) => {
-        console.log("Lobby edited successfully:", result);
+        // console.log("Lobby edited successfully:", result);
         document.getElementById("response-output-tab2").innerText = result;
       })
       .catch((error) => {
@@ -216,85 +233,22 @@ function App() {
       });
   };
 
-  function getLobby() {
-    const url = "/gamelord:gamelord:basilesex.os/lobby";
-
-    fetch(url)
-      .then((response) => {
-        if (response.ok) {
-          return response.json();
-        } else {
-          throw new Error("Failed to get lobby data");
-        }
-      })
-      .then((data) => {
-        console.log("Lobby data retrieved successfully:", data);
-
-        // Update the lobby information in the UI
-        document.getElementById("lobbyName").placeholder =
-          "Game Name: " + data.name;
-        document.getElementById("minecraftServerAddress").placeholder =
-          "MC Server: " + data.minecraft_server_address;
-
-        setLobby({
-          name: data.name,
-          minecraft_server_address: data.minecraft_server_address,
-          team1: data.team1.players,
-          team2: data.team2.players,
-        });
-
-        document.getElementById("response-output-tab2").innerText =
-          "Lobby data updated successfully";
-      })
-      .catch((error) => {
-        console.error("Error getting lobby data:", error);
-        document.getElementById(
-          "response-output-tab2"
-        ).innerText = `Error: ${error.message}`;
-      });
-  }
-
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host =
       window.location.port === "5173" ? "localhost:8080" : window.location.host;
-    const ws = new WebSocket(
-      `${protocol}//${host}/gamelord:gamelord:basilesex.os/`
-    );
+    if (!wsReady) {
+      ws = new WebSocket(`${protocol}//${host}/gamelord:gamelord:basilesex.os/`);
+    }
 
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);
+      setWsReady(true);
+      // ws.send(JSON.stringify("GetInit"));
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      switch (Object.keys(data)[0]) {
-        case 'EditLobby':
-          console.log('Lobby edited:', data.EditLobby);
-          setLobby(prevLobby => ({
-            ...prevLobby,
-            name: data.EditLobby.name,
-            minecraft_server_address: data.EditLobby.minecraft_server_address,
-          }));
-        case 'AddPlayerToTeam':
-          console.log('Player added to team:', data.AddPlayerToTeam);
-          if (data.AddPlayerToTeam.team === 'team1') {
-            setLobby(prevLobby => ({
-              ...prevLobby,
-              team1: [...prevLobby.team1, data.AddPlayerToTeam.player]
-            }));
-          } else {
-            setLobby(prevLobby => ({
-              ...prevLobby,
-              team2: [...prevLobby.team2, data.AddPlayerToTeam.player]
-            }));
-          }
-
-        // case 'Init':
-        //   console.log('Game lobby:', data.Init);
-        //   setLobby(data.Init);
-        default:
-          console.log('Unknown websocket message:', data);
-      }
+      applyDiff(data, setLobby);
     };
   };
 
@@ -373,7 +327,7 @@ function App() {
                   type="text"
                   id="lobbyName"
                   name="lobbyName"
-                  placeholder="Enter Lobby Name"
+                  placeholder={`Current Name: ${lobby.name}` || "Enter Lobby Name"}
                 />
               </div>
               <div className="form-group">
@@ -381,7 +335,7 @@ function App() {
                   type="text"
                   id="minecraftServerAddress"
                   name="minecraftServerAddress"
-                  placeholder="Enter Minecraft Server Address"
+                  placeholder={`Current Server: ${lobby.minecraft_server_address}` || "Enter Minecraft Server Address"}
                 />
               </div>
               <div className="form-group"></div>
@@ -395,17 +349,25 @@ function App() {
             <div>
               <h3>Team 1</h3>
               <ul>
-                {lobby.team1.map((player, index) => (
-                  <li key={index}>{player.kinode_id}</li>
-                ))}
+                {lobby.team1?.players?.length > 0 ? (
+                  lobby.team1.players.map((player, index) => (
+                    <li key={index}>{player.kinode_id}</li>
+                  ))
+                ) : (
+                  <li>No players in Team 1</li>
+                )}
               </ul>
             </div>
             <div>
               <h3>Team 2</h3>
               <ul>
-                {lobby.team2.map((player, index) => (
-                  <li key={index}>{player.kinode_id}</li>
-                ))}
+                {lobby.team2?.players?.length > 0 ? (
+                  lobby.team2.players.map((player, index) => (
+                    <li key={index}>{player.kinode_id}</li>
+                  ))
+                ) : (
+                  <li>No players in Team 2</li>
+                )}
               </ul>
             </div>
             <button type="button" onClick={() => clearTeams()}>
