@@ -5,7 +5,7 @@ import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
-const ThreeJsScene = () => {
+const ThreeJsScene = ({ ourInTeam }) => {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
@@ -49,9 +49,15 @@ const ThreeJsScene = () => {
   const prevTimeRef = useRef(performance.now());
 
   const [selectedCubes, setSelectedCubes] = useState([]);
-  const [showEffectMenu, setShowEffectMenu] = useState(false);
-  const [effect, setEffect] = useState('');
+  
+
   const [isPaused, setIsPaused] = useState(false);
+
+  const [showTeamAlert, setShowTeamAlert] = useState(false);
+  const [showCrosshair, setShowCrosshair] = useState(false);
+
+
+  
 
   const setupRenderer = useCallback(() => {
     if (!rendererRef.current && containerRef.current) {
@@ -100,12 +106,18 @@ const ThreeJsScene = () => {
   }, []);
 
   const enterMovementMode = useCallback((event) => {
+    if (!ourInTeam) {
+      setShowTeamAlert(true);
+      setTimeout(() => setShowTeamAlert(false), 3000); // Hide alert after 3 seconds
+      return;
+    }
+
     if (controlsRef.current && document.pointerLockElement !== containerRef.current) {
       containerRef.current.requestPointerLock();
       setShowInstructions(false);
       setIsLocked(true);
     }
-  }, []);
+  }, [ourInTeam]);
 
   const exitMovementMode = useCallback(() => {
     if (controlsRef.current) {
@@ -127,8 +139,30 @@ const ThreeJsScene = () => {
   }, []);
 
   const handleKeyDown = useCallback((event) => {
-    if (!isLocked || isPaused) return;
+    if (!isLocked) return;
     switch (event.code) {
+      case 'Enter':
+        if (selectedCubes.length > 0) {
+          const teamCubes = selectedCubes.reduce((acc, cube) => {
+            const center = [cube.position.x, cube.position.y, cube.position.z];
+            const side_length = 16; // Assuming a fixed side length
+            const cubeKey = JSON.stringify({ center, side_length });
+            acc[cubeKey] = ["Slowness"];
+            return acc;
+          }, {});
+
+          const logData = {
+            [ourInTeam]: teamCubes,
+            "Team2": {}
+          };
+
+          console.log('Enter pressed, opening effect menu');
+          console.log(JSON.stringify(logData, null, 2));
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        break;
       case 'ArrowUp':
       case 'KeyW': setMoveForward(true); break;
       case 'ArrowLeft':
@@ -142,27 +176,12 @@ const ThreeJsScene = () => {
       case 'KeyR':
         resetSelectedCubes();
         break;
-      case 'Enter':
-        if (selectedCubes.length > 0) {
-          setShowEffectMenu(true);
-          controlsRef.current.unlock();
-          setIsPaused(true);
-        }
-        break;
-      case 'Escape':
-        if (showEffectMenu) {
-          setShowEffectMenu(false);
-          setIsPaused(false);
-        } else {
-          exitMovementMode();
-          controlsRef.current.unlock();
-        }
-        event.preventDefault();
-        break;
       default:
         break;
     }
-  }, [isLocked, exitMovementMode, selectedCubes, showEffectMenu, isPaused]);
+  }, [isLocked, exitMovementMode, selectedCubes, isPaused]);
+
+
 
   const resetSelectedCubes = useCallback(() => {
     selectedCubes.forEach(cube => {
@@ -205,17 +224,15 @@ const ThreeJsScene = () => {
   }, [isLocked, handleKeyDown, handleKeyUp]);
 
   const handleMouseClick = useCallback((event) => {
+
     if (!isLocked) {
       enterMovementMode(event);
     } else if (!isPaused) {
       const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      const center = new THREE.Vector2(0, 0); // Center of the screen
 
       if (cameraRef.current && sceneRef.current) {
-        raycaster.setFromCamera(mouse, cameraRef.current);
+        raycaster.setFromCamera(center, cameraRef.current);
 
         const intersects = raycaster.intersectObjects(cubesRef.current, true);
         if (intersects.length > 0) {
@@ -232,30 +249,17 @@ const ThreeJsScene = () => {
 
           if (selectedCubes.includes(clickedCube)) {
             clickedCube.material.opacity = 0.02;
+            clickedCube.material.color.setHex(0xffffff);
             setSelectedCubes(selectedCubes.filter(cube => cube !== clickedCube));
           } else {
-            clickedCube.material.opacity = 0.5;
+            clickedCube.material.opacity = 0.1;
+            clickedCube.material.color.setHex(0xFFFFFF); // White color for selected cubes
             setSelectedCubes([...selectedCubes, clickedCube]);
           }
         }
       }
     }
   }, [isLocked, enterMovementMode, selectedCubes, isPaused]);
-
-  const applyEffect = useCallback(() => {
-    selectedCubes.forEach(cube => {
-      const cubePosition = cube.position;
-      const cubeSize = 16;
-      const x = Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
-      const y = Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
-      const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
-      console.log(`Applying effect "${effect}" to cube at (${x}, ${y}, ${z})`);
-    });
-    setShowEffectMenu(false);
-    setEffect('');
-    resetSelectedCubes();
-    setIsPaused(false);
-  }, [selectedCubes, effect, resetSelectedCubes]);
 
   useEffect(() => {
     if (initialized && containerRef.current) {
@@ -421,15 +425,6 @@ const ThreeJsScene = () => {
     directionalLight.castShadow = true;
     sceneRef.current.add(directionalLight);
 
-    // Optional: Add point lights for additional illumination
-    const pointLight1 = new THREE.PointLight(0xffffff, 0.5);
-    pointLight1.position.set(0, 50, 50);
-    sceneRef.current.add(pointLight1);
-
-    const pointLight2 = new THREE.PointLight(0xffffff, 0.5);
-    pointLight2.position.set(50, 50, -50);
-    sceneRef.current.add(pointLight2);
-
     console.log('Lighting set up.');
   };
 
@@ -585,24 +580,17 @@ const ThreeJsScene = () => {
   useEffect(() => {
     const handlePointerLockChange = () => {
       const isLocked = document.pointerLockElement === containerRef.current;
+      console.log('Pointer lock state changed:', isLocked ? 'locked' : 'unlocked');
       setIsLocked(isLocked);
       setIsInteractive(isLocked);
       setIsMoving(isLocked);
       if (!isLocked) {
         setShowInstructions(true);
-        setMovement({
-          forward: false,
-          backward: false,
-          left: false,
-          right: false,
-          up: false,
-          down: false
-        });
+        // Reset movement state
       }
     };
 
     document.addEventListener('pointerlockchange', handlePointerLockChange);
-
     return () => {
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
     };
@@ -645,6 +633,10 @@ const ThreeJsScene = () => {
     }
   }, [initialized, isLocked, enterMovementMode]);
 
+  useEffect(() => {
+    setShowCrosshair(isLocked);
+  }, [isLocked]);
+
   return (
     <div 
       ref={containerRef} 
@@ -679,32 +671,41 @@ const ThreeJsScene = () => {
           </div>
         </div>
       )}
-      {showEffectMenu && (
+
+      {showTeamAlert && (
         <div 
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(255,0,0,0.8)',
+            color: 'white',
+            padding: '10px',
+            borderRadius: '5px',
+            zIndex: 1000,
+          }}
+        >
+          You have to select a team to join before entering movement mode.
+        </div>
+      )}
+      {showCrosshair && (
+        <div
           style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
+            width: '20px',
+            height: '20px',
             transform: 'translate(-50%, -50%)',
-            background: 'rgba(0,0,0,0.8)',
-            padding: '20px',
-            borderRadius: '10px',
-            color: 'white',
-            pointerEvents: 'auto',
+            pointerEvents: 'none',
           }}
         >
-          <h2>Select Effect</h2>
-          <input 
-            type="text" 
-            value={effect} 
-            onChange={(e) => setEffect(e.target.value)}
-            placeholder="Enter effect"
-          />
-          <button onClick={applyEffect}>Apply</button>
-          <button onClick={() => {
-            setShowEffectMenu(false);
-            setIsPaused(false);
-          }}>Cancel</button>
+          <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="2" fill="white" />
+            <line x1="0" y1="10" x2="20" y2="10" stroke="white" strokeWidth="2" />
+            <line x1="10" y1="0" x2="10" y2="20" stroke="white" strokeWidth="2" />
+          </svg>
         </div>
       )}
     </div>
@@ -712,3 +713,4 @@ const ThreeJsScene = () => {
 };
 
 export default ThreeJsScene;
+

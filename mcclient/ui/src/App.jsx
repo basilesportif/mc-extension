@@ -11,8 +11,7 @@ import {
 let ws;
 import Msg from "./components/Msg";
 
-function App() {
-  const [ourInTeam, setOurInTeam] = useState(null);
+function App({ourInTeam, setOurInTeam}) {
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
