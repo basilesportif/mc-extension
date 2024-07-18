@@ -1,16 +1,18 @@
+use chrono::Utc;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init, get_blob,
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
-use chrono::Utc;
 
 mod utilities;
-use utilities::valid_position;
 mod gamelord_types;
-use gamelord_types::{ActivePlayer, Cube, CubeEffectList, TeamNameToRegion, State, GamelordRequestMinecraft, GamelordResponseMinecraft};
-use mcstructs::{GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, ChatMessage,};
+use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State};
+use mcstructs::{
+    ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
+    TeamNameToRegion,
+};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -24,12 +26,14 @@ fn load_world(state: &mut State) {
     println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
     match serde_json::from_str::<TeamNameToRegion>(&body_str) {
         Ok(new_world_config) => {
-            state.world_config = new_world_config;
+            state.lobby.world_config = new_world_config;
             state.cube_to_owner.clear();
             // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
-            for (owner, region) in state.world_config.iter() {
+            for (owner, region) in state.lobby.world_config.iter() {
                 for cube in region.cubes.keys() {
-                    state.cube_to_owner.entry(cube.clone())
+                    state
+                        .cube_to_owner
+                        .entry(cube.clone())
                         .and_modify(|owners| owners.push(owner.clone()))
                         .or_insert_with(|| vec![owner.clone()]);
                 }
@@ -126,6 +130,7 @@ fn handle_mcclient_request(
 ) -> anyhow::Result<()> {
     match request.clone() {
         McClientToGamelordRequest::Init => {
+            // sends init only to requestor (loops just look dumb)
             for player in state.lobby.team1.players.iter() {
                 if player.kinode_id == message.source().node() {
                     let diff =
@@ -190,15 +195,14 @@ fn handle_mcclient_request(
         McClientToGamelordRequest::SendMessage(chat_message) => {
             let sender_kinode_id = message.source().node().to_string();
             let sender_team = state.lobby.kinode_id_in_team(&sender_kinode_id);
-            let last_msg_id =
-                if let Some(sender_team) = sender_team {
-                    match sender_team {
-                        TeamName::Team1 => state.lobby.team1.last_message_id,
-                        TeamName::Team2 => state.lobby.team2.last_message_id,
-                    }
-                } else {
-                    return Err(anyhow::anyhow!("Sender is not in a team"));
-                };
+            let last_msg_id = if let Some(sender_team) = sender_team {
+                match sender_team {
+                    TeamName::Team1 => state.lobby.team1.last_message_id,
+                    TeamName::Team2 => state.lobby.team2.last_message_id,
+                }
+            } else {
+                return Err(anyhow::anyhow!("Sender is not in a team"));
+            };
             let id = last_msg_id + 1;
             let diff = GameLobbyDiff::Message({
                 ChatMessage {
@@ -216,6 +220,11 @@ fn handle_mcclient_request(
                 return state.update_clients(&diff);
             }
             return Ok(());
+        }
+        McClientToGamelordRequest::WorldConfigFull(world_config) => {
+            state.lobby.world_config = world_config.clone();
+            state.save();
+            return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
     }
 }
@@ -235,12 +244,15 @@ fn handle_kinode_message(
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
             // we get information about what team the player is in based on Active players
             if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
-                println!("Player {} is active in the game on team {:?}.", minecraft_id, active_player.team);
-                
+                println!(
+                    "Player {} is active in the game on team {:?}.",
+                    minecraft_id, active_player.team
+                );
+
                 // Update the player's current cube
                 active_player.current_cube = cube.clone();
-                
-                let world_config = &state.world_config;
+
+                let world_config = &state.lobby.world_config;
                 let cube_to_owner = &state.cube_to_owner;
 
                 if let Some(owners) = cube_to_owner.get(&cube) {
@@ -249,11 +261,16 @@ fn handle_kinode_message(
                         for owner in owners {
                             if let Some(team_cubes) = world_config.get(owner) {
                                 if let Some(cube_effects) = team_cubes.cubes.get(&cube) {
-                                    println!("Cube effects for enemy owner {:?}: {:?}", owner, cube_effects);
+                                    println!(
+                                        "Cube effects for enemy owner {:?}: {:?}",
+                                        owner, cube_effects
+                                    );
                                     // Send cube effects to mcdriver
-                                    let response = serde_json::to_vec(&GamelordResponseMinecraft::TransitionTriggeredResponse(
-                                        cube_effects.clone()
-                                    ))
+                                    let response = serde_json::to_vec(
+                                        &GamelordResponseMinecraft::TransitionTriggeredResponse(
+                                            cube_effects.clone(),
+                                        ),
+                                    )
                                     .expect("failed to parse gamelord cube transition response");
                                     Response::new().body(response).send().unwrap();
                                     return Ok(());
@@ -264,8 +281,9 @@ fn handle_kinode_message(
                 }
                 // If we reach here, either the cube is not owned, or it's owned by the player's team
                 println!("Cube not in enemy region, you are clear");
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse)
-                    .expect("failed to parse gamelord cube transition response");
+                let response =
+                    serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse)
+                        .expect("failed to parse gamelord cube transition response");
                 Response::new().body(response).send().unwrap();
                 Ok(())
             } else {
@@ -273,22 +291,39 @@ fn handle_kinode_message(
                 Err(anyhow::anyhow!("Player not found in active players"))
             }
         }
-        
-        // this comes from MC-Driver 
+
+        // this comes from MC-Driver
         // TO DO, connect this to the team registration interface for checking
-        GamelordRequestMinecraft::PlayerSpawnRequest{minecraft_id} => {
-            println!("Player spawn request received for player: {:?}", minecraft_id);
-            
-            let team_name = if state.lobby.team1.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+        GamelordRequestMinecraft::PlayerSpawnRequest { minecraft_id } => {
+            println!(
+                "Player spawn request received for player: {:?}",
+                minecraft_id
+            );
+
+            let team_name = if state
+                .lobby
+                .team1
+                .players
+                .iter()
+                .any(|p| p.minecraft_player_name == minecraft_id)
+            {
                 TeamName::Team1
-            } else if state.lobby.team2.players.iter().any(|p| p.minecraft_player_name == minecraft_id) {
+            } else if state
+                .lobby
+                .team2
+                .players
+                .iter()
+                .any(|p| p.minecraft_player_name == minecraft_id)
+            {
                 TeamName::Team2
             } else {
                 println!("Player {} is not assigned to a team", minecraft_id);
-                let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
-                    false,
-                    "Player is not assigned to a team.".to_string(),
-                )).expect("Failed to serialize response");
+                let response =
+                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
+                        false,
+                        "Player is not assigned to a team.".to_string(),
+                    ))
+                    .expect("Failed to serialize response");
                 Response::new().body(response).send().unwrap();
                 return Ok(());
             };
@@ -306,26 +341,30 @@ fn handle_kinode_message(
                 team: team_name.clone(),
             };
 
-            state.active_players.insert(minecraft_id.clone(), active_player);
+            state
+                .active_players
+                .insert(minecraft_id.clone(), active_player);
 
-            println!("Player {} added to active players on team {:?}", minecraft_id, &team_name);
+            println!(
+                "Player {} added to active players on team {:?}",
+                minecraft_id, &team_name
+            );
 
-            let response = serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
-                true,
-                format!("Player added to team {:?}.", &team_name),
-                spawn_cube,
-            )).expect("Failed to serialize response");
+            let response =
+                serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
+                    true,
+                    format!("Player added to team {:?}.", &team_name),
+                    spawn_cube,
+                ))
+                .expect("Failed to serialize response");
             Response::new().body(response).send().unwrap();
             Ok(())
-        },
+        }
         // Think about whether I need this
-        GamelordRequestMinecraft::PlayerLeaveRequest{minecraft_id} => {
+        GamelordRequestMinecraft::PlayerLeaveRequest { minecraft_id } => {
             if state.active_players.contains_key(&minecraft_id) {
                 state.active_players.remove(&minecraft_id);
-                println!(
-                    "Player with kinode_id {} has left the game.",
-                    &minecraft_id
-                );
+                println!("Player with kinode_id {} has left the game.", &minecraft_id);
                 state.save();
             } else {
                 println!(
@@ -392,7 +431,7 @@ fn handle_http_request(
                 println!("HTTP request path: {:?}", path);
                 match path.as_str() {
                     "/world_config" => {
-                        let response = serde_json::to_string(&state.world_config).unwrap();
+                        let response = serde_json::to_string(&state.lobby.world_config).unwrap();
                         http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
                     "/active_players" => {
@@ -402,13 +441,16 @@ fn handle_http_request(
                     "/api/loadWorld" => load_world(state),
                     "/api/addPlayer" => add_player(state),
                     "/api/deleteWorld" => {
-                        state.world_config.clear();
+                        state.lobby.world_config.clear();
                         state.cube_to_owner.clear();
                         state.save();
                         println!("World deleted from request");
                         http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
                     }
                     "/api/clearTeams" => {
+                        // need to update clients with lobby with empty teams before actually clearing teams, 
+                        // because it sends update to team members
+                        let _ = state.update_clients(&GameLobbyDiff::Init(state.lobby.clone().clear_teams()));
                         state.lobby.clear_teams();
                         state.save();
                         let blob = LazyLoadBlob {
@@ -416,7 +458,6 @@ fn handle_http_request(
                             bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
                         };
                         send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-
                         http::send_response(http::StatusCode::OK, None, b"Teams Cleared".to_vec());
                     }
                     "/api/editLobby" => edit_lobby(state, ws_channel_id).unwrap_or(()),

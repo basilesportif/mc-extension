@@ -9,8 +9,10 @@ import {
   MessageInput,
 } from "@chatscope/chat-ui-kit-react";
 let ws;
+import Msg from "./components/Msg";
 
 function App() {
+  const [ourInTeam, setOurInTeam] = useState(null);
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
@@ -39,11 +41,15 @@ function App() {
 
   useEffect(() => {
     console.log("lobby", lobby);
+    if (ourNode && lobby) {
+      setOurInTeam(nodeInTeam(ourNode, lobby));
+    }
   }, [lobby]);
 
   useEffect(() => {
     console.log("ourNode", ourNode);
-  }, [ourNode]);
+    console.log("ourInTeam", ourInTeam);
+  }, [ourNode, ourInTeam]);
 
   async function joinTeam(team_name) {
     console.log("join team");
@@ -90,7 +96,6 @@ function App() {
       return null;
     }
   };
-  
 
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -128,106 +133,119 @@ function App() {
   return (
     <div>
       <h2>McClient</h2>
-      <div style={{ position: "relative" }}>
-        <MainContainer>
-          <ChatContainer>
-            <MessageList>
-              {nodeInTeam(ourNode, lobby) === "team1" ? (
-                lobby.team1.messages.map((message, index) => (
-                  <Message
-                    key={message.id}
-                    model={{
-                      message: message.msg,
-                      sentTime: message.time,
-                      sender: message.from.kinode_id,
-                    }}
-                  >
-                    <Message.Header
-                      sender={message.from.kinode_id}
-                      sentTime={message.time}
-                    />
-                  </Message>
-                ))
-              ) : nodeInTeam(ourNode, lobby) === "team2" ? (
-                lobby.team2.messages.map((message, index) => (
-                  <Message
-                    key={message.id}
-                    model={{
-                      message: message.msg,
-                      sentTime: message.time,
-                      sender: message.from.kinode_id,
-                    }}
-                  >
-                    <Message.Header
-                      sender={message.from.kinode_id}
-                      sentTime={message.time}
-                    />
-                  </Message>
+      {ourInTeam === null && (
+        <>
+          <h3>Join Team</h3>
+          <form id="playerForm">
+            <input
+              type="text"
+              id="gamelordId"
+              placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
+            />
+            <input
+              type="text"
+              id="minecraftId"
+              placeholder="Enter Your Minecraft ID"
+            />
+            <button type="button" onClick={() => joinTeam("Team1")}>
+              Join Team1
+            </button>
+            <button type="button" onClick={() => joinTeam("Team2")}>
+              Join Team2
+            </button>
+          </form>
+        </>
+      )}
+      <div style={{ textAlign: "left" }}>
+        <p>Game: {lobby.name}</p>
+        <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div>
+            <h4>Team 1</h4>
+            <ul>
+              {lobby.team1?.players?.length > 0 ? (
+                lobby.team1.players.map((player, index) => (
+                  <p key={index}>{player.kinode_id}</p>
                 ))
               ) : (
-                <Message model={{
-                  message: "You are not in a team yet. Join a team to see messages.",
-                  sentTime: "",
-                  sender: "System"
-                }} />
+                <p>No players in Team 1</p>
               )}
-            </MessageList>
-            <MessageInput
-              placeholder="Type message here"
-              attachButton={false}
-              onSend={onSend}
-            />
-          </ChatContainer>
-        </MainContainer>
-      </div>
-      <h3>Join Team</h3>
-      <form id="playerForm">
-        <input
-          type="text"
-          id="gamelordId"
-          placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
-        />
-        <input
-          type="text"
-          id="minecraftId"
-          placeholder="Enter Your Minecraft ID"
-        />
-        <button type="button" onClick={() => joinTeam("Team1")}>
-          Join Team1
-        </button>
-        <button type="button" onClick={() => joinTeam("Team2")}>
-          Join Team2
-        </button>
-      </form>
-      <div>
-        <p>Server Name: {lobby.name}</p>
-        <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
-        <div>
-          <h4>Team 1</h4>
-          <ul>
-            {lobby.team1?.players?.length > 0 ? (
-              lobby.team1.players.map((player, index) => (
-                <p key={index}>{player.kinode_id}</p>
-              ))
-            ) : (
-              <p>No players in Team 1</p>
-            )}
-          </ul>
-        </div>
-        <div>
-          <h4>Team 2</h4>
-          <ul>
-            {lobby.team2?.players?.length > 0 ? (
-              lobby.team2.players.map((player, index) => (
-                <p key={index}>{player.kinode_id}</p>
-              ))
-            ) : (
-              <p>No players in Team 2</p>
-            )}
-          </ul>
+            </ul>
+          </div>
+          <div>
+            <h4>Team 2</h4>
+            <ul>
+              {lobby.team2?.players?.length > 0 ? (
+                lobby.team2.players.map((player, index) => (
+                  <p key={index}>{player.kinode_id}</p>
+                ))
+              ) : (
+                <p>No players in Team 2</p>
+              )}
+            </ul>
+          </div>
         </div>
       </div>
       <pre id="response-output"></pre>
+      <div
+        style={{
+          position: "relative",
+        }}
+      >
+        {ourInTeam === null ? (
+          <p>You are not in a team yet. Join a team to see messages.</p>
+        ) : (
+          <>
+            <p>{ourInTeam} Chat</p>
+
+            <MainContainer
+              style={{
+                width: "100%",
+                height: "50vh",
+                border: "1px solid #ccc",
+              }}
+            >
+              <ChatContainer>
+                <MessageList
+                  style={{
+                    height: "50vh",
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column-reverse",
+                    border: "1px solid #ccc",
+                  }}
+                >
+                  {nodeInTeam(ourNode, lobby) === "team1" ? (
+                    lobby.team1.messages.map((message, index) => (
+                      <Msg key={message.id} message={message} />
+                    ))
+                  ) : nodeInTeam(ourNode, lobby) === "team2" ? (
+                    lobby.team2.messages.map((message, index) => (
+                      <Msg key={message.id} message={message} />
+                    ))
+                  ) : (
+                    <Message
+                      model={{
+                        message:
+                          "You are not in a team yet. Join a team to see messages.",
+                        sentTime: "",
+                        sender: "System",
+                      }}
+                    />
+                  )}
+                </MessageList>
+                <MessageInput
+                  style={{ border: "1px solid #ccc" }}
+                  placeholder="Type message here"
+                  attachButton={false}
+                  sendButton={false}
+                  onSend={onSend}
+                />
+              </ChatContainer>
+            </MainContainer>
+          </>
+        )}
+      </div>
     </div>
   );
 }

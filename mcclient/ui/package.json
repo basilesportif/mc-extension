@@ -16,6 +16,7 @@
     "predev": "npm run copy-shared"
   },
   "dependencies": {
+    "three": "^0.166.1",
     "@chatscope/chat-ui-kit-react": "^2.0.3",
     "@chatscope/chat-ui-kit-styles": "^1.4.0",
     "react": "^18.3.1",

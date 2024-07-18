@@ -1,5 +1,5 @@
-use crate::gamelord_types::{Cube, Owner, Region, Owner::TeamName};
-use mcstructs::{Player, GameLobby};
+use crate::gamelord_types::{Owner, Owner::TeamName};
+use mcstructs::{Player, GameLobby, Cube, Region};
 use std::collections::HashMap;
 
 // TODO: Change this function to determine effects that are applied, else do nothing

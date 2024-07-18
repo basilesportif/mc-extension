@@ -1,6 +1,8 @@
 use kinode_process_lib::{println, NodeId};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Player {
@@ -46,6 +48,7 @@ pub enum McClientToGamelordRequest {
     Init,               // requests for all gamelobby data on initialization
     JoinTeam(JoinTeam), // request to join team
     SendMessage(String),// sends message to chat to which they belong
+    WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -58,6 +61,7 @@ pub enum WsPush {
 pub struct GameLobby {
     pub name: String,
     pub minecraft_server_address: String,
+    pub world_config: TeamNameToRegion,
     pub team1: Team,
     pub team2: Team,
 }
@@ -78,6 +82,7 @@ impl GameLobby {
                 messages: Vec::new(),
                 last_message_id: 0,
             },
+            world_config: HashMap::new(),
         }
     }
     pub fn player_in_team(&self, player: &Player) -> Option<TeamName> {
@@ -187,6 +192,10 @@ impl GameLobby {
                 }
                 Ok(self.clone())
             }
+            GameLobbyDiff::WorldConfigFull(world_config) => {
+                self.world_config = world_config.clone();
+                Ok(self.clone())
+            }
         }
     }
 }
@@ -197,6 +206,8 @@ pub enum GameLobbyDiff {
     AddPlayerToTeam { player: Player, team: TeamName },
     EditLobby { name: String, minecraft_server_address: String },
     Message(ChatMessage),
+    WorldConfigFull(TeamNameToRegion),
+    // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),
 }
 
@@ -211,4 +222,47 @@ pub struct ChatMessage {
 #[derive(Debug, Clone, Deserialize)]
 pub enum ChatRequest {
     SendMessage(String),
+}
+
+pub type TeamNameToRegion = HashMap<TeamName, Region>;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Region {
+    pub cubes: HashMap<Cube, CubeEffectList>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
+pub struct Cube {
+    pub center: (i32, i32, i32),
+    pub side_length: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Effect{
+    Slowness
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CubeEffectList{
+    effects: Vec<Effect>
+}
+
+impl Cube {
+    pub fn identifier(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+impl PartialEq for Cube {
+    fn eq(&self, other: &Self) -> bool {
+        self.center == other.center && self.side_length == other.side_length
+    }
+}
+
+impl Hash for Cube {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.center.hash(state);
+        self.side_length.hash(state);
+    }
 }
