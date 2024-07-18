@@ -5,17 +5,21 @@ function App() {
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
+    world_config: {},
+    goal_post: {center: [0,0,0], side_length: 1},
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
+      spawn_point: {center: [0,0,0], side_length: 1},
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
+      spawn_point: {center: [0,0,0], side_length: 1},
     },
   });
   const [activeTab, setActiveTab] = useState("tab1");
@@ -195,15 +199,15 @@ function App() {
   };
 
   const configurePoints = () => {
-    const team1SpawnX = document.getElementById("team1SpawnX").value;
-    const team1SpawnY = document.getElementById("team1SpawnY").value;
-    const team1SpawnZ = document.getElementById("team1SpawnZ").value;
-    const team2SpawnX = document.getElementById("team2SpawnX").value;
-    const team2SpawnY = document.getElementById("team2SpawnY").value;
-    const team2SpawnZ = document.getElementById("team2SpawnZ").value;
-    const goalPostX = document.getElementById("goalPostX").value;
-    const goalPostY = document.getElementById("goalPostY").value;
-    const goalPostZ = document.getElementById("goalPostZ").value;
+    const team1SpawnX = parseInt(document.getElementById("team1SpawnX").value || "0", 10);
+    const team1SpawnY = parseInt(document.getElementById("team1SpawnY").value || "0", 10);
+    const team1SpawnZ = parseInt(document.getElementById("team1SpawnZ").value || "0", 10);
+    const team2SpawnX = parseInt(document.getElementById("team2SpawnX").value || "0", 10);
+    const team2SpawnY = parseInt(document.getElementById("team2SpawnY").value || "0", 10);
+    const team2SpawnZ = parseInt(document.getElementById("team2SpawnZ").value || "0", 10);
+    const goalPostX = parseInt(document.getElementById("goalPostX").value || "0", 10);
+    const goalPostY = parseInt(document.getElementById("goalPostY").value || "0", 10);
+    const goalPostZ = parseInt(document.getElementById("goalPostZ").value || "0", 10);
 
     const data = {
       team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 1 },

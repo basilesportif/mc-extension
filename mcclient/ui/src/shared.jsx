@@ -75,6 +75,21 @@ export function applyDiff(data, setLobby) {
       });
       console.log("Message", data.Message);
       break;
+    case "ConfigurePoints":
+      console.log("ConfigurePoints", data.ConfigurePoints);
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        goal_post: data.ConfigurePoints.goal_post,
+        team1: {
+          ...prevLobby.team1,
+          spawn_point: data.ConfigurePoints.team1_spawn,
+        },
+        team2: {
+          ...prevLobby.team2,
+          spawn_point: data.ConfigurePoints.team2_spawn,
+        },
+      }));
+      break;
     default:
       console.log("Unknown websocket message:", data);
       break;

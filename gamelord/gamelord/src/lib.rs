@@ -421,6 +421,7 @@ fn handle_http_request(
                         team2_spawn,
                         goal_post,
                     };
+                    println!("diff: {:?}", diff);
                     let _ = state.lobby.apply_diff(&diff);
                     state.save();
                     let _ = state.update_clients(&diff);

@@ -16,17 +16,21 @@ function App() {
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
+    world_config: {},
+    goal_post: {center: [0,0,0], side_length: 1},
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
+      spawn_point: {center: [0,0,0], side_length: 1},
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
+      spawn_point: {center: [0,0,0], side_length: 1},
     },
   });
   const [ourNode, setOurNode] = useState(null);
