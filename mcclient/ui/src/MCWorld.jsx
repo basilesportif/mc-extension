@@ -44,6 +44,10 @@ const ThreeJsScene = () => {
   const [moveUp, setMoveUp] = useState(false);
   const [moveDown, setMoveDown] = useState(false);
 
+  const velocityRef = useRef(new THREE.Vector3());
+  const directionRef = useRef(new THREE.Vector3());
+  const prevTimeRef = useRef(performance.now());
+
   const setupRenderer = useCallback(() => {
     if (!rendererRef.current && containerRef.current) {
       const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -206,35 +210,33 @@ const ThreeJsScene = () => {
     if (!isLocked || !controlsRef.current) return;
 
     const currentTime = performance.now();
-    const delta = (currentTime - prevTime) / 1000;
+    const delta = (currentTime - prevTimeRef.current) / 1000;
 
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
-    velocity.y -= velocity.y * 10.0 * delta;
+    velocityRef.current.x -= velocityRef.current.x * 10.0 * delta;
+    velocityRef.current.z -= velocityRef.current.z * 10.0 * delta;
+    velocityRef.current.y -= velocityRef.current.y * 10.0 * delta;
 
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.y = Number(moveUp) - Number(moveDown);
-    direction.normalize();
+    directionRef.current.z = Number(moveForward) - Number(moveBackward);
+    directionRef.current.x = Number(moveRight) - Number(moveLeft);
+    directionRef.current.y = Number(moveUp) - Number(moveDown);
+    directionRef.current.normalize();
 
-    const speed = 400.0;
-    if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-    if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
-    // remember to try without the if statement
-    if (controlsRef.current) {
-      controlsRef.current.moveRight(-velocity.x * delta);
-      controlsRef.current.moveForward(-velocity.z * delta);
-      controlsRef.current.getObject().position.y += velocity.y * delta;
-    }
+    const speed = 500.0; // Increased speed for more responsive movement
+    if (moveForward || moveBackward) velocityRef.current.z -= directionRef.current.z * speed * delta;
+    if (moveLeft || moveRight) velocityRef.current.x -= directionRef.current.x * speed * delta;
+    if (moveUp || moveDown) velocityRef.current.y += directionRef.current.y * speed * delta;
+
+    controlsRef.current.moveRight(-velocityRef.current.x * delta);
+    controlsRef.current.moveForward(-velocityRef.current.z * delta);
+    controlsRef.current.getObject().position.y += velocityRef.current.y * delta;
 
     // Keep the sky centered on the camera
     if (skyRef.current) {
       skyRef.current.position.copy(controlsRef.current.getObject().position);
     }
 
-    setPrevTime(currentTime);
-  }, [isLocked, moveForward, moveBackward, moveLeft, moveRight, moveUp, moveDown, prevTime]);
+    prevTimeRef.current = currentTime;
+  }, [isLocked, moveForward, moveBackward, moveLeft, moveRight, moveUp, moveDown]);
 
   const handleAnimationFrame = useCallback(() => {
     handleMovement();
@@ -246,7 +248,7 @@ const ThreeJsScene = () => {
 
   useEffect(() => {
     if (initialized) {
-      handleAnimationFrame();
+      animationFrameRef.current = requestAnimationFrame(handleAnimationFrame);
     }
     return () => {
       if (animationFrameRef.current) {
