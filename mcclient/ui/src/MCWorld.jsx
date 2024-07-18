@@ -48,6 +48,11 @@ const ThreeJsScene = () => {
   const directionRef = useRef(new THREE.Vector3());
   const prevTimeRef = useRef(performance.now());
 
+  const [selectedCubes, setSelectedCubes] = useState([]);
+  const [showEffectMenu, setShowEffectMenu] = useState(false);
+  const [effect, setEffect] = useState('');
+  const [isPaused, setIsPaused] = useState(false);
+
   const setupRenderer = useCallback(() => {
     if (!rendererRef.current && containerRef.current) {
       const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -122,7 +127,7 @@ const ThreeJsScene = () => {
   }, []);
 
   const handleKeyDown = useCallback((event) => {
-    if (!isLocked) return;
+    if (!isLocked || isPaused) return;
     switch (event.code) {
       case 'ArrowUp':
       case 'KeyW': setMoveForward(true); break;
@@ -134,14 +139,37 @@ const ThreeJsScene = () => {
       case 'KeyD': setMoveRight(true); break;
       case 'Space': setMoveUp(true); break;
       case 'ShiftLeft': setMoveDown(true); break;
+      case 'KeyR':
+        resetSelectedCubes();
+        break;
+      case 'Enter':
+        if (selectedCubes.length > 0) {
+          setShowEffectMenu(true);
+          controlsRef.current.unlock();
+          setIsPaused(true);
+        }
+        break;
       case 'Escape':
-        exitMovementMode();
+        if (showEffectMenu) {
+          setShowEffectMenu(false);
+          setIsPaused(false);
+        } else {
+          exitMovementMode();
+          controlsRef.current.unlock();
+        }
         event.preventDefault();
         break;
       default:
         break;
     }
-  }, [isLocked, exitMovementMode]);
+  }, [isLocked, exitMovementMode, selectedCubes, showEffectMenu, isPaused]);
+
+  const resetSelectedCubes = useCallback(() => {
+    selectedCubes.forEach(cube => {
+      cube.material.opacity = 0.02;
+    });
+    setSelectedCubes([]);
+  }, [selectedCubes]);
 
   const handleKeyUp = useCallback((event) => {
     if (!isLocked) return;
@@ -178,14 +206,11 @@ const ThreeJsScene = () => {
 
   const handleMouseClick = useCallback((event) => {
     if (!isLocked) {
-      // If not in movement mode, enter it
       enterMovementMode(event);
-    } else {
-      // If already in movement mode, handle cube selection
+    } else if (!isPaused) {
       const raycaster = new THREE.Raycaster();
       const mouse = new THREE.Vector2();
 
-      // Calculate mouse position in normalized device coordinates
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -197,7 +222,6 @@ const ThreeJsScene = () => {
           const clickedCube = intersects[0].object;
           const cubePosition = clickedCube.position;
 
-          // Calculate the cube's center relative to world origin
           const cubeSize = 16;
           const x = Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
           const y = Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
@@ -206,16 +230,32 @@ const ThreeJsScene = () => {
           console.log(`Selected cube center: (${x}, ${y}, ${z})`);
           console.log(`Raw cube position: (${cubePosition.x}, ${cubePosition.y}, ${cubePosition.z})`);
 
-          // Highlight the selected cube (optional)
-          if (selectedCube) {
-            selectedCube.material.opacity = 0.02; // Reset previous cube opacity
+          if (selectedCubes.includes(clickedCube)) {
+            clickedCube.material.opacity = 0.02;
+            setSelectedCubes(selectedCubes.filter(cube => cube !== clickedCube));
+          } else {
+            clickedCube.material.opacity = 0.5;
+            setSelectedCubes([...selectedCubes, clickedCube]);
           }
-          clickedCube.material.opacity = 0.5; // Highlight selected cube
-          setSelectedCube(clickedCube);
         }
       }
     }
-  }, [isLocked, enterMovementMode, selectedCube]);
+  }, [isLocked, enterMovementMode, selectedCubes, isPaused]);
+
+  const applyEffect = useCallback(() => {
+    selectedCubes.forEach(cube => {
+      const cubePosition = cube.position;
+      const cubeSize = 16;
+      const x = Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
+      const y = Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
+      const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
+      console.log(`Applying effect "${effect}" to cube at (${x}, ${y}, ${z})`);
+    });
+    setShowEffectMenu(false);
+    setEffect('');
+    resetSelectedCubes();
+    setIsPaused(false);
+  }, [selectedCubes, effect, resetSelectedCubes]);
 
   useEffect(() => {
     if (initialized && containerRef.current) {
@@ -230,7 +270,7 @@ const ThreeJsScene = () => {
   }, [initialized, handleMouseClick]);
 
   const handleMovement = useCallback(() => {
-    if (!isLocked || !controlsRef.current) return;
+    if (!isLocked || isPaused || !controlsRef.current) return;
 
     const currentTime = performance.now();
     const delta = (currentTime - prevTimeRef.current) / 1000;
@@ -244,7 +284,7 @@ const ThreeJsScene = () => {
     directionRef.current.y = Number(moveUp) - Number(moveDown);
     directionRef.current.normalize();
 
-    const speed = 500.0; // Increased speed for more responsive movement
+    const speed = 500.0;
     if (moveForward || moveBackward) velocityRef.current.z -= directionRef.current.z * speed * delta;
     if (moveLeft || moveRight) velocityRef.current.x -= directionRef.current.x * speed * delta;
     if (moveUp || moveDown) velocityRef.current.y += directionRef.current.y * speed * delta;
@@ -253,13 +293,12 @@ const ThreeJsScene = () => {
     controlsRef.current.moveForward(-velocityRef.current.z * delta);
     controlsRef.current.getObject().position.y += velocityRef.current.y * delta;
 
-    // Keep the sky centered on the camera
     if (skyRef.current) {
       skyRef.current.position.copy(controlsRef.current.getObject().position);
     }
 
     prevTimeRef.current = currentTime;
-  }, [isLocked, moveForward, moveBackward, moveLeft, moveRight, moveUp, moveDown]);
+  }, [isLocked, moveForward, moveBackward, moveLeft, moveRight, moveUp, moveDown, isPaused]);
 
   const handleAnimationFrame = useCallback(() => {
     handleMovement();
@@ -303,7 +342,6 @@ const ThreeJsScene = () => {
       setupPointerLockControls();
     } catch (error) {
       console.error('Error initializing scene:', error);
-      // Handle the error appropriately (e.g., show user message)
     }
   };
 
@@ -373,12 +411,25 @@ const ThreeJsScene = () => {
   };
 
   const setupLighting = () => {
-    const ambientLight = new THREE.AmbientLight(0x404040);
+    // Ambient light
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
     sceneRef.current.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(1, 1, 1);
+    // Directional light (sun-like)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(100, 100, 50);
+    directionalLight.castShadow = true;
     sceneRef.current.add(directionalLight);
+
+    // Optional: Add point lights for additional illumination
+    const pointLight1 = new THREE.PointLight(0xffffff, 0.5);
+    pointLight1.position.set(0, 50, 50);
+    sceneRef.current.add(pointLight1);
+
+    const pointLight2 = new THREE.PointLight(0xffffff, 0.5);
+    pointLight2.position.set(50, 50, -50);
+    sceneRef.current.add(pointLight2);
+
     console.log('Lighting set up.');
   };
 
@@ -461,12 +512,12 @@ const ThreeJsScene = () => {
     const size = bbox.getSize(new THREE.Vector3());
     const center = bbox.getCenter(new THREE.Vector3());
 
-    const cubeSize = 16; // Each cube represents a 16x16x16 block volume
+    const cubeSize = 16;
     const gridX = Math.ceil(size.x / cubeSize);
     const gridY = Math.ceil(size.y / cubeSize);
     const gridZ = Math.ceil(size.z / cubeSize);
 
-    const gridGroup = new THREE.Group(); // Create a group for the grid
+    const gridGroup = new THREE.Group();
 
     const offsetX = Math.floor(gridX / 2) * cubeSize;
     const offsetY = Math.floor(bbox.min.y / cubeSize) * cubeSize;
@@ -479,25 +530,23 @@ const ThreeJsScene = () => {
         for (let k = 0; k < gridZ; k++) {
           const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
           const material = new THREE.MeshPhongMaterial({
-            color: 0xffffff, // White color
+            color: 0xffffff,
             transparent: true,
-            opacity: 0.02, // Very low opacity
+            opacity: 0.02,
             side: THREE.DoubleSide
           });
           const cube = new THREE.Mesh(geometry, material);
           
-          // Add wireframe for edges with very subtle color
           const edgesGeometry = new THREE.EdgesGeometry(geometry);
           const edgesMaterial = new THREE.LineBasicMaterial({ 
-            color: 0xcccccc, // Light gray
+            color: 0xcccccc,
             transparent: true,
-            opacity: 0.1, // Low opacity for edges
+            opacity: 0.1,
             linewidth: 1 
           });
           const wireframe = new THREE.LineSegments(edgesGeometry, edgesMaterial);
           cube.add(wireframe);
           
-          // Position the cube center
           cube.position.set(
             i * cubeSize - offsetX + cubeSize / 2,
             j * cubeSize + offsetY + cubeSize / 2,
@@ -511,7 +560,6 @@ const ThreeJsScene = () => {
       }
     }
 
-    // Center the Minecraft world
     minecraftWorld.position.set(-center.x, -bbox.min.y, -center.z);
 
     scene.add(gridGroup);
@@ -626,7 +674,37 @@ const ThreeJsScene = () => {
             WASD or Arrow keys to move, Space to go up, Shift to go down
             <br />
             Mouse to look around, ESC to exit, Click to select cubes
+            <br />
+            R to reset selection, Enter to open effect menu
           </div>
+        </div>
+      )}
+      {showEffectMenu && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0,0,0,0.8)',
+            padding: '20px',
+            borderRadius: '10px',
+            color: 'white',
+            pointerEvents: 'auto',
+          }}
+        >
+          <h2>Select Effect</h2>
+          <input 
+            type="text" 
+            value={effect} 
+            onChange={(e) => setEffect(e.target.value)}
+            placeholder="Enter effect"
+          />
+          <button onClick={applyEffect}>Apply</button>
+          <button onClick={() => {
+            setShowEffectMenu(false);
+            setIsPaused(false);
+          }}>Cancel</button>
         </div>
       )}
     </div>
