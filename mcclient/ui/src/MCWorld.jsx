@@ -104,7 +104,7 @@ const ThreeJsScene = () => {
 
   const exitMovementMode = useCallback(() => {
     if (controlsRef.current) {
-      controlsRef.current.unlock();
+      document.exitPointerLock();
     }
     setShowInstructions(true);
     setIsInteractive(false);
@@ -177,34 +177,57 @@ const ThreeJsScene = () => {
   }, [isLocked, handleKeyDown, handleKeyUp]);
 
   const handleMouseClick = useCallback((event) => {
-    const { clientX, clientY } = event;
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    mouse.x = (clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+    if (!isLocked) {
+      // If not in movement mode, enter it
+      enterMovementMode(event);
+    } else {
+      // If already in movement mode, handle cube selection
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
 
-    if (cameraRef.current && sceneRef.current) {
-      raycaster.setFromCamera(mouse, cameraRef.current);
+      // Calculate mouse position in normalized device coordinates
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-      const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
-      if (intersects.length > 0) {
-        const intersectedObject = intersects[0].object;
-        if (intersectedObject.userData.isMinecraftWorld) {
+      if (cameraRef.current && sceneRef.current) {
+        raycaster.setFromCamera(mouse, cameraRef.current);
+
+        const intersects = raycaster.intersectObjects(cubesRef.current, true);
+        if (intersects.length > 0) {
+          const clickedCube = intersects[0].object;
+          const cubePosition = clickedCube.position;
+
+          // Calculate the cube's center relative to world origin
+          const cubeSize = 16;
+          const x = Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
+          const y = Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
+          const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
+
+          console.log(`Selected cube center: (${x}, ${y}, ${z})`);
+          console.log(`Raw cube position: (${cubePosition.x}, ${cubePosition.y}, ${cubePosition.z})`);
+
+          // Highlight the selected cube (optional)
           if (selectedCube) {
-            selectedCube.material.opacity = 1;
+            selectedCube.material.opacity = 0.02; // Reset previous cube opacity
           }
-          setSelectedCube(intersectedObject);
-          intersectedObject.material.opacity = 0.5;
+          clickedCube.material.opacity = 0.5; // Highlight selected cube
+          setSelectedCube(clickedCube);
         }
       }
     }
-  }, [isMoving, selectedCube]);
+  }, [isLocked, enterMovementMode, selectedCube]);
 
   useEffect(() => {
-    if (selectedCube) {
-      selectedCube.material.opacity = 0.5;
+    if (initialized && containerRef.current) {
+      containerRef.current.addEventListener('click', handleMouseClick);
+
+      return () => {
+        if (containerRef.current) {
+          containerRef.current.removeEventListener('click', handleMouseClick);
+        }
+      };
     }
-  }, [selectedCube]);
+  }, [initialized, handleMouseClick]);
 
   const handleMovement = useCallback(() => {
     if (!isLocked || !controlsRef.current) return;
@@ -376,7 +399,6 @@ const ThreeJsScene = () => {
   const loadMinecraftWorld = () => {
     return new Promise((resolve, reject) => {
       if (!shouldLoadWorld) {
-        // If the user has exited the interactive mode, don't load the world
         resolve();
         return;
       }
@@ -410,6 +432,7 @@ const ThreeJsScene = () => {
               sceneRef.current.add(object);
               minecraftWorldRef.current = object;
               console.log('Minecraft world added to scene.');
+              createCubesBasedOnMinecraftWorld();
               resolve();
             },
             undefined,
@@ -426,6 +449,74 @@ const ThreeJsScene = () => {
         }
       );
     });
+  };
+
+  const createCubesBasedOnMinecraftWorld = () => {
+    if (!minecraftWorldRef.current || !sceneRef.current) return;
+
+    const minecraftWorld = minecraftWorldRef.current;
+    const scene = sceneRef.current;
+
+    const bbox = new THREE.Box3().setFromObject(minecraftWorld);
+    const size = bbox.getSize(new THREE.Vector3());
+    const center = bbox.getCenter(new THREE.Vector3());
+
+    const cubeSize = 16; // Each cube represents a 16x16x16 block volume
+    const gridX = Math.ceil(size.x / cubeSize);
+    const gridY = Math.ceil(size.y / cubeSize);
+    const gridZ = Math.ceil(size.z / cubeSize);
+
+    const gridGroup = new THREE.Group(); // Create a group for the grid
+
+    const offsetX = Math.floor(gridX / 2) * cubeSize;
+    const offsetY = Math.floor(bbox.min.y / cubeSize) * cubeSize;
+    const offsetZ = Math.floor(gridZ / 2) * cubeSize;
+
+    const newCubes = [];
+
+    for (let i = 0; i < gridX; i++) {
+      for (let j = 0; j < gridY; j++) {
+        for (let k = 0; k < gridZ; k++) {
+          const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+          const material = new THREE.MeshPhongMaterial({
+            color: 0xffffff, // White color
+            transparent: true,
+            opacity: 0.02, // Very low opacity
+            side: THREE.DoubleSide
+          });
+          const cube = new THREE.Mesh(geometry, material);
+          
+          // Add wireframe for edges with very subtle color
+          const edgesGeometry = new THREE.EdgesGeometry(geometry);
+          const edgesMaterial = new THREE.LineBasicMaterial({ 
+            color: 0xcccccc, // Light gray
+            transparent: true,
+            opacity: 0.1, // Low opacity for edges
+            linewidth: 1 
+          });
+          const wireframe = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+          cube.add(wireframe);
+          
+          // Position the cube center
+          cube.position.set(
+            i * cubeSize - offsetX + cubeSize / 2,
+            j * cubeSize + offsetY + cubeSize / 2,
+            k * cubeSize - offsetZ + cubeSize / 2
+          );
+          
+          cube.userData.clicked = false;
+          gridGroup.add(cube);
+          newCubes.push(cube);
+        }
+      }
+    }
+
+    // Center the Minecraft world
+    minecraftWorld.position.set(-center.x, -bbox.min.y, -center.z);
+
+    scene.add(gridGroup);
+    cubesRef.current = newCubes;
+    console.log('Cubes created based on Minecraft world.');
   };
 
   const getTextureType = (textureName) => {
@@ -510,7 +601,6 @@ const ThreeJsScene = () => {
     <div 
       ref={containerRef} 
       style={{ width: '100%', height: '100%', position: 'relative' }}
-      onClick={enterMovementMode}
       tabIndex="0"
     >
       {showInstructions && (
@@ -535,7 +625,7 @@ const ThreeJsScene = () => {
           <div style={{ fontSize: '18px', marginTop: '20px' }}>
             WASD or Arrow keys to move, Space to go up, Shift to go down
             <br />
-            Mouse to look around, ESC to exit, Click to resume
+            Mouse to look around, ESC to exit, Click to select cubes
           </div>
         </div>
       )}
