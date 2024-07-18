@@ -79,9 +79,6 @@ fn handle_http_request(
             };
             let ws_push = serde_json::from_slice::<WsPush>(&blob.bytes)?;
             match ws_push {
-                WsPush::GetInit => {
-                    // do nothing
-                }
                 WsPush::SendMessage(message) => {
                     println!("mcclient: received message: {}", message);
                     if let Some(gamelord) = &state.gamelord_address {
@@ -93,6 +90,7 @@ fn handle_http_request(
                         return Err(anyhow::anyhow!("mcclient: no gamelord address"));
                     }
                 }
+                _ => {}
             }
             return Ok(());
         }

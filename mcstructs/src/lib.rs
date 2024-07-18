@@ -4,6 +4,7 @@ use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Player {
     pub kinode_id: NodeId,
@@ -22,6 +23,7 @@ pub struct Team {
     pub players: HashSet<Player>,
     pub messages: Vec<ChatMessage>,
     pub last_message_id: u64,
+    pub spawn_point: Cube,
 }
 
 impl Team {
@@ -55,6 +57,11 @@ pub enum McClientToGamelordRequest {
 pub enum WsPush {
     GetInit,
     SendMessage(String),
+    ConfigurePoints {
+        team1_spawn: Cube,
+        team2_spawn: Cube,
+        goal_post: Cube,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +69,7 @@ pub struct GameLobby {
     pub name: String,
     pub minecraft_server_address: String,
     pub world_config: TeamNameToRegion,
+    pub goal_post: Cube,
     pub team1: Team,
     pub team2: Team,
 }
@@ -75,14 +83,17 @@ impl GameLobby {
                 players: HashSet::new(),
                 messages: Vec::new(),
                 last_message_id: 0,
+                spawn_point: Cube::new(),
             },
             team2: Team {
                 name: TeamName::Team2,
                 players: HashSet::new(),
                 messages: Vec::new(),
                 last_message_id: 0,
+                spawn_point: Cube::new(),
             },
             world_config: HashMap::new(),
+            goal_post: Cube::new(),
         }
     }
     pub fn player_in_team(&self, player: &Player) -> Option<TeamName> {
@@ -130,12 +141,14 @@ impl GameLobby {
             players: HashSet::new(),
             messages: Vec::new(),
             last_message_id: 0,
+            spawn_point: Cube::new(),
         };
         self.team2 = Team {
             name: TeamName::Team2,
             players: HashSet::new(),
             messages: Vec::new(),
             last_message_id: 0,
+            spawn_point: Cube::new(),
         };
         self.clone()
     }
@@ -196,6 +209,12 @@ impl GameLobby {
                 self.world_config = world_config.clone();
                 Ok(self.clone())
             }
+            GameLobbyDiff::ConfigurePoints { team1_spawn, team2_spawn, goal_post } => {
+                self.team1.spawn_point = team1_spawn.clone();
+                self.team2.spawn_point = team2_spawn.clone();
+                self.goal_post = goal_post.clone();
+                Ok(self.clone())
+            }
         }
     }
 }
@@ -207,6 +226,7 @@ pub enum GameLobbyDiff {
     EditLobby { name: String, minecraft_server_address: String },
     Message(ChatMessage),
     WorldConfigFull(TeamNameToRegion),
+    ConfigurePoints { team1_spawn: Cube, team2_spawn: Cube, goal_post: Cube },
     // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),
 }
@@ -237,6 +257,7 @@ pub struct Cube {
     pub side_length: i32,
 }
 
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Effect{
     Slowness
@@ -251,6 +272,12 @@ impl Cube {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
         hasher.finish()
+    }
+    pub fn new() -> Cube {
+        Cube {
+            center: (0,0,0),
+            side_length: 1
+        }
     }
 }
 

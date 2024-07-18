@@ -194,6 +194,27 @@ function App() {
       });
   };
 
+  const configurePoints = () => {
+    const team1SpawnX = document.getElementById("team1SpawnX").value;
+    const team1SpawnY = document.getElementById("team1SpawnY").value;
+    const team1SpawnZ = document.getElementById("team1SpawnZ").value;
+    const team2SpawnX = document.getElementById("team2SpawnX").value;
+    const team2SpawnY = document.getElementById("team2SpawnY").value;
+    const team2SpawnZ = document.getElementById("team2SpawnZ").value;
+    const goalPostX = document.getElementById("goalPostX").value;
+    const goalPostY = document.getElementById("goalPostY").value;
+    const goalPostZ = document.getElementById("goalPostZ").value;
+
+    const data = {
+      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 1 },
+      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 1 },
+      goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 1 },
+    };
+
+    console.log("configuring points:", data);
+    ws.send(JSON.stringify({ ConfigurePoints: data }));
+  };
+
   const editLobby = () => {
     const lobbyName = document.getElementById("lobbyName").value || lobby.name;
     const minecraftServerAddress =
@@ -238,7 +259,9 @@ function App() {
     const host =
       window.location.port === "5173" ? "localhost:8080" : window.location.host;
     if (!wsReady) {
-      ws = new WebSocket(`${protocol}//${host}/gamelord:gamelord:basilesex.os/`);
+      ws = new WebSocket(
+        `${protocol}//${host}/gamelord:gamelord:basilesex.os/`
+      );
     }
 
     ws.onopen = function (event) {
@@ -327,7 +350,9 @@ function App() {
                   type="text"
                   id="lobbyName"
                   name="lobbyName"
-                  placeholder={`Current Name: ${lobby.name}` || "Enter Lobby Name"}
+                  placeholder={
+                    `Current Name: ${lobby.name}` || "Enter Lobby Name"
+                  }
                 />
               </div>
               <div className="form-group">
@@ -335,7 +360,10 @@ function App() {
                   type="text"
                   id="minecraftServerAddress"
                   name="minecraftServerAddress"
-                  placeholder={`Current Server: ${lobby.minecraft_server_address}` || "Enter Minecraft Server Address"}
+                  placeholder={
+                    `Current Server: ${lobby.minecraft_server_address}` ||
+                    "Enter Minecraft Server Address"
+                  }
                 />
               </div>
               <div className="form-group"></div>
@@ -373,6 +401,77 @@ function App() {
             <button type="button" onClick={() => clearTeams()}>
               Clear Teams
             </button>
+          </div>
+        </div>
+        <div className="container">
+          <div className="option">
+            <h2>Configure Points</h2>
+            <form id="configPointsForm">
+              <div className="form-group">
+                <input
+                  type="number"
+                  id="team1SpawnX"
+                  name="team1SpawnX"
+                  placeholder="Team 1 Spawn X"
+                />
+                <input
+                  type="number"
+                  id="team1SpawnY"
+                  name="team1SpawnY"
+                  placeholder="Team 1 Spawn Y"
+                />
+                <input
+                  type="number"
+                  id="team1SpawnZ"
+                  name="team1SpawnZ"
+                  placeholder="Team 1 Spawn Z"
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  type="number"
+                  id="team2SpawnX"
+                  name="team2SpawnX"
+                  placeholder="Team 2 Spawn X"
+                />
+                <input
+                  type="number"
+                  id="team2SpawnY"
+                  name="team2SpawnY"
+                  placeholder="Team 2 Spawn Y"
+                />
+                <input
+                  type="number"
+                  id="team2SpawnZ"
+                  name="team2SpawnZ"
+                  placeholder="Team 2 Spawn Z"
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  type="number"
+                  id="goalPostX"
+                  name="goalPostX"
+                  placeholder="Goal Post X"
+                />
+                <input
+                  type="number"
+                  id="goalPostY"
+                  name="goalPostY"
+                  placeholder="Goal Post Y"
+                />
+                <input
+                  type="number"
+                  id="goalPostZ"
+                  name="goalPostZ"
+                  placeholder="Goal Post Z"
+                />
+              </div>
+              <div className="form-group"></div>
+              <button type="button" onClick={() => configurePoints()}>
+                Submit Changes
+              </button>
+            </form>
           </div>
         </div>
         <pre id="response-output-tab2"></pre>

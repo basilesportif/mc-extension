@@ -6,12 +6,12 @@ use kinode_process_lib::{
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
 
-mod utilities;
 mod gamelord_types;
+mod utilities;
 use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State};
 use mcstructs::{
     ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
-    TeamNameToRegion,
+    TeamNameToRegion, WsPush,
 };
 
 wit_bindgen::generate!({
@@ -401,7 +401,6 @@ fn handle_http_request(
             *ws_channel_id = None;
             return Ok(());
         }
-        // not used yet, wip
         http::HttpServerRequest::WebSocketPush {
             channel_id,
             message_type,
@@ -409,21 +408,25 @@ fn handle_http_request(
             let Some(blob) = get_blob() else {
                 return Ok(());
             };
-            // dont need this, implemented on ws open
-            // let ws_push  = serde_json::from_slice::<WsPush>(&blob.bytes)?;
-            // if let WsPush::GetInit = ws_push {
-            //     send_ws_push(
-            //         ws_channel_id.unwrap_or(0),
-            //         WsMessageType::Text,
-            //         LazyLoadBlob {
-            //             mime: Some("application/json".to_string()),
-            //             bytes: serde_json::to_vec(&GameLobbyDiff::Init(
-            //                 state.lobby.clone(),
-            //             ))?,
-            //         },
-            //     );
-            // }
 
+            let ws_push = serde_json::from_slice::<WsPush>(&blob.bytes)?;
+            match ws_push {
+                WsPush::ConfigurePoints {
+                    team1_spawn,
+                    team2_spawn,
+                    goal_post,
+                } => {
+                    let diff = GameLobbyDiff::ConfigurePoints {
+                        team1_spawn,
+                        team2_spawn,
+                        goal_post,
+                    };
+                    let _ = state.lobby.apply_diff(&diff);
+                    state.save();
+                    let _ = state.update_clients(&diff);
+                }
+                _ => {}
+            }
             return Ok(());
         }
         http::HttpServerRequest::Http(http_request) => {
@@ -448,9 +451,11 @@ fn handle_http_request(
                         http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
                     }
                     "/api/clearTeams" => {
-                        // need to update clients with lobby with empty teams before actually clearing teams, 
+                        // need to update clients with lobby with empty teams before actually clearing teams,
                         // because it sends update to team members
-                        let _ = state.update_clients(&GameLobbyDiff::Init(state.lobby.clone().clear_teams()));
+                        let _ = state.update_clients(&GameLobbyDiff::Init(
+                            state.lobby.clone().clear_teams(),
+                        ));
                         state.lobby.clear_teams();
                         state.save();
                         let blob = LazyLoadBlob {
