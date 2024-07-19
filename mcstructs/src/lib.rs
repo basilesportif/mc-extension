@@ -57,6 +57,7 @@ pub enum McClientToGamelordRequest {
 pub enum WsPush {
     GetInit,
     SendMessage(String),
+    WorldConfigRegion(TeamName, RegionAsList),
     ConfigurePoints {
         team1_spawn: Cube,
         team2_spawn: Cube,
@@ -209,6 +210,10 @@ impl GameLobby {
                 self.world_config = world_config.clone();
                 Ok(self.clone())
             }
+            GameLobbyDiff::WorldConfigRegion(team, region) => {
+                self.world_config.insert(team.clone(), region.clone());
+                Ok(self.clone())
+            }
             GameLobbyDiff::ConfigurePoints { team1_spawn, team2_spawn, goal_post } => {
                 self.team1.spawn_point = team1_spawn.clone();
                 self.team2.spawn_point = team2_spawn.clone();
@@ -226,6 +231,7 @@ pub enum GameLobbyDiff {
     EditLobby { name: String, minecraft_server_address: String },
     Message(ChatMessage),
     WorldConfigFull(TeamNameToRegion),
+    WorldConfigRegion(TeamName, Region),
     ConfigurePoints { team1_spawn: Cube, team2_spawn: Cube, goal_post: Cube },
     // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),
@@ -251,12 +257,16 @@ pub struct Region {
     pub cubes: HashMap<Cube, CubeEffectList>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RegionAsList {
+    pub cubes: Vec<(Cube, CubeEffectList)>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {
     pub center: (i32, i32, i32),
     pub side_length: i32,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Effect{

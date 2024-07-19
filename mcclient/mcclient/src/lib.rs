@@ -90,6 +90,9 @@ fn handle_http_request(
                         return Err(anyhow::anyhow!("mcclient: no gamelord address"));
                     }
                 }
+                WsPush::WorldConfigRegion(team, region) => {
+                    println!("mcclient: received world config region: {:?}", (team, region));
+                }
                 _ => {}
             }
             return Ok(());

@@ -8,39 +8,13 @@ import {
   Message,
   MessageInput,
 } from "@chatscope/chat-ui-kit-react";
-let ws;
 import Msg from "./components/Msg";
 
-function App({ourInTeam, setOurInTeam}) {
-  const [lobby, setLobby] = useState({
-    name: "",
-    minecraft_server_address: "",
-    world_config: {},
-    goal_post: {center: [0,0,0], side_length: 1},
-    team1: {
-      last_message_id: 0,
-      messages: [],
-      name: "",
-      players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
-    },
-    team2: {
-      last_message_id: 0,
-      messages: [],
-      name: "",
-      players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
-    },
-  });
-  const [ourNode, setOurNode] = useState(null);
+function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}) {
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
   });
-
-  useEffect(() => {
-    webSocket();
-  }, []);
 
   useEffect(() => {
     console.log("lobby", lobby);
@@ -100,33 +74,6 @@ function App({ourInTeam, setOurInTeam}) {
     }
   };
 
-  const webSocket = () => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // jurij's dev setup
-    // 5173 - 8080
-    // 5174 - 8080
-    // 5175 - 8081
-    const host =
-      window.location.port === "5173" || window.location.port === "5174"
-        ? "localhost:8080"
-        : window.location.port === "5175"
-        ? "localhost:8081"
-        : window.location.host;
-
-    ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
-
-    ws.onopen = function (event) {
-      console.log("Connection opened on " + window.location.host + ":", event);
-    };
-    ws.onmessage = function (event) {
-      const data = JSON.parse(event.data);
-      console.log("data", data);
-      applyDiff(data, setLobby);
-      if (data.OurNode) {
-        setOurNode(data.OurNode);
-      }
-    };
-  };
 
   const onSend = (message) => {
     console.log("sending:", message);
