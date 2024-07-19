@@ -11,8 +11,10 @@ mod utilities;
 use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State};
 use mcstructs::{
     ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
-    TeamNameToRegion, WsPush,
+    TeamNameToRegion, WsPush, Region, CubeEffectList
 };
+use std::collections::HashMap;
+
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -30,7 +32,7 @@ fn load_world(state: &mut State) {
             state.cube_to_owner.clear();
             // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
             for (owner, region) in state.lobby.world_config.iter() {
-                for cube in region.cubes.keys() {
+                for cube in region.to_hashmap().keys() {
                     state
                         .cube_to_owner
                         .entry(cube.clone())
@@ -226,6 +228,12 @@ fn handle_mcclient_request(
             state.save();
             return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
+        McClientToGamelordRequest::WorldConfigRegion(team, region) => {
+            let diff = GameLobbyDiff::WorldConfigRegion(team, region);
+            let _ = state.lobby.apply_diff(&diff);           
+            state.save();
+            return state.update_clients(&diff);
+        }
     }
 }
 
@@ -260,7 +268,7 @@ fn handle_kinode_message(
                         // Cube is owned by enemy team(s)
                         for owner in owners {
                             if let Some(team_cubes) = world_config.get(owner) {
-                                if let Some(cube_effects) = team_cubes.cubes.get(&cube) {
+                                if let Some(cube_effects) = team_cubes.to_hashmap().get(&cube) {
                                     println!(
                                         "Cube effects for enemy owner {:?}: {:?}",
                                         owner, cube_effects

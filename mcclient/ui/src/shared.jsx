@@ -52,16 +52,20 @@ export function applyDiff(data, setLobby) {
       console.log("Message received:", data.Message);
       setLobby((prevLobby) => {
         let team = null;
-        if (prevLobby.team1.players.some(
+        if (
+          prevLobby.team1.players.some(
             (player) => player.kinode_id === data.Message.from.kinode_id
-          )) {
-            team = "team1";
-          } else if (prevLobby.team2.players.some(
+          )
+        ) {
+          team = "team1";
+        } else if (
+          prevLobby.team2.players.some(
             (player) => player.kinode_id === data.Message.from.kinode_id
-          )) {
-            team = "team2";
-          } else {
-            console.error("Message from unknown player:", data.Message);
+          )
+        ) {
+          team = "team2";
+        } else {
+          console.error("Message from unknown player:", data.Message);
           return prevLobby;
         }
         return {
@@ -87,6 +91,17 @@ export function applyDiff(data, setLobby) {
         team2: {
           ...prevLobby.team2,
           spawn_point: data.ConfigurePoints.team2_spawn,
+        },
+      }));
+      break;
+    case "WorldConfigRegion":
+      console.log("WorldConfigRegion", data.WorldConfigRegion);
+      let team = data.WorldConfigRegion[0] === "Team1" ? "team1" : "team2";
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        world_config: {
+          ...prevLobby.world_config,
+          [team]: data.WorldConfigRegion[1],
         },
       }));
       break;

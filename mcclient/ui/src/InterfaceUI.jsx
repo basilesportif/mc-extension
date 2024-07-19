@@ -82,7 +82,7 @@ const InterfaceUI = () => {
         />
       </div>
       <div style={{ width: "70%", position: "relative" }}>
-        <ThreeJsScene ws={ws} ourInTeam={ourInTeam} />
+        <ThreeJsScene ws={ws} ourInTeam={ourInTeam} lobby={lobby} />
       </div>
     </div>
   );

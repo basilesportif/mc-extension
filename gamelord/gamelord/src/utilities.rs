@@ -12,7 +12,7 @@ pub fn valid_position(
 ) -> (String, bool) {
     if let Some(team_name) = lobby.player_in_team(player) {
         if let Some(region) = layout.get(&TeamName(team_name.clone())) {
-            if region.cubes.contains_key(&cube) {
+            if region.to_hashmap().contains_key(&cube) {
                 return (format!("Access granted to player: {}", player.kinode_id), true);
             }
         }

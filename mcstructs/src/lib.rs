@@ -51,13 +51,14 @@ pub enum McClientToGamelordRequest {
     JoinTeam(JoinTeam), // request to join team
     SendMessage(String),// sends message to chat to which they belong
     WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
+    WorldConfigRegion(TeamName, Region),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WsPush {
     GetInit,
     SendMessage(String),
-    WorldConfigRegion(TeamName, RegionAsList),
+    WorldConfigRegion(TeamName, Region),
     ConfigurePoints {
         team1_spawn: Cube,
         team2_spawn: Cube,
@@ -254,13 +255,14 @@ pub type TeamNameToRegion = HashMap<TeamName, Region>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Region {
-    pub cubes: HashMap<Cube, CubeEffectList>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RegionAsList {
     pub cubes: Vec<(Cube, CubeEffectList)>,
 }
+impl Region {
+    pub fn to_hashmap(&self) -> HashMap<Cube, CubeEffectList> {
+        self.cubes.iter().cloned().collect()
+        }
+    }
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 pub struct Cube {

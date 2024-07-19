@@ -3,7 +3,10 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
     Request,
 };
-use mcstructs::{GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, WsPush};
+use mcstructs::{
+    Cube, CubeEffectList, GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Region,
+    WsPush,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -91,7 +94,13 @@ fn handle_http_request(
                     }
                 }
                 WsPush::WorldConfigRegion(team, region) => {
-                    println!("mcclient: received world config region: {:?}", (team, region));
+                    if let Some(gamelord) = &state.gamelord_address {
+                        let update_region_request =
+                            McClientToGamelordRequest::WorldConfigRegion(team, region);
+                        let _ = Request::to(gamelord.clone())
+                            .body(serde_json::to_vec(&update_region_request)?)
+                            .send();
+                    }
                 }
                 _ => {}
             }
@@ -137,11 +146,11 @@ fn handle_http_request(
                 b"{\"message\": \"success\"}".to_vec(),
             );
             Ok(())
-        },
+        }
         _ => {
             println!("mcclient: unknown http request: {:?}", path);
             Ok(())
-        },
+        }
     }
 }
 
@@ -152,6 +161,7 @@ fn handle_gamelord_update(
 ) -> anyhow::Result<()> {
     println!("received update");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
+    // println!("deserialized update: {:#?}", deserialized);
     state.lobby = match state.lobby.apply_diff(&deserialized) {
         Ok(lobby) => lobby,
         Err(e) => {
@@ -159,7 +169,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
-    println!("state: {:?}", state.lobby);
+    // println!("state: {:#?}", state.lobby.world_config);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),
@@ -169,7 +179,11 @@ fn handle_gamelord_update(
     Ok(())
 }
 
-fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>, our: &Address) -> anyhow::Result<()> {
+fn handle_message(
+    state: &mut State,
+    ws_channel_id: &mut Option<u32>,
+    our: &Address,
+) -> anyhow::Result<()> {
     let message = await_message()?;
 
     if let Some(gamelord) = &state.gamelord_address {
@@ -192,7 +206,7 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-    for path in ["/join_team",] {
+    for path in ["/join_team"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
