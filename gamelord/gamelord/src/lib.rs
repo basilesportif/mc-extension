@@ -56,36 +56,6 @@ fn load_world(state: &mut State) {
     }
 }
 
-fn add_player(state: &mut State) {
-    let body = get_blob().unwrap_or_default();
-    println!("body: {:?}", body);
-    let body_str = String::from_utf8_lossy(&body.bytes);
-    println!("body_str: {:?}", body_str);
-    match serde_json::from_str::<Player>(&body_str) {
-        Ok(player) => {
-            println!("player: {:?}", player);
-            let player_clone = player.clone(); // Clone player before insertion
-            state
-                .allowed_players
-                .insert(player.minecraft_player_name.clone(), player);
-            println!(
-                "Player {} added to allowed players",
-                player_clone.minecraft_player_name
-            );
-            state.save();
-            http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
-        }
-        Err(e) => {
-            println!("Failed to parse player data: {:?}", e);
-            http::send_response(
-                http::StatusCode::BAD_REQUEST,
-                None,
-                b"Invalid player data".to_vec(),
-            );
-        }
-    }
-}
-
 fn edit_lobby(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
     let bytes = get_blob()
         .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
@@ -451,7 +421,6 @@ fn handle_http_request(
                         http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
                     "/api/loadWorld" => load_world(state),
-                    "/api/addPlayer" => add_player(state),
                     "/api/deleteWorld" => {
                         state.lobby.world_config.clear();
                         state.cube_to_owner.clear();
@@ -528,10 +497,9 @@ fn init(our: Address) {
     for path in [
         "/api/loadWorld",
         "/world_config",
-        "/api/addPlayer",
         "/api/deleteWorld",
         "/api/editLobby",
-        "api/clearTeams",
+        "/api/clearTeams",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }

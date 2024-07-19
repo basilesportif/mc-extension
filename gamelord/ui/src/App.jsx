@@ -26,7 +26,6 @@ function App() {
   const [wsReady, setWsReady] = useState(false);
 
   useEffect(() => {
-    document.getElementById("playerForm").addEventListener("submit", addPlayer);
     setActiveTab("tab2");
     if (!wsReady) {
       webSocket();
@@ -45,42 +44,6 @@ function App() {
     // Add 'active' class to the selected tab
     document.getElementById(activeTab).classList.add("active");
   }, [activeTab]);
-
-  async function addPlayer() {
-    const minecraftName = document.getElementById("minecraftName").placeholder;
-    const kinode_id = document.getElementById("kinode_id").placeholder;
-    const playerData = {
-      kinode_id: kinode_id,
-      minecraft_player_name: minecraftName,
-    };
-
-    const url = "/gamelord:gamelord:basilesex.os/api/addPlayer"; // Adjust the URL as needed
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(playerData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.text();
-      console.log("Player added successfully:", data);
-      document.getElementById(
-        "response-output-tab1"
-      ).innerText = `Player ${minecraftName} with ID ${kinode_id} added successfully.`;
-    } catch (error) {
-      console.error("Error adding player:", error);
-      document.getElementById(
-        "response-output-tab1"
-      ).innerText = `Error: ${error.message}`;
-    }
-  }
 
   function uploadFile() {
     const fileInput = document.getElementById("fileInput");
@@ -292,30 +255,6 @@ function App() {
       </div>
       <div id="tab1" className="tab-content active">
         <div className="container">
-          <div className="option">
-            <h2>Add Player to Game</h2>
-            <form id="playerForm">
-              <div className="form-group">
-                <input
-                  type="text"
-                  id="minecraftName"
-                  name="minecraftName"
-                  placeholder="Enter Minecraft Name"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="text"
-                  id="kinode_id"
-                  name="kinode_id"
-                  placeholder="Enter Kinode ID"
-                />
-              </div>
-              <button type="button" onClick={() => addPlayer()}>
-                Submit Details
-              </button>
-            </form>
-          </div>
           <div className="option">
             <h2>Load Preconfigured World</h2>
             <form>
