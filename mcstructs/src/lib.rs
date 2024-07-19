@@ -288,7 +288,7 @@ impl Cube {
     pub fn new() -> Cube {
         Cube {
             center: (0,0,0),
-            side_length: 1
+            side_length: 16
         }
     }
 }

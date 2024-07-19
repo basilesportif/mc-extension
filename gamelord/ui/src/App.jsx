@@ -6,20 +6,20 @@ function App() {
     name: "",
     minecraft_server_address: "",
     world_config: {},
-    goal_post: {center: [0,0,0], side_length: 1},
+    goal_post: {center: [0,0,0], side_length: 16},
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
+      spawn_point: {center: [0,0,0], side_length: 16},
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
+      spawn_point: {center: [0,0,0], side_length: 16},
     },
   });
   const [activeTab, setActiveTab] = useState("tab1");
@@ -189,9 +189,9 @@ function App() {
     const goalPostZ = parseInt(document.getElementById("goalPostZ").value || "0", 10);
 
     const data = {
-      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 1 },
-      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 1 },
-      goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 1 },
+      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 16 },
+      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 16 },
+      goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 16 },
     };
 
     console.log("configuring points:", data);

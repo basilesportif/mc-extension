@@ -298,10 +298,9 @@ fn handle_kinode_message(
                 return Ok(());
             };
 
-            // Hardcoded spawn cube
-            let spawn_cube = Cube {
-                center: (0, 0, 0),
-                side_length: 50,
+            let spawn_cube = match team_name {
+                TeamName::Team1 => &state.lobby.team1.spawn_point,
+                TeamName::Team2 => &state.lobby.team2.spawn_point,
             };
 
             let active_player = ActivePlayer {
@@ -324,7 +323,7 @@ fn handle_kinode_message(
                 serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
                     true,
                     format!("Player added to team {:?}.", &team_name),
-                    spawn_cube,
+                    spawn_cube.clone(),
                 ))
                 .expect("Failed to serialize response");
             Response::new().body(response).send().unwrap();
