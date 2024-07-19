@@ -5,7 +5,7 @@ import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 
-const ThreeJsScene = ({ ws, ourInTeam }) => {
+const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
