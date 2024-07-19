@@ -6,7 +6,6 @@ import { PointerLockControls } from "three/examples/jsm/controls/PointerLockCont
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 
 const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
-  const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
@@ -17,9 +16,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const containerRef = useRef(null);
   const skyRef = useRef(null);
 
-  const [isInteractive, setIsInteractive] = useState(false);
-  const [isMoving, setIsMoving] = useState(false);
-  const [showMenu, setShowMenu] = useState(true);
   const [movement, setMovement] = useState({
     forward: false,
     backward: false,
@@ -28,10 +24,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     up: false,
     down: false,
   });
-  const [selectedCube, setSelectedCube] = useState(null);
-  const [velocity] = useState(new THREE.Vector3());
-  const [direction] = useState(new THREE.Vector3());
-  const [prevTime, setPrevTime] = useState(performance.now());
+
   const [initialized, setInitialized] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -50,10 +43,54 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
 
   const [selectedCubes, setSelectedCubes] = useState([]);
 
-  const [isPaused, setIsPaused] = useState(false);
+
 
   const [showTeamAlert, setShowTeamAlert] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(false);
+
+  const init = async () => {
+    if (sceneRef.current) {
+      console.log("Scene already initialized.");
+      return;
+    }
+
+    try {
+      console.log("Initializing Three.js scene...");
+      setupScene();
+      setupCamera();
+      setupRenderer();
+      setupSky();
+      setupLighting();
+      createAxes();
+
+      console.log("Loading Minecraft world...");
+      await loadMinecraftWorld();
+
+      console.log("Three.js scene initialized.");
+      setInitialized(true);
+      setupPointerLockControls();
+    } catch (error) {
+      console.error("Error initializing scene:", error);
+    }
+  };
+  const setupScene = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.00025);
+    sceneRef.current = scene;
+    console.log("Scene set up.");
+  };
+
+  const setupCamera = useCallback(() => {
+    if (containerRef.current) {
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight;
+      const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+      camera.position.set(0, 50, 200);
+      cameraRef.current = camera;
+      console.log("Camera set up.");
+    }
+  }, []);
 
   const setupRenderer = useCallback(() => {
     if (!rendererRef.current && containerRef.current) {
@@ -68,23 +105,154 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     }
   }, []);
 
-  const setupCamera = useCallback(() => {
-    if (containerRef.current) {
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      camera.position.set(0, 50, 200);
-      cameraRef.current = camera;
-      console.log("Camera set up.");
+  const setupSky = () => {
+    const sky = new Sky();
+    sky.scale.setScalar(450000);
+    sceneRef.current.add(sky);
+    skyRef.current = sky;
+
+    const sun = new THREE.Vector3();
+    const effectController = {
+      turbidity: 10,
+      rayleigh: 2,
+      mieCoefficient: 0.005,
+      mieDirectionalG: 0.8,
+      elevation: 2,
+      azimuth: 180,
+      exposure: rendererRef.current.toneMappingExposure,
+    };
+    const uniforms = sky.material.uniforms;
+    uniforms["turbidity"].value = effectController.turbidity;
+    uniforms["rayleigh"].value = effectController.rayleigh;
+    uniforms["mieCoefficient"].value = effectController.mieCoefficient;
+    uniforms["mieDirectionalG"].value = effectController.mieDirectionalG;
+
+    const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
+    const theta = THREE.MathUtils.degToRad(effectController.azimuth);
+
+    sun.setFromSphericalCoords(1, phi, theta);
+
+    uniforms["sunPosition"].value.copy(sun);
+    console.log("Sky set up.");
+  };
+
+  const setupLighting = () => {
+    // Ambient light
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    sceneRef.current.add(ambientLight);
+
+    // Directional light (sun-like)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(100, 100, 50);
+    directionalLight.castShadow = true;
+    sceneRef.current.add(directionalLight);
+
+    console.log("Lighting set up.");
+  };
+
+
+  const createAxes = () => {
+    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const largeNumber = 10000;
+    const axes = ["x", "y", "z"].map((axis) => {
+      const points = [new THREE.Vector3(), new THREE.Vector3()];
+      points[0][axis] = -largeNumber;
+      points[1][axis] = largeNumber;
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      return new THREE.Line(geometry, material);
+    });
+    sceneRef.current.add(...axes);
+    console.log("Axes created.");
+  };
+
+  const loadMinecraftWorld = () => {
+    return new Promise((resolve, reject) => {
+      if (!shouldLoadWorld) {
+        resolve();
+        return;
+      }
+
+      console.log("Loading MTL file...");
+      const objLoader = new OBJLoader();
+      const mtlLoader = new MTLLoader();
+      const objPath = "/mcclient:mcclient:basilesex.os/minecraft.obj";
+      const mtlPath = "/mcclient:mcclient:basilesex.os/minecraft.mtl";
+
+      mtlLoader.load(
+        mtlPath,
+        (materials) => {
+          console.log("MTL file loaded.");
+          materials.preload();
+          objLoader.setMaterials(materials);
+          console.log("Loading OBJ file...");
+          objLoader.load(
+            objPath,
+            (object) => {
+              console.log("OBJ file loaded.");
+              object.traverse((child) => {
+                if (child.isMesh) {
+                  child.userData.isMinecraftWorld = true;
+                  if (child.material.map) {
+                    const textureType = getTextureType(child.material.map.name);
+                    console.log(`Texture type: ${textureType}`);
+                  }
+                }
+              });
+              sceneRef.current.add(object);
+              minecraftWorldRef.current = object;
+              console.log("Minecraft world added to scene.");
+              createCubesBasedOnMinecraftWorld();
+              resolve();
+            },
+            undefined,
+            (error) => {
+              console.error("Error loading OBJ file:", error);
+              reject(error);
+            }
+          );
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading MTL file:", error);
+          reject(error);
+        }
+      );
+    });
+  };
+
+  const setupPointerLockControls = () => {
+    if (cameraRef.current && containerRef.current) {
+      const controls = new PointerLockControls(
+        cameraRef.current,
+        containerRef.current
+      );
+      controlsRef.current = controls;
+
+      controls.addEventListener("lock", () => {
+        setShowInstructions(false);
+        setIsLocked(true);
+      });
+
+      controls.addEventListener("unlock", () => {
+        setShowInstructions(true);
+        setIsLocked(false);
+        setMoveForward(false);
+        setMoveBackward(false);
+        setMoveLeft(false);
+        setMoveRight(false);
+        setMoveUp(false);
+        setMoveDown(false);
+      });
+
+      sceneRef.current.add(controls.getObject());
+      console.log("PointerLockControls set up.");
     }
-  }, []);
+  };
 
   const onPointerLockChange = useCallback(() => {
     const isLocked = document.pointerLockElement === containerRef.current;
     setIsLocked(isLocked);
-    setIsInteractive(isLocked);
-    setIsMoving(isLocked);
-    setShowMenu(!isLocked);
+    
     if (!isLocked) {
       setMovement({
         forward: false,
@@ -116,6 +284,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         containerRef.current.requestPointerLock();
         setShowInstructions(false);
         setIsLocked(true);
+        
       }
     },
     [ourInTeam]
@@ -126,8 +295,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       document.exitPointerLock();
     }
     setShowInstructions(true);
-    setIsInteractive(false);
-    setIsMoving(false);
     setMovement({
       forward: false,
       backward: false,
@@ -217,7 +384,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           break;
       }
     },
-    [isLocked, exitMovementMode, selectedCubes, isPaused]
+    [isLocked, exitMovementMode, selectedCubes]
   );
 
   const resetSelectedCubes = useCallback(() => {
@@ -279,7 +446,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     (event) => {
       if (!isLocked) {
         enterMovementMode(event);
-      } else if (!isPaused) {
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0); // Center of the screen
 
@@ -319,7 +485,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         }
       }
     },
-    [isLocked, enterMovementMode, selectedCubes, isPaused]
+    [isLocked, enterMovementMode, selectedCubes]
   );
 
   useEffect(() => {
@@ -335,7 +501,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   }, [initialized, handleMouseClick]);
 
   const handleMovement = useCallback(() => {
-    if (!isLocked || isPaused || !controlsRef.current) return;
+    if (!isLocked  || !controlsRef.current) return;
 
     const currentTime = performance.now();
     const delta = (currentTime - prevTimeRef.current) / 1000;
@@ -374,7 +540,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     moveRight,
     moveUp,
     moveDown,
-    isPaused,
   ]);
 
   const handleAnimationFrame = useCallback(() => {
@@ -396,182 +561,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     };
   }, [initialized, handleAnimationFrame]);
 
-  const init = async () => {
-    if (sceneRef.current) {
-      console.log("Scene already initialized.");
-      return;
-    }
-
-    try {
-      console.log("Initializing Three.js scene...");
-      setupScene();
-      setupCamera();
-      setupRenderer();
-      setupSky();
-      setupLighting();
-      createAxes();
-
-      console.log("Loading Minecraft world...");
-      await loadMinecraftWorld();
-
-      console.log("Three.js scene initialized.");
-      setInitialized(true);
-      setupPointerLockControls();
-    } catch (error) {
-      console.error("Error initializing scene:", error);
-    }
-  };
-
-  const setupScene = () => {
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.FogExp2(0x87ceeb, 0.00025);
-    sceneRef.current = scene;
-    console.log("Scene set up.");
-  };
-
-  const setupSky = () => {
-    const sky = new Sky();
-    sky.scale.setScalar(450000);
-    sceneRef.current.add(sky);
-    skyRef.current = sky;
-
-    const sun = new THREE.Vector3();
-    const effectController = {
-      turbidity: 10,
-      rayleigh: 2,
-      mieCoefficient: 0.005,
-      mieDirectionalG: 0.8,
-      elevation: 2,
-      azimuth: 180,
-      exposure: rendererRef.current.toneMappingExposure,
-    };
-    const uniforms = sky.material.uniforms;
-    uniforms["turbidity"].value = effectController.turbidity;
-    uniforms["rayleigh"].value = effectController.rayleigh;
-    uniforms["mieCoefficient"].value = effectController.mieCoefficient;
-    uniforms["mieDirectionalG"].value = effectController.mieDirectionalG;
-
-    const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
-    const theta = THREE.MathUtils.degToRad(effectController.azimuth);
-
-    sun.setFromSphericalCoords(1, phi, theta);
-
-    uniforms["sunPosition"].value.copy(sun);
-    console.log("Sky set up.");
-  };
-
-  const setupPointerLockControls = () => {
-    if (cameraRef.current && containerRef.current) {
-      const controls = new PointerLockControls(
-        cameraRef.current,
-        containerRef.current
-      );
-      controlsRef.current = controls;
-
-      controls.addEventListener("lock", () => {
-        setShowInstructions(false);
-        setIsLocked(true);
-      });
-
-      controls.addEventListener("unlock", () => {
-        setShowInstructions(true);
-        setIsLocked(false);
-        setMoveForward(false);
-        setMoveBackward(false);
-        setMoveLeft(false);
-        setMoveRight(false);
-        setMoveUp(false);
-        setMoveDown(false);
-      });
-
-      sceneRef.current.add(controls.getObject());
-      console.log("PointerLockControls set up.");
-    }
-  };
-
-  const setupLighting = () => {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-    sceneRef.current.add(ambientLight);
-
-    // Directional light (sun-like)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(100, 100, 50);
-    directionalLight.castShadow = true;
-    sceneRef.current.add(directionalLight);
-
-    console.log("Lighting set up.");
-  };
-
-  const createAxes = () => {
-    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const largeNumber = 10000;
-    const axes = ["x", "y", "z"].map((axis) => {
-      const points = [new THREE.Vector3(), new THREE.Vector3()];
-      points[0][axis] = -largeNumber;
-      points[1][axis] = largeNumber;
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      return new THREE.Line(geometry, material);
-    });
-    sceneRef.current.add(...axes);
-    console.log("Axes created.");
-  };
-
-  const loadMinecraftWorld = () => {
-    return new Promise((resolve, reject) => {
-      if (!shouldLoadWorld) {
-        resolve();
-        return;
-      }
-
-      console.log("Loading MTL file...");
-      const objLoader = new OBJLoader();
-      const mtlLoader = new MTLLoader();
-      const objPath = "/mcclient:mcclient:basilesex.os/minecraft.obj";
-      const mtlPath = "/mcclient:mcclient:basilesex.os/minecraft.mtl";
-
-      mtlLoader.load(
-        mtlPath,
-        (materials) => {
-          console.log("MTL file loaded.");
-          materials.preload();
-          objLoader.setMaterials(materials);
-          console.log("Loading OBJ file...");
-          objLoader.load(
-            objPath,
-            (object) => {
-              console.log("OBJ file loaded.");
-              object.traverse((child) => {
-                if (child.isMesh) {
-                  child.userData.isMinecraftWorld = true;
-                  if (child.material.map) {
-                    const textureType = getTextureType(child.material.map.name);
-                    console.log(`Texture type: ${textureType}`);
-                  }
-                }
-              });
-              sceneRef.current.add(object);
-              minecraftWorldRef.current = object;
-              console.log("Minecraft world added to scene.");
-              createCubesBasedOnMinecraftWorld();
-              resolve();
-            },
-            undefined,
-            (error) => {
-              console.error("Error loading OBJ file:", error);
-              reject(error);
-            }
-          );
-        },
-        undefined,
-        (error) => {
-          console.error("Error loading MTL file:", error);
-          reject(error);
-        }
-      );
-    });
-  };
 
   const createCubesBasedOnMinecraftWorld = () => {
     if (!minecraftWorldRef.current || !sceneRef.current) return;
@@ -664,8 +653,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         isLocked ? "locked" : "unlocked"
       );
       setIsLocked(isLocked);
-      setIsInteractive(isLocked);
-      setIsMoving(isLocked);
       if (!isLocked) {
         setShowInstructions(true);
         // Reset movement state
