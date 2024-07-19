@@ -20,7 +20,6 @@ let moveRight = false;
 let moveUp = false;
 let moveDown = false;
 let canFly = true;
-let collisionEnabled = true;
 
 let prevTime = performance.now();
 const velocity = new THREE.Vector3();
@@ -324,9 +323,6 @@ function onKeyDown(event) {
     case 'ShiftLeft':
       if (canFly) moveDown = true;
       break;
-    case 'KeyC':
-      collisionEnabled = !collisionEnabled;
-      break;
     case 'KeyF':
       canFly = !canFly;
       if (!canFly) {
@@ -428,7 +424,7 @@ function animate() {
 
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
-    velocity.y -= velocity.y * 10.0 * delta; // Add damping to y axis
+    velocity.y -= velocity.y * 10.0 * delta;
 
     direction.z = Number(moveForward) - Number(moveBackward);
     direction.x = Number(moveRight) - Number(moveLeft);
@@ -439,41 +435,14 @@ function animate() {
     if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
     if (moveUp || moveDown) velocity.y += direction.y * 400.0 * delta;
 
-    if (collisionEnabled) {
-      // Collision detection
-      const raycaster = new THREE.Raycaster();
-      raycaster.set(controls.getObject().position, new THREE.Vector3(0, -1, 0));
-      const intersects = raycaster.intersectObject(minecraftWorld, true);
-
-      if (intersects.length > 0) {
-        const distance = intersects[0].distance;
-        if (distance < 10) {
-          velocity.y = Math.max(0, velocity.y);
-        }
-      }
-    }
-
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
 
     controls.getObject().position.y += velocity.y * delta;
 
-    // If flying is toggled off, make the player drop down until they reach a cube
-    if (!canFly && !collisionEnabled) {
-      const raycaster = new THREE.Raycaster();
-      raycaster.set(controls.getObject().position, new THREE.Vector3(0, -1, 0));
-      const intersects = raycaster.intersectObject(minecraftWorld, true);
-
-      if (intersects.length > 0) {
-        const distance = intersects[0].distance;
-        if (distance < 10) {
-          velocity.y = Math.max(0, velocity.y);
-        } else {
-          velocity.y -= 9.8 * delta; // Apply gravity
-        }
-      } else {
-        velocity.y -= 9.8 * delta; // Apply gravity
-      }
+    // If flying is toggled off, make the player drop down
+    if (!canFly) {
+      velocity.y -= 9.8 * delta; // Apply gravity
     }
 
     // Keep the sky centered on the camera
