@@ -123,8 +123,24 @@ function App() {
       })
       .then((data) => {
         console.log("World configuration:", data);
-        document.getElementById("response-output-tab1").innerText =
-          JSON.stringify(data, null, 2);
+        // Create a Blob with the JSON data
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        
+        // Create a temporary URL for the Blob
+        const url = window.URL.createObjectURL(blob);
+        
+        // Create a temporary anchor element
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'world_config.json';
+        
+        // Append the anchor to the body, click it, and remove it
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Revoke the temporary URL
+        window.URL.revokeObjectURL(url);
       })
       .catch((error) => {
         console.error("Error getting world configuration:", error);
@@ -256,7 +272,8 @@ function App() {
       <div id="tab1" className="tab-content active">
         <div className="container">
           <div className="option">
-            <h2>Load Preconfigured World</h2>
+            <h2>Load Preconfigured Effects</h2>
+            <p>Insert world_config.json and overwrite current world_config. NOT necessary to use, players can start by editing an empty world config.</p>
             <form>
               <div className="form-group">
                 <input type="file" id="fileInput" accept=".json" />
@@ -270,6 +287,7 @@ function App() {
         <div className="container">
           <div className="option">
             <h2>Delete World</h2>
+            <p>Deletes the world config created by players.</p>
             <button type="button" onClick={() => deleteWorld()}>
               Delete World
             </button>

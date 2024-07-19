@@ -8,7 +8,7 @@ use kinode_process_lib::{
 
 mod gamelord_types;
 mod utilities;
-use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State};
+use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State, CubeToOwnerTrait};
 use mcstructs::{
     ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
     TeamNameToRegion, WsPush, Region, CubeEffectList
@@ -29,17 +29,7 @@ fn load_world(state: &mut State) {
     match serde_json::from_str::<TeamNameToRegion>(&body_str) {
         Ok(new_world_config) => {
             state.lobby.world_config = new_world_config;
-            state.cube_to_owner.clear();
-            // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
-            for (owner, region) in state.lobby.world_config.iter() {
-                for cube in region.to_hashmap().keys() {
-                    state
-                        .cube_to_owner
-                        .entry(cube.clone())
-                        .and_modify(|owners| owners.push(owner.clone()))
-                        .or_insert_with(|| vec![owner.clone()]);
-                }
-            }
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
 
             println!("World loaded from request");
@@ -195,12 +185,14 @@ fn handle_mcclient_request(
         }
         McClientToGamelordRequest::WorldConfigFull(world_config) => {
             state.lobby.world_config = world_config.clone();
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
         McClientToGamelordRequest::WorldConfigRegion(team, region) => {
             let diff = GameLobbyDiff::WorldConfigRegion(team, region);
-            let _ = state.lobby.apply_diff(&diff);           
+            let _ = state.lobby.apply_diff(&diff);
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&diff);
         }
