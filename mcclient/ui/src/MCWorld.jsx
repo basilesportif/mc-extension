@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
+import * as threeJsSetup from "./utils/threeJsSetup";
 
 const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const sceneRef = useRef(null);
@@ -16,19 +16,11 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const containerRef = useRef(null);
   const skyRef = useRef(null);
 
-  const [movement, setMovement] = useState({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-  });
-
   const [initialized, setInitialized] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
   const [shouldLoadWorld, setShouldLoadWorld] = useState(true);
+  const [areCubesSelectable, setAreCubesSelectable] = useState(false);
 
   const [moveForward, setMoveForward] = useState(false);
   const [moveBackward, setMoveBackward] = useState(false);
@@ -37,16 +29,22 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const [moveUp, setMoveUp] = useState(false);
   const [moveDown, setMoveDown] = useState(false);
 
+  const [showEffectMenu, setShowEffectMenu] = useState(false);
+  const [selectedEffects, setSelectedEffects] = useState([]);
+
+  const effectOptions = ['Slowness', 'Weakness', 'Blindness'];
+
   const velocityRef = useRef(new THREE.Vector3());
   const directionRef = useRef(new THREE.Vector3());
   const prevTimeRef = useRef(performance.now());
 
   const [selectedCubes, setSelectedCubes] = useState([]);
 
-
-
   const [showTeamAlert, setShowTeamAlert] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(false);
+
+  const [storedPlayerPosition, setStoredPlayerPosition] = useState(null);
+  const [storedCameraDirection, setStoredCameraDirection] = useState(null);
 
   const init = async () => {
     if (sceneRef.current) {
@@ -56,113 +54,17 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
 
     try {
       console.log("Initializing Three.js scene...");
-      setupScene();
-      setupCamera();
-      setupRenderer();
-      setupSky();
-      setupLighting();
-      createAxes();
-
+      threeJsSetup.setupThreeJsScene(sceneRef, cameraRef, rendererRef, containerRef, skyRef);
+  
       console.log("Loading Minecraft world...");
       await loadMinecraftWorld();
-
+  
       console.log("Three.js scene initialized.");
       setInitialized(true);
       setupPointerLockControls();
     } catch (error) {
       console.error("Error initializing scene:", error);
     }
-  };
-  const setupScene = () => {
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.FogExp2(0x87ceeb, 0.00025);
-    sceneRef.current = scene;
-    console.log("Scene set up.");
-  };
-
-  const setupCamera = useCallback(() => {
-    if (containerRef.current) {
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-      camera.position.set(0, 50, 200);
-      cameraRef.current = camera;
-      console.log("Camera set up.");
-    }
-  }, []);
-
-  const setupRenderer = useCallback(() => {
-    if (!rendererRef.current && containerRef.current) {
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      renderer.setSize(width, height);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      rendererRef.current = renderer;
-      containerRef.current.appendChild(renderer.domElement);
-      console.log("Renderer set up.");
-    }
-  }, []);
-
-  const setupSky = () => {
-    const sky = new Sky();
-    sky.scale.setScalar(450000);
-    sceneRef.current.add(sky);
-    skyRef.current = sky;
-
-    const sun = new THREE.Vector3();
-    const effectController = {
-      turbidity: 10,
-      rayleigh: 2,
-      mieCoefficient: 0.005,
-      mieDirectionalG: 0.8,
-      elevation: 2,
-      azimuth: 180,
-      exposure: rendererRef.current.toneMappingExposure,
-    };
-    const uniforms = sky.material.uniforms;
-    uniforms["turbidity"].value = effectController.turbidity;
-    uniforms["rayleigh"].value = effectController.rayleigh;
-    uniforms["mieCoefficient"].value = effectController.mieCoefficient;
-    uniforms["mieDirectionalG"].value = effectController.mieDirectionalG;
-
-    const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
-    const theta = THREE.MathUtils.degToRad(effectController.azimuth);
-
-    sun.setFromSphericalCoords(1, phi, theta);
-
-    uniforms["sunPosition"].value.copy(sun);
-    console.log("Sky set up.");
-  };
-
-  const setupLighting = () => {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-    sceneRef.current.add(ambientLight);
-
-    // Directional light (sun-like)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(100, 100, 50);
-    directionalLight.castShadow = true;
-    sceneRef.current.add(directionalLight);
-
-    console.log("Lighting set up.");
-  };
-
-
-  const createAxes = () => {
-    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const largeNumber = 10000;
-    const axes = ["x", "y", "z"].map((axis) => {
-      const points = [new THREE.Vector3(), new THREE.Vector3()];
-      points[0][axis] = -largeNumber;
-      points[1][axis] = largeNumber;
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      return new THREE.Line(geometry, material);
-    });
-    sceneRef.current.add(...axes);
-    console.log("Axes created.");
   };
 
   const loadMinecraftWorld = () => {
@@ -231,17 +133,17 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       controls.addEventListener("lock", () => {
         setShowInstructions(false);
         setIsLocked(true);
+        
       });
 
       controls.addEventListener("unlock", () => {
-        setShowInstructions(true);
-        setIsLocked(false);
-        setMoveForward(false);
-        setMoveBackward(false);
-        setMoveLeft(false);
-        setMoveRight(false);
-        setMoveUp(false);
-        setMoveDown(false);
+        if (showEffectMenu) {
+          setShowInstructions(true);
+          setIsLocked(false);
+        }else{
+          setShowInstructions(false);
+          setIsLocked(false);
+        }
       });
 
       sceneRef.current.add(controls.getObject());
@@ -252,17 +154,8 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const onPointerLockChange = useCallback(() => {
     const isLocked = document.pointerLockElement === containerRef.current;
     setIsLocked(isLocked);
+
     
-    if (!isLocked) {
-      setMovement({
-        forward: false,
-        backward: false,
-        left: false,
-        right: false,
-        up: false,
-        down: false,
-      });
-    }
   }, []);
 
   const onPointerLockError = useCallback(() => {
@@ -284,27 +177,38 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         containerRef.current.requestPointerLock();
         setShowInstructions(false);
         setIsLocked(true);
+        setAreCubesSelectable(true);
         
+        // Restore the player's position and camera direction
+        if (storedPlayerPosition && storedCameraDirection) {
+          controlsRef.current.getObject().position.copy(storedPlayerPosition);
+          cameraRef.current.getWorldDirection(storedCameraDirection);
+        }
       }
     },
-    [ourInTeam]
+    [ourInTeam, storedPlayerPosition, storedCameraDirection]
   );
 
   const exitMovementMode = useCallback(() => {
     if (controlsRef.current) {
       document.exitPointerLock();
+      // Store the player's position and camera direction
+      const playerPosition = controlsRef.current.getObject().position.clone();
+      const cameraDirection = cameraRef.current.getWorldDirection(new THREE.Vector3());
+
+      setStoredPlayerPosition(playerPosition);
+      setStoredCameraDirection(cameraDirection);
     }
     setShowInstructions(true);
-    setMovement({
-      forward: false,
-      backward: false,
-      left: false,
-      right: false,
-      up: false,
-      down: false,
-    });
     setShouldLoadWorld(false);
     setIsLocked(false);
+    setAreCubesSelectable(false);
+    setMoveForward(false);
+    setMoveBackward(false);
+    setMoveLeft(false);
+    setMoveRight(false);
+    setMoveUp(false);
+    setMoveDown(false);
   }, []);
 
   const handleKeyDown = useCallback(
@@ -312,45 +216,12 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       if (!isLocked) return;
       switch (event.code) {
         case "Enter":
-          if (selectedCubes.length > 0) {
-            // the exact format which backend needs
-            const teamCubes = selectedCubes.reduce((acc, cube) => {
-              const center = [
-                cube.position.x,
-                cube.position.y,
-                cube.position.z,
-              ];
-              const side_length = 16; // Assuming a fixed side length
-              const element = [{ center, side_length }, [["Slowness"]]];
-              // if cube in list, dont add
-              if (
-                !acc.some(
-                  (e) =>
-                    e[0][0] === center[0] &&
-                    e[0][1] === center[1] &&
-                    e[0][2] === center[2] &&
-                    e[0][3] === side_length
-                )
-              ) {
-                acc.push(element);
-              }
-              return acc;
-            }, []);
-
-            let team =
-              ourInTeam === "team1"
-                ? "Team1"
-                : ourInTeam === "team2"
-                ? "Team2"
-                : null;
-
-            // this is the exact format the backend needs
-            const logData = [team, { cubes: teamCubes }];
-            console.log("Enter pressed, opening effect menu");
-            console.log(JSON.stringify(logData, null, 2));
-
-            ws.send(JSON.stringify({ WorldConfigRegion: logData }));
+          if (controlsRef.current && document.pointerLockElement === containerRef.current) {
+            document.exitPointerLock();
           }
+          setShowEffectMenu(true);
+          setShowInstructions(false);
+          clearSelectedCubes();
           break;
         case "Escape":
           event.preventDefault();
@@ -388,6 +259,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   );
 
   const resetSelectedCubes = useCallback(() => {
+    console.log("Resetting selected cubes");
     selectedCubes.forEach((cube) => {
       cube.material.opacity = 0.02;
     });
@@ -444,8 +316,14 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
 
   const handleMouseClick = useCallback(
     (event) => {
-      if (!isLocked) {
+      if (!isLocked && !showEffectMenu) {
+        console.log("Entering movement mode");
         enterMovementMode(event);
+      }
+      console.log("Are cubes selectable:", areCubesSelectable);
+      if (areCubesSelectable && !showEffectMenu) {
+        console.log("Are cubes selectable:", areCubesSelectable);
+        console.log("Is locked:", isLocked);
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0); // Center of the screen
 
@@ -484,8 +362,13 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           }
         }
       }
+      if (showEffectMenu) {
+        console.log("Showing effect menu");
+      }
+      
+
     },
-    [isLocked, enterMovementMode, selectedCubes]
+    [isLocked, enterMovementMode, selectedCubes, areCubesSelectable]
   );
 
   useEffect(() => {
@@ -501,7 +384,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   }, [initialized, handleMouseClick]);
 
   const handleMovement = useCallback(() => {
-    if (!isLocked  || !controlsRef.current) return;
+    if (!isLocked || !controlsRef.current) return;
 
     const currentTime = performance.now();
     const delta = (currentTime - prevTimeRef.current) / 1000;
@@ -522,6 +405,27 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       velocityRef.current.x -= directionRef.current.x * speed * delta;
     if (moveUp || moveDown)
       velocityRef.current.y += directionRef.current.y * speed * delta;
+
+    // Restrict the camera's movement within a bounding box (check beforehand whether it fits)
+    const boundingBoxPadding = 50; // Adjust this value to change the padding around the Minecraft world
+    if (minecraftWorldRef.current && cubesRef.current) {
+      const bbox = new THREE.Box3().setFromObject(minecraftWorldRef.current);
+      const size = bbox.getSize(new THREE.Vector3());
+      const center = bbox.getCenter(new THREE.Vector3());
+
+      const minX = center.x - size.x / 2 - boundingBoxPadding;
+      const maxX = center.x + size.x / 2 + boundingBoxPadding;
+      const minY = 0; // Assuming the ground is at y = 0
+      const maxY = center.y + size.y / 2 + boundingBoxPadding;
+      const minZ = center.z - size.z / 2 - boundingBoxPadding;
+      const maxZ = center.z + size.z / 2 + boundingBoxPadding;
+
+      const cameraPosition = controlsRef.current.getObject().position;
+      cameraPosition.clamp(
+        new THREE.Vector3(minX, minY, minZ),
+        new THREE.Vector3(maxX, maxY, maxZ)
+      );
+    }
 
     controlsRef.current.moveRight(-velocityRef.current.x * delta);
     controlsRef.current.moveForward(-velocityRef.current.z * delta);
@@ -653,10 +557,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         isLocked ? "locked" : "unlocked"
       );
       setIsLocked(isLocked);
-      if (!isLocked) {
-        setShowInstructions(true);
-        // Reset movement state
-      }
     };
 
     document.addEventListener("pointerlockchange", handlePointerLockChange);
@@ -711,6 +611,81 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   useEffect(() => {
     setShowCrosshair(isLocked);
   }, [isLocked]);
+
+  const handleEffectSelection = (effect) => {
+    setSelectedEffects((prevEffects) =>
+      prevEffects.includes(effect)
+        ? prevEffects.filter((e) => e !== effect)
+        : [...prevEffects, effect]
+    );
+  };
+
+  const handleApplyEffects = () => {
+    if (selectedCubes.length > 0) {
+      // the exact format which backend needs
+      const teamCubes = selectedCubes.reduce((acc, cube) => {
+        const center = [
+          cube.position.x,
+          cube.position.y,
+          cube.position.z,
+        ];
+        const side_length = 16; // Assuming a fixed side length
+        const element = [{ center, side_length }, [selectedEffects]];
+        // if cube in list, dont add
+        if (
+          !acc.some(
+            (e) =>
+              e[0].center[0] === center[0] &&
+              e[0].center[1] === center[1] &&
+              e[0].center[2] === center[2] &&
+              e[0].side_length === side_length
+          )
+        ) {
+          acc.push(element);
+        }
+        return acc;
+      }, []);
+
+      let team =
+        ourInTeam === "team1"
+          ? "Team1"
+          : ourInTeam === "team2"
+          ? "Team2"
+          : null;
+
+      // this is the exact format the backend needs
+      const logData = [team, { cubes: teamCubes }];
+      console.log("Enter pressed, opening effect menu");
+      console.log(JSON.stringify(logData, null, 2));
+
+      ws.send(JSON.stringify({ WorldConfigRegion: logData }));
+    }
+
+    setShowEffectMenu(false);
+    setSelectedEffects([]);
+    // Relock the pointer to the Minecraft world
+    if (controlsRef.current && containerRef.current) {
+      containerRef.current.requestPointerLock();
+      setIsLocked(true);
+      setAreCubesSelectable(true);
+      setShowEffectMenu(false);
+      setShowInstructions(false);
+    }
+  };
+
+  const handleCancelEffects = () => {
+    console.log('Effect selection canceled');
+    setShowEffectMenu(false);
+    setSelectedEffects([]);
+    if (controlsRef.current && containerRef.current) {
+      containerRef.current.requestPointerLock();
+      setIsLocked(true);
+      setAreCubesSelectable(true);
+      setShowEffectMenu(false);
+      setShowInstructions(false);
+    }
+    
+  };
 
   return (
     <div
@@ -794,6 +769,42 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
               strokeWidth="2"
             />
           </svg>
+        </div>
+      )}
+
+      {showEffectMenu && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '5px',
+            zIndex: 1000,
+          }}
+        >
+          <h2>Select Effects</h2>
+          {effectOptions.map((effect) => (
+            <div key={effect}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedEffects.includes(effect)}
+                  onChange={() => handleEffectSelection(effect)}
+                />
+                {effect}
+              </label>
+            </div>
+          ))}
+          <div style={{ marginTop: '20px' }}>
+            <button onClick={handleApplyEffects}>Apply</button>
+            <button onClick={handleCancelEffects} style={{ marginLeft: '10px' }}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
