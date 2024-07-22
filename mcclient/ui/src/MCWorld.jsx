@@ -61,7 +61,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   
       console.log("Three.js scene initialized.");
       setInitialized(true);
-      setupPointerLockControls();
     } catch (error) {
       console.error("Error initializing scene:", error);
     }
@@ -122,45 +121,51 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     });
   };
 
-  const setupPointerLockControls = () => {
-    if (cameraRef.current && containerRef.current) {
-      const controls = new PointerLockControls(
-        cameraRef.current,
-        containerRef.current
-      );
-      controlsRef.current = controls;
+  useEffect(() => {
+    const handleLock = () => {
+      setShowInstructions(false);
+      setIsLocked(true); 
+    };
 
-      controls.addEventListener("lock", () => {
+    const handleUnlock = () => {
+      if (showEffectMenu) {
         setShowInstructions(false);
-        setIsLocked(true);
-        
-      });
+        setAreCubesSelectable(false);
+      } else {
+        setShowInstructions(true);
+      }
+      setIsLocked(false);
+    };
 
-      controls.addEventListener("unlock", () => {
-        if (showEffectMenu) {
-          setShowInstructions(true);
-          setIsLocked(false);
-        }else{
-          setShowInstructions(false);
-          setIsLocked(false);
-        }
-      });
+    const TrackPointerLockControls = () => {
+      if (cameraRef.current && containerRef.current && initialized) {
+        const controls = new PointerLockControls(
+          cameraRef.current,
+          containerRef.current
+        );
+        controlsRef.current = controls;
 
-      sceneRef.current.add(controls.getObject());
-      console.log("PointerLockControls set up.");
+        controls.addEventListener("lock", handleLock);
+        controls.addEventListener("unlock", handleUnlock);
+
+        sceneRef.current.add(controls.getObject());
+        console.log("PointerLockControls set up.");
+      }
+    };
+
+    if (initialized) {
+      TrackPointerLockControls();
     }
-  };
 
-  const onPointerLockChange = useCallback(() => {
-    const isLocked = document.pointerLockElement === containerRef.current;
-    setIsLocked(isLocked);
+    return () => {
+      if (controlsRef.current) {
+        const controls = controlsRef.current;
+        controls.removeEventListener("lock", handleLock);
+        controls.removeEventListener("unlock", handleUnlock);
+      }
+    };
+  }, [initialized, showEffectMenu]);
 
-    
-  }, []);
-
-  const onPointerLockError = useCallback(() => {
-    console.error("PointerLock Error");
-  }, []);
 
   const enterMovementMode = useCallback(
     (event) => {
@@ -169,14 +174,11 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         setTimeout(() => setShowTeamAlert(false), 3000); // Hide alert after 3 seconds
         return;
       }
-
       if (
         controlsRef.current &&
         document.pointerLockElement !== containerRef.current
       ) {
         containerRef.current.requestPointerLock();
-        setShowInstructions(false);
-        setIsLocked(true);
         setAreCubesSelectable(true);
         
         // Restore the player's position and camera direction
@@ -184,6 +186,9 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           controlsRef.current.getObject().position.copy(storedPlayerPosition);
           cameraRef.current.getWorldDirection(storedCameraDirection);
         }
+      } else {
+        // Handle case when pointer is already locked
+        console.log("Pointer is already locked.");
       }
     },
     [ourInTeam, storedPlayerPosition, storedCameraDirection]
@@ -199,9 +204,8 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       setStoredPlayerPosition(playerPosition);
       setStoredCameraDirection(cameraDirection);
     }
-    setShowInstructions(true);
+    
     setShouldLoadWorld(false);
-    setIsLocked(false);
     setAreCubesSelectable(false);
     setMoveForward(false);
     setMoveBackward(false);
@@ -221,10 +225,10 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           }
           setShowEffectMenu(true);
           setShowInstructions(false);
-          clearSelectedCubes();
           break;
         case "Escape":
-          event.preventDefault();
+          console.log("Escape key pressed");
+          exitMovementMode();
           break;
         case "ArrowUp":
         case "KeyW":
@@ -318,9 +322,10 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     (event) => {
       if (!isLocked && !showEffectMenu) {
         console.log("Entering movement mode");
+        console.log("Is locked:", isLocked);
         enterMovementMode(event);
       }
-      console.log("Are cubes selectable:", areCubesSelectable);
+      
       if (areCubesSelectable && !showEffectMenu) {
         console.log("Are cubes selectable:", areCubesSelectable);
         console.log("Is locked:", isLocked);
@@ -361,9 +366,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
             }
           }
         }
-      }
-      if (showEffectMenu) {
-        console.log("Showing effect menu");
       }
       
 
@@ -549,64 +551,19 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     }
   }, [initialized]);
 
-  useEffect(() => {
-    const handlePointerLockChange = () => {
-      const isLocked = document.pointerLockElement === containerRef.current;
-      console.log(
-        "Pointer lock state changed:",
-        isLocked ? "locked" : "unlocked"
-      );
-      setIsLocked(isLocked);
-    };
-
-    document.addEventListener("pointerlockchange", handlePointerLockChange);
-    return () => {
-      document.removeEventListener(
-        "pointerlockchange",
-        handlePointerLockChange
-      );
-    };
-  }, []);
 
   useEffect(() => {
     if (initialized) {
-      document.addEventListener("pointerlockchange", onPointerLockChange);
-      document.addEventListener("pointerlockerror", onPointerLockError);
-
       if (controlsRef.current) {
         sceneRef.current.add(controlsRef.current.getObject());
       }
-
       handleAnimationFrame();
     }
-
     return () => {
-      document.removeEventListener("pointerlockchange", onPointerLockChange);
-      document.removeEventListener("pointerlockerror", onPointerLockError);
       cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [initialized, onPointerLockChange, onPointerLockError]);
+  }, [initialized]);
 
-  useEffect(() => {
-    if (initialized && containerRef.current) {
-      const handleUserInteraction = (event) => {
-        if (event.target === containerRef.current && !isLocked) {
-          enterMovementMode(event);
-        }
-      };
-
-      containerRef.current.addEventListener("click", handleUserInteraction);
-
-      return () => {
-        if (containerRef.current) {
-          containerRef.current.removeEventListener(
-            "click",
-            handleUserInteraction
-          );
-        }
-      };
-    }
-  }, [initialized, isLocked, enterMovementMode]);
 
   useEffect(() => {
     setShowCrosshair(isLocked);
@@ -666,10 +623,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     // Relock the pointer to the Minecraft world
     if (controlsRef.current && containerRef.current) {
       containerRef.current.requestPointerLock();
-      setIsLocked(true);
       setAreCubesSelectable(true);
-      setShowEffectMenu(false);
-      setShowInstructions(false);
     }
   };
 
@@ -679,10 +633,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     setSelectedEffects([]);
     if (controlsRef.current && containerRef.current) {
       containerRef.current.requestPointerLock();
-      setIsLocked(true);
       setAreCubesSelectable(true);
-      setShowEffectMenu(false);
-      setShowInstructions(false);
     }
     
   };
