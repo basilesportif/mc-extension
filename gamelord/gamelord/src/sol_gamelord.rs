@@ -125,4 +125,22 @@ impl Caller {
             Err(e) => Err(anyhow::anyhow!("Error incrementing counter: {:?}", e)),
         }
     }
+
+    pub fn number(&self) -> anyhow::Result<U256> {
+        let call: Vec<u8> = Counter::numberCall {}.abi_encode();
+        let tx_req = TransactionRequest::default();
+        let to = match EthAddress::from_str(&self.contract_address) {
+            Ok(to) => to,
+            Err(e) => return Err(anyhow::anyhow!("Error parsing contract address: {:?}", e)),
+        };
+        let tx = tx_req.to(to).input(call.into());
+
+        match self.provider.call(tx, None) {
+            Ok(result) => {
+                let cost = U256::abi_decode(&result, false)?;
+                Ok(cost)
+            }
+            Err(e) => Err(anyhow::anyhow!("Error getting spawn cost: {:?}", e)),
+        }
+    }
 }

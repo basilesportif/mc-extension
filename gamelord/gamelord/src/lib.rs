@@ -489,7 +489,8 @@ fn handle_message(
             println!("terminal message received");
             match contract_caller {
                 Some(caller) => {
-                    let result = caller.increment();
+                    let _ = caller.increment();
+                    let result = caller.number();
                     println!("result: {:?}", result);
                 }
                 None => println!("No contract caller"),
