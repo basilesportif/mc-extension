@@ -21,6 +21,24 @@ impl ActivePlayer {
 }
 
 pub type CubeToOwner = HashMap<Cube, Vec<TeamName>>;
+pub trait CubeToOwnerTrait {
+    fn sync_with_world_config(&mut self, world_config: &TeamNameToRegion) -> Result<(), anyhow::Error>;
+}
+
+impl CubeToOwnerTrait for CubeToOwner {
+    // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
+    fn sync_with_world_config(&mut self, world_config: &TeamNameToRegion) -> Result<(), anyhow::Error> {
+        self.clear();
+        for (owner, region) in world_config.iter() {
+            for cube in region.to_hashmap().keys() {
+                self.entry(cube.clone())
+                    .and_modify(|owners| owners.push(owner.clone()))
+                    .or_insert_with(|| vec![owner.clone()]);
+            }
+        }
+        Ok(())
+    }
+}
 
 // TODO, change this to Team (Team1 or Team2), without the Unclaimed struct
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]

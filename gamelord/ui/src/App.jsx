@@ -6,27 +6,26 @@ function App() {
     name: "",
     minecraft_server_address: "",
     world_config: {},
-    goal_post: {center: [0,0,0], side_length: 1},
+    goal_post: {center: [0,0,0], side_length: 16},
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
+      spawn_point: {center: [0,0,0], side_length: 16},
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 1},
+      spawn_point: {center: [0,0,0], side_length: 16},
     },
   });
   const [activeTab, setActiveTab] = useState("tab1");
   const [wsReady, setWsReady] = useState(false);
 
   useEffect(() => {
-    document.getElementById("playerForm").addEventListener("submit", addPlayer);
     setActiveTab("tab2");
     if (!wsReady) {
       webSocket();
@@ -45,42 +44,6 @@ function App() {
     // Add 'active' class to the selected tab
     document.getElementById(activeTab).classList.add("active");
   }, [activeTab]);
-
-  async function addPlayer() {
-    const minecraftName = document.getElementById("minecraftName").placeholder;
-    const kinode_id = document.getElementById("kinode_id").placeholder;
-    const playerData = {
-      kinode_id: kinode_id,
-      minecraft_player_name: minecraftName,
-    };
-
-    const url = "/gamelord:gamelord:basilesex.os/api/addPlayer"; // Adjust the URL as needed
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(playerData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.text();
-      console.log("Player added successfully:", data);
-      document.getElementById(
-        "response-output-tab1"
-      ).innerText = `Player ${minecraftName} with ID ${kinode_id} added successfully.`;
-    } catch (error) {
-      console.error("Error adding player:", error);
-      document.getElementById(
-        "response-output-tab1"
-      ).innerText = `Error: ${error.message}`;
-    }
-  }
 
   function uploadFile() {
     const fileInput = document.getElementById("fileInput");
@@ -160,8 +123,24 @@ function App() {
       })
       .then((data) => {
         console.log("World configuration:", data);
-        document.getElementById("response-output-tab1").innerText =
-          JSON.stringify(data, null, 2);
+        // Create a Blob with the JSON data
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        
+        // Create a temporary URL for the Blob
+        const url = window.URL.createObjectURL(blob);
+        
+        // Create a temporary anchor element
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'world_config.json';
+        
+        // Append the anchor to the body, click it, and remove it
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Revoke the temporary URL
+        window.URL.revokeObjectURL(url);
       })
       .catch((error) => {
         console.error("Error getting world configuration:", error);
@@ -210,9 +189,9 @@ function App() {
     const goalPostZ = parseInt(document.getElementById("goalPostZ").value || "0", 10);
 
     const data = {
-      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 1 },
-      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 1 },
-      goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 1 },
+      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 16 },
+      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 16 },
+      goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 16 },
     };
 
     console.log("configuring points:", data);
@@ -293,31 +272,8 @@ function App() {
       <div id="tab1" className="tab-content active">
         <div className="container">
           <div className="option">
-            <h2>Add Player to Game</h2>
-            <form id="playerForm">
-              <div className="form-group">
-                <input
-                  type="text"
-                  id="minecraftName"
-                  name="minecraftName"
-                  placeholder="Enter Minecraft Name"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="text"
-                  id="kinode_id"
-                  name="kinode_id"
-                  placeholder="Enter Kinode ID"
-                />
-              </div>
-              <button type="button" onClick={() => addPlayer()}>
-                Submit Details
-              </button>
-            </form>
-          </div>
-          <div className="option">
-            <h2>Load Preconfigured World</h2>
+            <h2>Load Preconfigured Effects</h2>
+            <p>Insert world_config.json and overwrite current world_config. NOT necessary to use, players can start by editing an empty world config.</p>
             <form>
               <div className="form-group">
                 <input type="file" id="fileInput" accept=".json" />
@@ -331,6 +287,7 @@ function App() {
         <div className="container">
           <div className="option">
             <h2>Delete World</h2>
+            <p>Deletes the world config created by players.</p>
             <button type="button" onClick={() => deleteWorld()}>
               Delete World
             </button>

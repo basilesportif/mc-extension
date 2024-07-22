@@ -8,7 +8,7 @@ use kinode_process_lib::{
 
 mod gamelord_types;
 mod utilities;
-use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State};
+use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State, CubeToOwnerTrait};
 use mcstructs::{
     ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
     TeamNameToRegion, WsPush, Region, CubeEffectList
@@ -29,17 +29,7 @@ fn load_world(state: &mut State) {
     match serde_json::from_str::<TeamNameToRegion>(&body_str) {
         Ok(new_world_config) => {
             state.lobby.world_config = new_world_config;
-            state.cube_to_owner.clear();
-            // update cube_to_owner to check who owns that cube, and if it is already owned, add that owner as well
-            for (owner, region) in state.lobby.world_config.iter() {
-                for cube in region.to_hashmap().keys() {
-                    state
-                        .cube_to_owner
-                        .entry(cube.clone())
-                        .and_modify(|owners| owners.push(owner.clone()))
-                        .or_insert_with(|| vec![owner.clone()]);
-                }
-            }
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
 
             println!("World loaded from request");
@@ -51,36 +41,6 @@ fn load_world(state: &mut State) {
                 http::StatusCode::BAD_REQUEST,
                 None,
                 b"Invalid world data".to_vec(),
-            );
-        }
-    }
-}
-
-fn add_player(state: &mut State) {
-    let body = get_blob().unwrap_or_default();
-    println!("body: {:?}", body);
-    let body_str = String::from_utf8_lossy(&body.bytes);
-    println!("body_str: {:?}", body_str);
-    match serde_json::from_str::<Player>(&body_str) {
-        Ok(player) => {
-            println!("player: {:?}", player);
-            let player_clone = player.clone(); // Clone player before insertion
-            state
-                .allowed_players
-                .insert(player.minecraft_player_name.clone(), player);
-            println!(
-                "Player {} added to allowed players",
-                player_clone.minecraft_player_name
-            );
-            state.save();
-            http::send_response(http::StatusCode::OK, None, b"Player Added".to_vec());
-        }
-        Err(e) => {
-            println!("Failed to parse player data: {:?}", e);
-            http::send_response(
-                http::StatusCode::BAD_REQUEST,
-                None,
-                b"Invalid player data".to_vec(),
             );
         }
     }
@@ -225,12 +185,14 @@ fn handle_mcclient_request(
         }
         McClientToGamelordRequest::WorldConfigFull(world_config) => {
             state.lobby.world_config = world_config.clone();
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
         McClientToGamelordRequest::WorldConfigRegion(team, region) => {
             let diff = GameLobbyDiff::WorldConfigRegion(team, region);
-            let _ = state.lobby.apply_diff(&diff);           
+            let _ = state.lobby.apply_diff(&diff);
+            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&diff);
         }
@@ -336,10 +298,9 @@ fn handle_kinode_message(
                 return Ok(());
             };
 
-            // Hardcoded spawn cube
-            let spawn_cube = Cube {
-                center: (0, 0, 0),
-                side_length: 50,
+            let spawn_cube = match team_name {
+                TeamName::Team1 => &state.lobby.team1.spawn_point,
+                TeamName::Team2 => &state.lobby.team2.spawn_point,
             };
 
             let active_player = ActivePlayer {
@@ -362,7 +323,7 @@ fn handle_kinode_message(
                 serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
                     true,
                     format!("Player added to team {:?}.", &team_name),
-                    spawn_cube,
+                    spawn_cube.clone(),
                 ))
                 .expect("Failed to serialize response");
             Response::new().body(response).send().unwrap();
@@ -451,7 +412,6 @@ fn handle_http_request(
                         http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
                     "/api/loadWorld" => load_world(state),
-                    "/api/addPlayer" => add_player(state),
                     "/api/deleteWorld" => {
                         state.lobby.world_config.clear();
                         state.cube_to_owner.clear();
@@ -528,10 +488,9 @@ fn init(our: Address) {
     for path in [
         "/api/loadWorld",
         "/world_config",
-        "/api/addPlayer",
         "/api/deleteWorld",
         "/api/editLobby",
-        "api/clearTeams",
+        "/api/clearTeams",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
