@@ -1,5 +1,9 @@
 # Playtesting Setup
 
+```bash
+git clone https://github.com/basilesportif/mc-extension.git
+```
+
 ## Planning Phase
 
 ### Server Setup - gamelord
