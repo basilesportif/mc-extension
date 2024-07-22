@@ -16,7 +16,7 @@ use kinode_process_lib::{
 use serde::Deserialize;
 use std::str::FromStr;
 
-pub const CONTRACT_ADDRESS: &str = "0x7a2088a1bFc9d81c55368AE168C2C02570cB814F"; //TODO
+pub const CONTRACT_ADDRESS: &str = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 pub const WALLET_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 pub struct Caller {
@@ -50,6 +50,7 @@ fn send_tx(
     if let Ok(tx_count) = tx_count {
         nonce = tx_count.to::<u64>();
     } else {
+        println!("tx_count: {:?}", tx_count);
         return Err(anyhow::anyhow!("Error getting transaction count"));
     }
 
