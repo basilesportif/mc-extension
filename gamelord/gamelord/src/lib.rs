@@ -9,7 +9,7 @@ use kinode_process_lib::{
 };
 
 mod sol_gamelord;
-use sol_gamelord::{Caller, Counter, CONTRACT_ADDRESS, WALLET_KEY};
+use sol_gamelord::{Action, Caller, Counter, WALLET_KEY};
 mod gamelord_types;
 mod utilities;
 use gamelord_types::{
@@ -469,9 +469,53 @@ fn handle_http_request(
     Ok(())
 }
 
+// used for eth contract testing
+fn handle_terminal_message(
+    state: &mut State,
+    contract_caller: &mut Option<Caller>,
+    ws_channel_id: &mut Option<u32>,
+    message: &Message,
+) -> anyhow::Result<()> {
+    println!("terminal message received");
+
+    let caller = match contract_caller {
+        Some(caller) => caller,
+        None => return Ok(()),
+    };
+
+    let action = match serde_json::from_slice::<Action>(&message.body()) {
+        Ok(deserialized) => deserialized,
+        Err(e) => {
+            println!("Failed to deserialize message body: {:?}", e);
+            return Ok(());
+        }
+    };
+
+    match action {
+        Action::SetContractAddress(address) => {
+            println!("Setting contract address to: {}", address);
+            *contract_caller = Caller::new(
+                address.as_str(),
+                Provider::new(31337, 5),
+                31337,
+                WALLET_KEY,
+            );
+        }
+        Action::Increment => {
+            let _ = caller.increment();
+        }
+        Action::Number => {
+            let result = caller.number();
+            println!("result: {:?}", result);
+        }
+        _ => println!("Invalid message"),
+    }
+    return Ok(());
+}
+
 fn handle_message(
     state: &mut State,
-    contract_caller: &Option<Caller>,
+    contract_caller: &mut Option<Caller>,
     ws_channel_id: &mut Option<u32>,
 ) -> anyhow::Result<()> {
     let message = await_message()?;
@@ -484,18 +528,9 @@ fn handle_message(
     }
     if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
-        // using for eth contract testing
+
         if message.source().process.package_name == "terminal" {
-            println!("terminal message received");
-            match contract_caller {
-                Some(caller) => {
-                    let _ = caller.increment();
-                    let result = caller.number();
-                    println!("result: {:?}", result);
-                }
-                None => println!("No contract caller"),
-            }
-            return Ok(());
+            return handle_terminal_message(state, contract_caller, ws_channel_id, &message);
         }
         handle_kinode_message(state, ws_channel_id, &message)?;
     } else {
@@ -525,10 +560,10 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
-    let contract_caller = Caller::new(CONTRACT_ADDRESS, Provider::new(31337, 5), 31337, WALLET_KEY);
-    
+    let mut contract_caller = Caller::new("", Provider::new(31337, 5), 31337, WALLET_KEY);
+
     loop {
-        match handle_message(&mut state, &contract_caller, &mut ws_channel_id) {
+        match handle_message(&mut state, &mut contract_caller, &mut ws_channel_id) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);

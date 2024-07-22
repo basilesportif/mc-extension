@@ -13,12 +13,18 @@ use kinode_process_lib::{
     eth::{Address as EthAddress, BlockId, BlockNumberOrTag, EthError, Filter, Log, Provider},
     kinode, println,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-pub const CONTRACT_ADDRESS: &str = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 pub const WALLET_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
+
+#[derive(Serialize, Deserialize, Clone)]
+pub enum Action {
+    SetContractAddress(String),
+    Increment,
+    Number,
+}
 pub struct Caller {
     contract_address: String,
     provider: Provider,
