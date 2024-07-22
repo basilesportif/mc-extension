@@ -4,6 +4,9 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import * as threeJsSetup from "./utils/threeJsSetup";
+import { CubeConstructor } from "./utils/CubeConstructor";
+import { Crosshair, Instructions, TeamAlert } from "./components/MCWorldElements";
+import  EffectMenu  from "./components/EffectMenu";
 
 const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const sceneRef = useRef(null);
@@ -45,6 +48,8 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
 
   const [storedPlayerPosition, setStoredPlayerPosition] = useState(null);
   const [storedCameraDirection, setStoredCameraDirection] = useState(null);
+
+  const [unpaintedCubesCount, setUnpaintedCubesCount] = useState(0);
 
   const init = async () => {
     if (sceneRef.current) {
@@ -102,7 +107,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
               sceneRef.current.add(object);
               minecraftWorldRef.current = object;
               console.log("Minecraft world added to scene.");
-              createCubesBasedOnMinecraftWorld();
+              CubeConstructor(minecraftWorldRef, sceneRef, cubesRef);
               resolve();
             },
             undefined,
@@ -122,6 +127,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   };
 
   useEffect(() => {
+
     const handleLock = () => {
       setShowInstructions(false);
       setIsLocked(true); 
@@ -149,7 +155,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         controls.addEventListener("unlock", handleUnlock);
 
         sceneRef.current.add(controls.getObject());
-        console.log("PointerLockControls set up.");
       }
     };
 
@@ -467,75 +472,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     };
   }, [initialized, handleAnimationFrame]);
 
-
-  const createCubesBasedOnMinecraftWorld = () => {
-    if (!minecraftWorldRef.current || !sceneRef.current) return;
-
-    const minecraftWorld = minecraftWorldRef.current;
-    const scene = sceneRef.current;
-
-    const bbox = new THREE.Box3().setFromObject(minecraftWorld);
-    const size = bbox.getSize(new THREE.Vector3());
-    const center = bbox.getCenter(new THREE.Vector3());
-
-    const cubeSize = 16;
-    const gridX = Math.ceil(size.x / cubeSize);
-    const gridY = Math.ceil(size.y / cubeSize);
-    const gridZ = Math.ceil(size.z / cubeSize);
-
-    const gridGroup = new THREE.Group();
-
-    const offsetX = Math.floor(gridX / 2) * cubeSize;
-    const offsetY = Math.floor(bbox.min.y / cubeSize) * cubeSize;
-    const offsetZ = Math.floor(gridZ / 2) * cubeSize;
-
-    const newCubes = [];
-
-    for (let i = 0; i < gridX; i++) {
-      for (let j = 0; j < gridY; j++) {
-        for (let k = 0; k < gridZ; k++) {
-          const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
-          const material = new THREE.MeshPhongMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.02,
-            side: THREE.DoubleSide,
-          });
-          const cube = new THREE.Mesh(geometry, material);
-
-          const edgesGeometry = new THREE.EdgesGeometry(geometry);
-          const edgesMaterial = new THREE.LineBasicMaterial({
-            color: 0xcccccc,
-            transparent: true,
-            opacity: 0.1,
-            linewidth: 1,
-          });
-          const wireframe = new THREE.LineSegments(
-            edgesGeometry,
-            edgesMaterial
-          );
-          cube.add(wireframe);
-
-          cube.position.set(
-            i * cubeSize - offsetX + cubeSize / 2,
-            j * cubeSize + offsetY + cubeSize / 2,
-            k * cubeSize - offsetZ + cubeSize / 2
-          );
-
-          cube.userData.clicked = false;
-          gridGroup.add(cube);
-          newCubes.push(cube);
-        }
-      }
-    }
-
-    minecraftWorld.position.set(-center.x, -bbox.min.y, -center.z);
-
-    scene.add(gridGroup);
-    cubesRef.current = newCubes;
-    console.log("Cubes created based on Minecraft world.");
-  };
-
   const getTextureType = (textureName) => {
     if (textureName.includes("block")) return "block";
     if (textureName.includes("entity")) return "entity";
@@ -550,7 +486,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       init();
     }
   }, [initialized]);
-
 
   useEffect(() => {
     if (initialized) {
@@ -569,74 +504,47 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     setShowCrosshair(isLocked);
   }, [isLocked]);
 
-  const handleEffectSelection = (effect) => {
-    setSelectedEffects((prevEffects) =>
-      prevEffects.includes(effect)
-        ? prevEffects.filter((e) => e !== effect)
-        : [...prevEffects, effect]
-    );
-  };
+  const paintCubes = useCallback(() => {
+    const { world_config } = lobby;
+    let unpaintedCount = 0;
 
-  const handleApplyEffects = () => {
-    if (selectedCubes.length > 0) {
-      // the exact format which backend needs
-      const teamCubes = selectedCubes.reduce((acc, cube) => {
-        const center = [
-          cube.position.x,
-          cube.position.y,
-          cube.position.z,
-        ];
-        const side_length = 16; // Assuming a fixed side length
-        const element = [{ center, side_length }, [selectedEffects]];
-        // if cube in list, dont add
-        if (
-          !acc.some(
-            (e) =>
-              e[0].center[0] === center[0] &&
-              e[0].center[1] === center[1] &&
-              e[0].center[2] === center[2] &&
-              e[0].side_length === side_length
-          )
-        ) {
-          acc.push(element);
+    if (world_config) {
+      const { Team1 = {}, Team2 = {} } = world_config;
+
+      cubesRef.current.forEach((cube) => {
+        const cubePosition = cube.position;
+        const cubeSize = 16;
+        const x = Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
+        const y = Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
+        const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
+        const cubeCenter = { center: [x, y, z], side_length: cubeSize };
+
+        const team1Config = Team1[JSON.stringify(cubeCenter)];
+        const team2Config = Team2[JSON.stringify(cubeCenter)];
+
+        if (team1Config && team2Config) {
+          cube.material.color.setHex(0xff0000); // Red for double effects
+          cube.material.opacity = 0.05;
+        } else if (team1Config) {
+          cube.material.color.setHex(0x0000ff); // Blue for Team 1
+          cube.material.opacity = 0.05;
+        } else if (team2Config) {
+          cube.material.color.setHex(0x00ff00); // Green for Team 2
+          cube.material.opacity = 0.05;
+        } else {
+          cube.material.color.setHex(0xffffff); // White for unpainted cubes
+          cube.material.opacity = 0.02;
+          unpaintedCount++;
         }
-        return acc;
-      }, []);
-
-      let team =
-        ourInTeam === "team1"
-          ? "Team1"
-          : ourInTeam === "team2"
-          ? "Team2"
-          : null;
-
-      // this is the exact format the backend needs
-      const logData = [team, { cubes: teamCubes }];
-      console.log("Enter pressed, opening effect menu");
-      console.log(JSON.stringify(logData, null, 2));
-
-      ws.send(JSON.stringify({ WorldConfigRegion: logData }));
+      });
     }
 
-    setShowEffectMenu(false);
-    setSelectedEffects([]);
-    // Relock the pointer to the Minecraft world
-    if (controlsRef.current && containerRef.current) {
-      containerRef.current.requestPointerLock();
-      setAreCubesSelectable(true);
-    }
-  };
+    setUnpaintedCubesCount(unpaintedCount);
+  }, [lobby.world_config]);
 
-  const handleCancelEffects = () => {
-    console.log('Effect selection canceled');
-    setShowEffectMenu(false);
-    setSelectedEffects([]);
-    if (controlsRef.current && containerRef.current) {
-      containerRef.current.requestPointerLock();
-      setAreCubesSelectable(true);
-    }
-    
-  };
+  useEffect(() => {
+    paintCubes();
+  }, [paintCubes]);
 
   return (
     <div
@@ -644,120 +552,25 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       style={{ width: "100%", height: "100%", position: "relative" }}
       tabIndex="0"
     >
-      {showInstructions && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            background: "rgba(0,0,0,0.5)",
-            color: "white",
-            fontSize: "24px",
-            cursor: "pointer",
-          }}
-        >
-          <div>Click to Start</div>
-          <div style={{ fontSize: "18px", marginTop: "20px" }}>
-            WASD or Arrow keys to move, Space to go up, Shift to go down
-            <br />
-            Mouse to look around, ESC to exit, Click to select cubes
-            <br />R to reset selection, Enter to open effect menu
-          </div>
-        </div>
-      )}
-
-      {showTeamAlert && (
-        <div
-          style={{
-            position: "absolute",
-            top: "20px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(255,0,0,0.8)",
-            color: "white",
-            padding: "10px",
-            borderRadius: "5px",
-            zIndex: 1000,
-          }}
-        >
-          You have to select a team to join before entering movement mode.
-        </div>
-      )}
-      {showCrosshair && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: "20px",
-            height: "20px",
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-          }}
-        >
-          <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="10" cy="10" r="2" fill="white" />
-            <line
-              x1="0"
-              y1="10"
-              x2="20"
-              y2="10"
-              stroke="white"
-              strokeWidth="2"
-            />
-            <line
-              x1="10"
-              y1="0"
-              x2="10"
-              y2="20"
-              stroke="white"
-              strokeWidth="2"
-            />
-          </svg>
-        </div>
-      )}
-
-      {showEffectMenu && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
-            padding: '20px',
-            borderRadius: '5px',
-            zIndex: 1000,
-          }}
-        >
-          <h2>Select Effects</h2>
-          {effectOptions.map((effect) => (
-            <div key={effect}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedEffects.includes(effect)}
-                  onChange={() => handleEffectSelection(effect)}
-                />
-                {effect}
-              </label>
-            </div>
-          ))}
-          <div style={{ marginTop: '20px' }}>
-            <button onClick={handleApplyEffects}>Apply</button>
-            <button onClick={handleCancelEffects} style={{ marginLeft: '10px' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {showInstructions && <Instructions />}
+      {showTeamAlert && <TeamAlert />}
+      {showCrosshair && <Crosshair />}
+        {showEffectMenu && <EffectMenu
+          showEffectMenu={showEffectMenu}
+          effectOptions={effectOptions}
+          selectedEffects={selectedEffects}
+          setSelectedEffects={setSelectedEffects}
+          ourInTeam={ourInTeam}
+          ws={ws}
+          controlsRef={controlsRef}
+          containerRef={containerRef}
+          setAreCubesSelectable={setAreCubesSelectable}
+          selectedCubes={selectedCubes}
+          setShowEffectMenu={setShowEffectMenu}
+          lobby={lobby}
+          paintCubes={paintCubes}
+         />}
+      <div>Unpainted Cubes: {unpaintedCubesCount}</div>
     </div>
   );
 };
