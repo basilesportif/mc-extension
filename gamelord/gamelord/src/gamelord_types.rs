@@ -1,8 +1,8 @@
-use kinode_process_lib::{get_state, println, set_state, Address, Request};
+use kinode_process_lib::{get_state, println, set_state, Address, Request, eth::Provider};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-
 use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
+use crate::sol_gamelord::{Caller, CONTRACT_ADDRESS, WALLET_KEY};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {

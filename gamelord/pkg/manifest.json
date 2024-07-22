@@ -6,7 +6,8 @@
         "request_networking": true,
         "request_capabilities": [
             "http_server:distro:sys",
-            "vfs:distro:sys"
+            "vfs:distro:sys",
+            "eth:distro:sys"
         ],
         "grant_capabilities": [
             "gamelord:gamelord:basilesex.os",

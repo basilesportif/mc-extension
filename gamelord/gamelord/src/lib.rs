@@ -1,20 +1,25 @@
 use chrono::Utc;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
-    await_message, call_init, get_blob,
+    await_message, call_init,
+    eth::Provider,
+    get_blob,
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
 
+mod sol_gamelord;
+use sol_gamelord::{Caller, Counter, CONTRACT_ADDRESS, WALLET_KEY};
 mod gamelord_types;
 mod utilities;
-use gamelord_types::{ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft, State, CubeToOwnerTrait};
+use gamelord_types::{
+    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft, State,
+};
 use mcstructs::{
-    ChatMessage, Cube, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName,
-    TeamNameToRegion, WsPush, Region, CubeEffectList
+    ChatMessage, Cube, CubeEffectList, GameLobbyDiff, McClientToGamelordRequest, Player, Region,
+    TeamName, TeamNameToRegion, WsPush,
 };
 use std::collections::HashMap;
-
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -29,7 +34,9 @@ fn load_world(state: &mut State) {
     match serde_json::from_str::<TeamNameToRegion>(&body_str) {
         Ok(new_world_config) => {
             state.lobby.world_config = new_world_config;
-            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
+            let _ = state
+                .cube_to_owner
+                .sync_with_world_config(&state.lobby.world_config);
             state.save();
 
             println!("World loaded from request");
@@ -185,14 +192,18 @@ fn handle_mcclient_request(
         }
         McClientToGamelordRequest::WorldConfigFull(world_config) => {
             state.lobby.world_config = world_config.clone();
-            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
+            let _ = state
+                .cube_to_owner
+                .sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
         }
         McClientToGamelordRequest::WorldConfigRegion(team, region) => {
             let diff = GameLobbyDiff::WorldConfigRegion(team, region);
             let _ = state.lobby.apply_diff(&diff);
-            let _ = state.cube_to_owner.sync_with_world_config(&state.lobby.world_config);
+            let _ = state
+                .cube_to_owner
+                .sync_with_world_config(&state.lobby.world_config);
             state.save();
             return state.update_clients(&diff);
         }
@@ -458,7 +469,11 @@ fn handle_http_request(
     Ok(())
 }
 
-fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
+fn handle_message(
+    state: &mut State,
+    contract_caller: &Option<Caller>,
+    ws_channel_id: &mut Option<u32>,
+) -> anyhow::Result<()> {
     let message = await_message()?;
 
     if let "http_server:distro:sys" | "http_client:distro:sys" =
@@ -467,9 +482,20 @@ fn handle_message(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow:
         println!("HTTP request received.");
         return handle_http_request(state, ws_channel_id, &message);
     }
-
     if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
+        // using for eth contract testing
+        if message.source().process.package_name == "terminal" {
+            println!("terminal message received");
+            match contract_caller {
+                Some(caller) => {
+                    let result = caller.increment();
+                    println!("result: {:?}", result);
+                }
+                None => println!("No contract caller"),
+            }
+            return Ok(());
+        }
         handle_kinode_message(state, ws_channel_id, &message)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
@@ -498,10 +524,10 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
-    // println!("state on init: {:?}", state);
-
+    let contract_caller = Caller::new(CONTRACT_ADDRESS, Provider::new(31337, 5), 31337, WALLET_KEY);
+    
     loop {
-        match handle_message(&mut state, &mut ws_channel_id) {
+        match handle_message(&mut state, &contract_caller, &mut ws_channel_id) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);
