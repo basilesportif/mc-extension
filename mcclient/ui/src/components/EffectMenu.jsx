@@ -50,20 +50,6 @@ const EffectMenu = ({
           ? "Team2"
           : null;
 
-      // Create a copy of the lobby state with the updated effects
-      const updatedLobby = {
-        ...lobby,
-        world_config: {
-          ...lobby.world_config,
-          [team]: {
-            ...lobby.world_config[team],
-            ...teamCubes.reduce((acc, [cube, effects]) => {
-              acc[JSON.stringify(cube)] = effects;
-              return acc;
-            }, {}),
-          },
-        },
-      };
 
       // this is the exact format the backend needs
       const logData = [team, { cubes: teamCubes }];
@@ -71,12 +57,8 @@ const EffectMenu = ({
       console.log(JSON.stringify(logData, null, 2));
 
       // Send the updated lobby state over WebSocket
-      ws.send(JSON.stringify({ WorldConfigRegion: logData, lobby: updatedLobby }));
+      ws.send(JSON.stringify({ WorldConfigRegion: logData }));
 
-      // Delay the execution of paintCubes by 1 second
-      setTimeout(() => {
-        paintCubes();
-      }, 1000);
     }
 
     setShowEffectMenu(false);

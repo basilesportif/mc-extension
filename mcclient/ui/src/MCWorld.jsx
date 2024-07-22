@@ -509,7 +509,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     let unpaintedCount = 0;
 
     if (world_config) {
-      const { Team1 = {}, Team2 = {} } = world_config;
+      const { Team1 = {}, team1 = {} } = world_config;
 
       cubesRef.current.forEach((cube) => {
         const cubePosition = cube.position;
@@ -519,8 +519,13 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
         const cubeCenter = { center: [x, y, z], side_length: cubeSize };
 
-        const team1Config = Team1[JSON.stringify(cubeCenter)];
-        const team2Config = Team2[JSON.stringify(cubeCenter)];
+        const team1Config = Team1.cubes?.find(([cubeConfig]) => {
+          return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
+        });
+
+        const team2Config = team1.cubes?.find(([cubeConfig]) => {
+          return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
+        });
 
         if (team1Config && team2Config) {
           cube.material.color.setHex(0xff0000); // Red for double effects
@@ -543,8 +548,12 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   }, [lobby.world_config]);
 
   useEffect(() => {
+    console.log('lobby changed:', lobby);
+  }, [lobby]);
+
+  useEffect(() => {
     paintCubes();
-  }, [paintCubes]);
+  }, [paintCubes, lobby]);
 
   return (
     <div

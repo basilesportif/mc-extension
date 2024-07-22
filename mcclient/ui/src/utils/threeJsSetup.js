@@ -67,14 +67,20 @@ const setupSky = (sceneRef, skyRef, rendererRef) => {
 
 const setupLighting = (sceneRef) => {
   // Ambient light
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-  sceneRef.current.add(ambientLight);
+  const ambientLight = new THREE.AmbientLight(0x404040, 0.8); // Increase ambient light intensity
 
   // Directional light (sun-like)
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  directionalLight.position.set(100, 100, 50);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increase directional light intensity
+  directionalLight.position.set(200, 200, 100); // Adjust position for better lighting
   directionalLight.castShadow = true;
-  sceneRef.current.add(directionalLight);
+
+  // Shadow map configuration
+  directionalLight.shadow.mapSize.width = 2048; // Increase shadow map resolution
+  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.camera.near = 1; // Adjust near and far planes
+  directionalLight.shadow.camera.far = 500;
+
+  sceneRef.current.add(ambientLight, directionalLight);
 
   console.log("Lighting set up.");
 };
