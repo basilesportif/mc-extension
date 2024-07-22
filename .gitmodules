@@ -1,0 +1,3 @@
+[submodule "sol-contracts/gamelord/lib/forge-std"]
+	path = sol-contracts/gamelord/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
