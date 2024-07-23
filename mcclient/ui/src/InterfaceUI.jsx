@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { applyDiff } from "./shared";
 import App from "./App";
 import ThreeJsScene from "./MCWorld";
+import Login from "./Login";
 
 let ws;
 
@@ -33,6 +34,28 @@ const InterfaceUI = () => {
     webSocket();
   }, []);
 
+  useEffect(() => {
+    console.log("lobby", lobby);
+    if (ourNode && lobby) {
+      setOurInTeam(nodeInTeam(ourNode, lobby));
+    }
+  }, [lobby]);
+
+  useEffect(() => {
+    console.log("ourNode", ourNode);
+    console.log("ourInTeam", ourInTeam);
+  }, [ourNode, ourInTeam]);
+
+  const nodeInTeam = (node, lobby) => {
+    if (lobby.team1.players.some((p) => p.kinode_id === node)) {
+      return "team1";
+    } else if (lobby.team2.players.some((p) => p.kinode_id === node)) {
+      return "team2";
+    } else {
+      return null;
+    }
+  };
+
   const webSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     // jurij's dev setup
@@ -62,6 +85,14 @@ const InterfaceUI = () => {
   };
 
   return (
+    <div>
+    {console.log("ourInTeam:", ourInTeam)}
+    {ourInTeam === null ? (
+      <Login
+        ourInTeam={ourInTeam}
+        setOurInTeam={setOurInTeam}
+      />
+    ) : (
     <div style={{ display: "flex", height: "100vh" }}>
       <div
         style={{
@@ -79,11 +110,14 @@ const InterfaceUI = () => {
           setOurInTeam={setOurInTeam}
           lobby={lobby}
           setLobby={setLobby}
+          nodeInTeam={nodeInTeam}
         />
       </div>
       <div style={{ width: "70%", position: "relative" }}>
         <ThreeJsScene ws={ws} ourInTeam={ourInTeam} lobby={lobby} />
       </div>
+        </div>
+      )}
     </div>
   );
 };

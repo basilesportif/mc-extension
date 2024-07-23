@@ -10,69 +10,11 @@ import {
 } from "@chatscope/chat-ui-kit-react";
 import Msg from "./components/Msg";
 
-function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}) {
+function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby, nodeInTeam}) {
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
   });
-
-  useEffect(() => {
-    console.log("lobby", lobby);
-    if (ourNode && lobby) {
-      setOurInTeam(nodeInTeam(ourNode, lobby));
-    }
-  }, [lobby]);
-
-  useEffect(() => {
-    console.log("ourNode", ourNode);
-    console.log("ourInTeam", ourInTeam);
-  }, [ourNode, ourInTeam]);
-
-  async function joinTeam(team_name) {
-    console.log("join team");
-    const minecraft_id = document.getElementById("minecraftId").value;
-    const gamelord_id = document.getElementById("gamelordId").value;
-
-    const url = `/mcclient:mcclient:basilesex.os/join_team`;
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          gamelord_id: gamelord_id,
-          minecraft_id: minecraft_id,
-          team_name: team_name,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.text();
-      document.getElementById(
-        "response-output"
-      ).innerText = `${minecraft_id} join request made.`;
-    } catch (error) {
-      console.error("Error adding player:", error);
-      document.getElementById(
-        "response-output"
-      ).innerText = `Error: ${error.message}`;
-    }
-  }
-
-  const nodeInTeam = (node, lobby) => {
-    if (lobby.team1.players.some((p) => p.kinode_id === node)) {
-      return "team1";
-    } else if (lobby.team2.players.some((p) => p.kinode_id === node)) {
-      return "team2";
-    } else {
-      return null;
-    }
-  };
 
 
   const onSend = (message) => {
@@ -83,29 +25,6 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
   return (
     <div>
       <h2>McClient</h2>
-      {ourInTeam === null && (
-        <>
-          <h3>Join Team</h3>
-          <form id="playerForm">
-            <input
-              type="text"
-              id="gamelordId"
-              placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
-            />
-            <input
-              type="text"
-              id="minecraftId"
-              placeholder="Enter Your Minecraft ID"
-            />
-            <button type="button" onClick={() => joinTeam("Team1")}>
-              Join Team1
-            </button>
-            <button type="button" onClick={() => joinTeam("Team2")}>
-              Join Team2
-            </button>
-          </form>
-        </>
-      )}
       <div style={{ textAlign: "left" }}>
         <p>Game: {lobby.name}</p>
         <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
