@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { formatAddress, formatChainAsNum } from "./utils/eth";
-import { ethers } from "ethers";
+import { ethers, parseEther } from "ethers";
 
 let providers = [];
 let signer = null;
@@ -43,20 +43,20 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
   const [selectedWallet, setSelectedWallet] = useState();
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();
-  const providers = useSyncProviders();
+  //   const providers = useSyncProviders();
 
-  const handleConnect = async (providerWithInfo) => {
-    try {
-      const accounts = await providerWithInfo.provider.request({
-        method: "eth_requestAccounts",
-      });
+  //   const handleConnect = async (providerWithInfo) => {
+  //     try {
+  //         const accounts = await providerWithInfo.provider.request({
+  //         method: "eth_requestAccounts",
+  //       });
 
-      setSelectedWallet(providerWithInfo);
-      setUserAccount(accounts?.[0]);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  //       setSelectedWallet(providerWithInfo);
+  //       setUserAccount(accounts?.[0]);
+  //     } catch (error) {
+  //       console.error(error);
+  //     }
+  //   };
 
   async function joinTeam(team_name) {
     console.log("join team");
@@ -89,48 +89,37 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
   }
 
   useEffect(() => {
-    getChainId(selectedWallet);
     const loadEthers = async () => {
       if (window.ethereum == null) {
         console.log("MetaMask not installed; using read-only defaults");
         provider = ethers.getDefaultProvider();
       } else {
-        provider = new ethers.JsonRpcProvider("http://localhost:8545");
-        console.log(provider);
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
         signer = await provider.getSigner();
+        // Get the provider's chain ID
+        let network = await provider.getNetwork();
+        console.log("NETWORK", network.chainId);
+        setChainId(network.chainId.toString());
+        console.log("Connected to chain ID:", network.chainId);
+        let address = await signer.getAddress();
+        setUserAccount(address);
+        console.log("ADDRESS", address);
       }
     };
     loadEthers();
-  }, [selectedWallet]);
-
-  const getChainId = async (providerWithInfo) => {
-    try {
-      const chainId = await providerWithInfo.provider.request({
-        method: "eth_chainId",
-      });
-      console.log("Connected to chain:", chainId);
-      setChainId(formatChainAsNum(chainId));
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  }, []);
 
   const sendEth = async () => {
     try {
-      const txHash = await selectedWallet.provider.request({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: userAccount,
-            to: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
-            value: "0x0", // wei amount in hex
-            gasLimit: "0x5028",
-            maxPriorityFeePerGas: "0x3b9aca00",
-            maxFeePerGas: "0x2540be400",
-          },
-        ],
+      let tx = await signer.sendTransaction({
+        to: "0xc8637aadB7619fcaF1aD108682cF593cD124D499",
+        // "0x0B306BF915C4d645ff596e518fAf3F9669b97016", - contract address
+        value: parseEther("0.1"),
       });
-      console.log(txHash);
+      let receipt = await tx.wait();
+
+      console.log(receipt);
     } catch (error) {
       console.error(error);
     }
@@ -162,9 +151,9 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
           </form>
         </>
       )}
-      <h3>Connect with MetaMask</h3>
-      <h2>Wallets Detected:</h2>
-      <div>
+      {/* <h3>Connect with MetaMask</h3>
+      <h2>Wallets Detected:</h2> */}
+      {/* <div>
         <div>{}</div>
         {providers.length > 0 ? (
           providers?.map((provider) => (
@@ -179,8 +168,8 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
         ) : (
           <div>No Announced Wallet Providers</div>
         )}
-      </div>
-      <hr />
+      </div> */}
+      {/* <hr />
       <h2>{userAccount ? "" : "No "}Wallet Selected</h2>
       {userAccount && (
         <div>
@@ -194,9 +183,10 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
           </div>
         </div>
       )}
-      <hr />
-      <h2>Network Information</h2>
+      <hr /> */}
+      {/* <h2>Network Information</h2> */}
       <div>Chain ID: {chainId}</div>
+      <div>Address: {userAccount}</div>
       <button className="sendEthButton" onClick={sendEth}>
         Send ETH
       </button>
