@@ -1,23 +1,10 @@
-import React, { useEffect, useState, useSyncExternalStore } from "react";
-import { MetaMaskButton } from "@metamask/sdk-react-ui";
-
-export const formatBalance = (rawBalance) => {
-    const balance = (parseInt(rawBalance) / 1000000000000000000).toFixed(2)
-    return balance
-  }
-  
-  export const formatChainAsNum = (chainIdHex) => {
-    const chainIdNum = parseInt(chainIdHex)
-    return chainIdNum
-  }
-  
-  export const formatAddress = (addr) => {
-    const upperAfterLastTwo = addr.slice(0, 2) + addr.slice(2)
-    return `${upperAfterLastTwo.substring(0, 5)}...${upperAfterLastTwo.substring(39)}`
-  }
-
+import React, { useEffect, useState } from "react";
+import { formatAddress, formatChainAsNum } from "./utils/eth";
+import { ethers } from "ethers";
 
 let providers = [];
+let signer = null;
+let provider;
 const subscribe = (callback) => {
   function onAnnouncement(event) {
     if (providers.map((p) => p.info.uuid).includes(event.detail.info.uuid)) {
@@ -102,16 +89,48 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
   }
 
   useEffect(() => {
-    network(selectedWallet);
+    getChainId(selectedWallet);
+    const loadEthers = async () => {
+      if (window.ethereum == null) {
+        console.log("MetaMask not installed; using read-only defaults");
+        provider = ethers.getDefaultProvider();
+      } else {
+        provider = new ethers.JsonRpcProvider("http://localhost:8545");
+        console.log(provider);
+        signer = await provider.getSigner();
+      }
+    };
+    loadEthers();
   }, [selectedWallet]);
 
-  const network = async (providerWithInfo) => {
+  const getChainId = async (providerWithInfo) => {
     try {
       const chainId = await providerWithInfo.provider.request({
         method: "eth_chainId",
       });
       console.log("Connected to chain:", chainId);
-      setChainId(chainId);
+      setChainId(formatChainAsNum(chainId));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const sendEth = async () => {
+    try {
+      const txHash = await selectedWallet.provider.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: userAccount,
+            to: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
+            value: "0x0", // wei amount in hex
+            gasLimit: "0x5028",
+            maxPriorityFeePerGas: "0x3b9aca00",
+            maxFeePerGas: "0x2540be400",
+          },
+        ],
+      });
+      console.log(txHash);
     } catch (error) {
       console.error(error);
     }
@@ -144,9 +163,9 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
         </>
       )}
       <h3>Connect with MetaMask</h3>
-      {/* <ConnectWallet provider={provider}/> */}
       <h2>Wallets Detected:</h2>
       <div>
+        <div>{}</div>
         {providers.length > 0 ? (
           providers?.map((provider) => (
             <button
@@ -178,6 +197,9 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
       <hr />
       <h2>Network Information</h2>
       <div>Chain ID: {chainId}</div>
+      <button className="sendEthButton" onClick={sendEth}>
+        Send ETH
+      </button>
     </>
   );
 };
