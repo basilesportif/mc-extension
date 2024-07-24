@@ -1,62 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { formatAddress, formatChainAsNum } from "./utils/eth";
 import { ethers, parseEther } from "ethers";
+import Counter from "./abi/Counter.json";
 
-let providers = [];
 let signer = null;
 let provider;
-const subscribe = (callback) => {
-  function onAnnouncement(event) {
-    if (providers.map((p) => p.info.uuid).includes(event.detail.info.uuid)) {
-      return;
-    }
-    providers = [...providers, event.detail];
-    callback();
-  }
-
-  // Listen for custom event
-  window.addEventListener("eip6963:announceProvider", onAnnouncement);
-
-  // Dispatch the event, which triggers the event listener in the MetaMask wallet.
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-
-  // Return a function to remove the event listener
-  return () =>
-    window.removeEventListener("eip6963:announceProvider", onAnnouncement);
-};
-const getSnapshot = () => providers;
-const getServerSnapshot = () => [];
-const useSyncProviders = () => {
-  const [cachedProviders, setCachedProviders] = useState(getSnapshot);
-
-  useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setCachedProviders(getSnapshot());
-    });
-    return unsubscribe;
-  }, []);
-
-  return cachedProviders;
-};
-
+const CONTRACT_ADDRESS = "0x0B306BF915C4d645ff596e518fAf3F9669b97016";
 const Login = ({ ourInTeam, setOurInTeam }) => {
-  const [selectedWallet, setSelectedWallet] = useState();
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();
-  //   const providers = useSyncProviders();
-
-  //   const handleConnect = async (providerWithInfo) => {
-  //     try {
-  //         const accounts = await providerWithInfo.provider.request({
-  //         method: "eth_requestAccounts",
-  //       });
-
-  //       setSelectedWallet(providerWithInfo);
-  //       setUserAccount(accounts?.[0]);
-  //     } catch (error) {
-  //       console.error(error);
-  //     }
-  //   };
+  const [contract, setContract] = useState(null);
+  const [number, setNumber] = useState();
 
   async function joinTeam(team_name) {
     console.log("join team");
@@ -105,16 +58,39 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
         let address = await signer.getAddress();
         setUserAccount(address);
         console.log("ADDRESS", address);
+        const counter_contract = new ethers.Contract(
+          CONTRACT_ADDRESS,
+          Counter.abi,
+          signer
+        );
+        setContract(counter_contract);
       }
     };
     loadEthers();
   }, []);
 
+  const increment = async () => {
+    try {
+      let tx = await contract.increment();
+      let receipt = await tx.wait();
+      console.log("TX", receipt);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  const getNumber = async () => {
+    try {
+      let number = await contract.number();
+      console.log("NUMBER", number);
+      setNumber(number.toString());
+    } catch (error) {
+      console.error(error);
+    }
+  };
   const sendEth = async () => {
     try {
       let tx = await signer.sendTransaction({
         to: "0xc8637aadB7619fcaF1aD108682cF593cD124D499",
-        // "0x0B306BF915C4d645ff596e518fAf3F9669b97016", - contract address
         value: parseEther("0.1"),
       });
       let receipt = await tx.wait();
@@ -151,42 +127,16 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
           </form>
         </>
       )}
-      {/* <h3>Connect with MetaMask</h3>
-      <h2>Wallets Detected:</h2> */}
-      {/* <div>
-        <div>{}</div>
-        {providers.length > 0 ? (
-          providers?.map((provider) => (
-            <button
-              key={provider.info.uuid}
-              onClick={() => handleConnect(provider)}
-            >
-              <img src={provider.info.icon} alt={provider.info.name} />
-              <div>{provider.info.name}</div>
-            </button>
-          ))
-        ) : (
-          <div>No Announced Wallet Providers</div>
-        )}
-      </div> */}
-      {/* <hr />
-      <h2>{userAccount ? "" : "No "}Wallet Selected</h2>
-      {userAccount && (
-        <div>
-          <div>
-            <img
-              src={selectedWallet.info.icon}
-              alt={selectedWallet.info.name}
-            />
-            <div>{selectedWallet.info.name}</div>
-            <div>({formatAddress(userAccount)})</div>
-          </div>
-        </div>
-      )}
-      <hr /> */}
-      {/* <h2>Network Information</h2> */}
+      <hr />
       <div>Chain ID: {chainId}</div>
       <div>Address: {userAccount}</div>
+      <button className="incrementButton" onClick={increment}>
+        Increment
+      </button>
+      <button className="getNumberButton" onClick={getNumber}>
+        Get Number
+      </button>
+      <div>Number: {number}</div>
       <button className="sendEthButton" onClick={sendEth}>
         Send ETH
       </button>
