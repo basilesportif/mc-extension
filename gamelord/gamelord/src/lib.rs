@@ -185,6 +185,7 @@ fn handle_mcclient_request(
                 // );
             }
 
+
             let signature = match Signature::from_str(join_team.signature.as_str()) {
                 Ok(signature) => signature,
                 Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
@@ -494,7 +495,7 @@ fn handle_http_request(
                         let _ = state.update_clients(&GameLobbyDiff::Init(
                             state.lobby.clone().clear_teams(),
                         ));
-                        state.lobby.clear_teams();
+                        state.clear_teams(); // different from lobby.clear_teams
                         state.save();
                         let blob = LazyLoadBlob {
                             mime: Some("application/json".to_string()),

@@ -80,6 +80,13 @@ impl State {
         let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
         set_state(&serialized_state);
     }
+    pub fn clear_teams(&mut self) {
+        self.cube_to_owner.clear();
+        self.active_players.clear();
+        self.allowed_players.clear();
+        self.node_to_eth.clear();
+        self.lobby.clear_teams();
+    }
     pub fn update_clients(&self, diff: &GameLobbyDiff) -> Result<(), anyhow::Error> {
         fn update_players(
             players: HashSet<Player>,
