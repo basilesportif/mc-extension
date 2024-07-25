@@ -4,7 +4,7 @@ import Gamelord from "./abi/Gamelord.json";
 
 let signer = null;
 let provider;
-const CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+const CONTRACT_ADDRESS = "0x9a9f2ccfde556a7e9ff0848998aa4a0cfd8863ae";
 const Login = ({ ourInTeam, setOurInTeam }) => {
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();
@@ -59,13 +59,15 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
   }
 
   async function getPlayerInfo() {
-    const tx = await contract.getPlayerInfo(userAccount);
-    const player_info = await tx.wait();
-    // setEthWagered(player_info.amount_wagered);
-    // setTeamRequested(player_info.team);
-    console.log("ETH WAGERED", player_info);
-    // console.log("TEAM REQUESTED", player_info.team);
+    const player_info = await contract.getPlayerInfo(userAccount);
+    setEthWagered(player_info[0]);
+    setTeamRequested(player_info[1] === 0n ? "Team1" : "Team2");
   }
+
+  useEffect(() => {
+    // console.log("ETH WAGERED", ethWagered);
+    // console.log("TEAM REQUESTED", teamRequested);
+  }, [ethWagered, teamRequested]);
 
   useEffect(() => {
     const loadEthers = async () => {
