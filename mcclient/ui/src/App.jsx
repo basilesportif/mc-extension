@@ -18,7 +18,7 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby,
 
 
   const onSend = (message) => {
-    console.log("sending:", message);
+    // console.log("sending:", message);
     ws.send(JSON.stringify({ SendMessage: message }));
   };
 

@@ -130,7 +130,8 @@ fn handle_mcclient_request(
             }
             return Ok(());
         }
-        McClientToGamelordRequest::JoinTeam(join_team) => {
+        McClientToGamelordRequest::JoinTeam(join_team) => {         
+            // add player to team:
             let player = Player {
                 kinode_id: message.source().node().to_string(),
                 minecraft_player_name: join_team.minecraft_id.to_string(),
@@ -139,7 +140,6 @@ fn handle_mcclient_request(
                 player: player.clone(),
                 team: join_team.team_name.clone(),
             };
-            println!("diff: {:?}", diff);
             match state.lobby.apply_diff(diff) {
                 Ok(lobby) => {
                     state.lobby = lobby;

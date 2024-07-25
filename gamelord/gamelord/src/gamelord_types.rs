@@ -1,8 +1,9 @@
-use kinode_process_lib::{get_state, println, set_state, Address, Request, eth::Provider};
+use kinode_process_lib::{get_state, println, set_state, Address, Request, NodeId, eth::{Provider, Address as EthAddress}};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
 use crate::sol_gamelord::{Caller, WALLET_KEY};
+use alloy_primitives::U256;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -54,6 +55,7 @@ pub struct State {
     pub cube_to_owner: CubeToOwner,
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
+    pub node_to_eth: HashMap<NodeId, (EthAddress, U256)>, // nodeId to EthAddress and Eth Wagered amount
 }
 
 impl State {
@@ -64,6 +66,7 @@ impl State {
             cube_to_owner: HashMap::new(),
             active_players: HashMap::new(),
             allowed_players: HashMap::new(),
+            node_to_eth: HashMap::new(),
         }
     }
     pub fn fetch() -> Option<State> {

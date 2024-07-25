@@ -35,15 +35,15 @@ const InterfaceUI = () => {
   }, []);
 
   useEffect(() => {
-    console.log("lobby", lobby);
+    // console.log("lobby", lobby);
     if (ourNode && lobby) {
       setOurInTeam(nodeInTeam(ourNode, lobby));
     }
   }, [lobby]);
 
   useEffect(() => {
-    console.log("ourNode", ourNode);
-    console.log("ourInTeam", ourInTeam);
+    // console.log("ourNode", ourNode);
+    // console.log("ourInTeam", ourInTeam);
   }, [ourNode, ourInTeam]);
 
   const nodeInTeam = (node, lobby) => {
@@ -72,11 +72,11 @@ const InterfaceUI = () => {
     ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
 
     ws.onopen = function (event) {
-      console.log("Connection opened on " + window.location.host + ":", event);
+      // console.log("Connection opened on " + window.location.host + ":", event);
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      console.log("data", data);
+      // console.log("data", data);
       applyDiff(data, setLobby);
       if (data.OurNode) {
         setOurNode(data.OurNode);
@@ -86,7 +86,6 @@ const InterfaceUI = () => {
 
   return (
     <div>
-    {console.log("ourInTeam:", ourInTeam)}
     {ourInTeam === null ? (
       <Login
         ourInTeam={ourInTeam}
