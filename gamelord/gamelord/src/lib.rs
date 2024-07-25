@@ -7,19 +7,21 @@ use kinode_process_lib::{
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
-
 mod sol_gamelord;
-use sol_gamelord::{Action, Caller, Counter, WALLET_KEY};
+use sol_gamelord::{Action, Caller, WALLET_KEY};
 mod gamelord_types;
 mod utilities;
+use alloy::signers::{local::PrivateKeySigner, SignerSync};
+use alloy_primitives::{Signature, U256};
 use gamelord_types::{
     ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft, State,
 };
 use mcstructs::{
-    ChatMessage, Cube, CubeEffectList, GameLobbyDiff, McClientToGamelordRequest, Player, Region,
-    TeamName, TeamNameToRegion, WsPush,
+    ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,
+    Region, TeamName, TeamNameToRegion, WsPush,
 };
 use std::collections::HashMap;
+use std::str::FromStr;
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -91,15 +93,53 @@ fn edit_lobby(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Res
     }
 }
 
+fn add_to_team(
+    state: &mut State,
+    kinode_id: String,
+    minecraft_id: String,
+    team_name: TeamName,
+    ws_channel_id: &mut Option<u32>,
+) -> anyhow::Result<()> {
+    let player = Player {
+        kinode_id: kinode_id,
+        minecraft_player_name: minecraft_id,
+    };
+    let diff = &GameLobbyDiff::AddPlayerToTeam {
+        player: player.clone(),
+        team: team_name.clone(),
+    };
+    match state.lobby.apply_diff(diff) {
+        Ok(lobby) => {
+            state.lobby = lobby;
+            state.save();
+            let blob = LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(diff)?,
+            };
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+
+            return state.update_clients(&GameLobbyDiff::AddPlayerToTeam {
+                player: player.clone(),
+                team: team_name.clone(),
+            });
+        }
+        Err(e) => {
+            println!("mcclient: error applying diff: {}", e);
+            return Ok(());
+        }
+    };
+}
+
 fn handle_mcclient_request(
     state: &mut State,
+    contract_caller: &mut Option<Caller>,
     ws_channel_id: &mut Option<u32>,
     request: &McClientToGamelordRequest,
     message: &Message,
 ) -> anyhow::Result<()> {
     match request.clone() {
         McClientToGamelordRequest::Init => {
-            // sends init only to requestor (loops just look dumb)
+            // sends init only to requestor, confirms that they are in team (loops just look dumb)
             for player in state.lobby.team1.players.iter() {
                 if player.kinode_id == message.source().node() {
                     let diff =
@@ -130,36 +170,53 @@ fn handle_mcclient_request(
             }
             return Ok(());
         }
-        McClientToGamelordRequest::JoinTeam(join_team) => {         
-            // add player to team:
-            let player = Player {
-                kinode_id: message.source().node().to_string(),
-                minecraft_player_name: join_team.minecraft_id.to_string(),
-            };
-            let diff = &GameLobbyDiff::AddPlayerToTeam {
-                player: player.clone(),
-                team: join_team.team_name.clone(),
-            };
-            match state.lobby.apply_diff(diff) {
-                Ok(lobby) => {
-                    state.lobby = lobby;
-                    state.save();
-                    let blob = LazyLoadBlob {
-                        mime: Some("application/json".to_string()),
-                        bytes: serde_json::to_vec(diff)?,
-                    };
-                    send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+        McClientToGamelordRequest::JoinTeam(join_team) => {
+            println!("got join team");
+            let node_id = message.source().node().to_string();
+            if let Some(..) = state.node_to_eth.get(&node_id) {
+                return Ok(());
+                // how to make this idempotent properly?
+                // return add_to_team(
+                //     state,
+                //     node_id,
+                //     join_team.minecraft_id,
+                //     join_team.team_name,
+                //     ws_channel_id,
+                // );
+            }
 
-                    return state.update_clients(&GameLobbyDiff::AddPlayerToTeam {
-                        player: player.clone(),
-                        team: join_team.team_name.clone(),
-                    });
-                }
-                Err(e) => {
-                    println!("mcclient: error applying diff: {}", e);
-                    return Ok(());
-                }
+            let signature = match Signature::from_str(join_team.signature.as_str()) {
+                Ok(signature) => signature,
+                Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
             };
+            let recovered_address = signature.recover_address_from_msg(node_id.clone())?;
+            if recovered_address != join_team.eth_address {
+                return Err(anyhow::anyhow!("Invalid signature"));
+            }
+
+            // get eth wagered and team from chain
+            let caller = match contract_caller {
+                Some(caller) => caller,
+                None => return Ok(()),
+            };
+
+            let (amount_wagered, team) = caller.get_player_info(recovered_address)?;
+            if amount_wagered < "50000000000000000".parse().unwrap() {
+                return Err(anyhow::anyhow!("Player has not wagered enough ETH."));
+            }
+
+            state.node_to_eth.insert(node_id.clone(), (recovered_address, amount_wagered));
+            state.save();
+
+            let _ = add_to_team(
+                state,
+                node_id,
+                join_team.minecraft_id,
+                join_team.team_name,
+                ws_channel_id,
+            );
+
+            return Ok(());
         }
         McClientToGamelordRequest::SendMessage(chat_message) => {
             let sender_kinode_id = message.source().node().to_string();
@@ -213,13 +270,14 @@ fn handle_mcclient_request(
 //have everything handled here
 fn handle_kinode_message(
     state: &mut State,
+    contract_caller: &mut Option<Caller>,
     ws_channel_id: &mut Option<u32>,
     message: &Message,
 ) -> anyhow::Result<()> {
     println!("handle kinode message entered");
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
-        return handle_mcclient_request(state, ws_channel_id, &request, message);
+        return handle_mcclient_request(state, contract_caller, ws_channel_id, &request, message);
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
@@ -494,18 +552,11 @@ fn handle_terminal_message(
     match action {
         Action::SetContractAddress(address) => {
             println!("Setting contract address to: {}", address);
-            *contract_caller = Caller::new(
-                address.as_str(),
-                Provider::new(31337, 5),
-                31337,
-                WALLET_KEY,
-            );
+            *contract_caller =
+                Caller::new(address.as_str(), Provider::new(31337, 5), 31337, WALLET_KEY);
         }
-        Action::Increment => {
-            let _ = caller.increment();
-        }
-        Action::Number => {
-            let result = caller.number();
+        Action::GetPlayerInfo(funding_address) => {
+            let result = caller.get_player_info(funding_address);
             println!("result: {:?}", result);
         }
         _ => println!("Invalid message"),
@@ -532,7 +583,7 @@ fn handle_message(
         if message.source().process.package_name == "terminal" {
             return handle_terminal_message(state, contract_caller, ws_channel_id, &message);
         }
-        handle_kinode_message(state, ws_channel_id, &message)?;
+        handle_kinode_message(state, contract_caller, ws_channel_id, &message)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
     }
@@ -560,7 +611,14 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
-    let mut contract_caller = Caller::new("", Provider::new(31337, 5), 31337, WALLET_KEY);
+    let mut contract_caller = Caller::new(
+        "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        Provider::new(31337, 5),
+        31337,
+        WALLET_KEY,
+    );
+
+    let min_eth_wager: U256 = "50000000000000000".parse().unwrap(); // 0.05 eth
 
     loop {
         match handle_message(&mut state, &mut contract_caller, &mut ws_channel_id) {

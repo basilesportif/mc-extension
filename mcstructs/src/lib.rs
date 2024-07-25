@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-
+use kinode_process_lib::eth::Address as EthAddress;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Player {
@@ -43,6 +43,8 @@ pub struct JoinTeam {
     pub gamelord_id: NodeId,
     pub minecraft_id: String,
     pub team_name: TeamName,
+    pub eth_address: EthAddress,
+    pub signature: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

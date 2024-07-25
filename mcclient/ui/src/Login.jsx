@@ -5,7 +5,7 @@ import Gamelord from "./abi/Gamelord.json";
 let signer = null;
 let provider;
 const CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-const Login = ({ ourInTeam, setOurInTeam }) => {
+const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();
   const [contract, setContract] = useState(null);
@@ -20,6 +20,11 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
 
     const url = `/mcclient:mcclient:basilesex.os/join_team`;
 
+    const message = ourNode;
+    const sig = await signer.signMessage(message);
+
+    console.log(sig);
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -30,6 +35,8 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
           gamelord_id: gamelord_id,
           minecraft_id: minecraft_id,
           team_name: team_name,
+          eth_address: userAccount,
+          signature: sig,
         }),
       });
 
@@ -72,8 +79,7 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
   useEffect(() => {
     try {
       getPlayerInfo();
-    } catch (error) {
-    }
+    } catch (error) {}
   }, [contract]);
 
   useEffect(() => {

@@ -11,6 +11,7 @@ kinode_process_lib = { git = "https://github.com/kinode-dao/process_lib", tag = 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.120"
 wit-bindgen = "0.24.0"
+hex = "0.4.3"
 alloy-sol-types = { version = "0.7.6", features = ["json"] }
 alloy-primitives = "0.7.6"
 alloy-rlp = "0.3.5"

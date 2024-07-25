@@ -1,3 +1,4 @@
+use crate::sol_gamelord::Gamelord::PlayerInfo;
 use alloy::{
     consensus::{SignableTransaction, TxEip1559, TxEnvelope},
     network::eip2718::Encodable2718,
@@ -13,17 +14,16 @@ use kinode_process_lib::{
     eth::{Address as EthAddress, BlockId, BlockNumberOrTag, EthError, Filter, Log, Provider},
     kinode, println,
 };
+use mcstructs::TeamName;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 pub const WALLET_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
-
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Action {
     SetContractAddress(String),
-    Increment,
-    Number,
+    GetPlayerInfo(EthAddress),
 }
 pub struct Caller {
     contract_address: String,
@@ -36,8 +36,8 @@ sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
     #[derive(Debug)]
-    Counter,
-    "abi/Counter.json"
+    Gamelord,
+    "abi/Gamelord.json"
 );
 
 fn send_tx(
@@ -114,39 +114,50 @@ impl Caller {
         })
     }
 
-    pub fn increment(&self) -> anyhow::Result<FixedBytes<32>> {
-        let call = Counter::incrementCall {}.abi_encode();
+    // pub fn increment(&self) -> anyhow::Result<FixedBytes<32>> {
+    //     let call = Counter::incrementCall {}.abi_encode();
 
-        match send_tx(
-            &self.provider,
-            &self.wallet,
-            &self.contract_address,
-            call.into(),
-            1500000,
-            10000000000,
-            300000000,
-            U256::from(0),
-        ) {
-            Ok(tx_hash) => Ok(tx_hash),
-            Err(e) => Err(anyhow::anyhow!("Error incrementing counter: {:?}", e)),
+    //     match send_tx(
+    //         &self.provider,
+    //         &self.wallet,
+    //         &self.contract_address,
+    //         call.into(),
+    //         1500000,
+    //         10000000000,
+    //         300000000,
+    //         U256::from(0),
+    //     ) {
+    //         Ok(tx_hash) => Ok(tx_hash),
+    //         Err(e) => Err(anyhow::anyhow!("Error incrementing counter: {:?}", e)),
+    //     }
+    // }
+
+    // returns eth wagered and team
+    pub fn get_player_info(&self, funding_address: EthAddress) -> anyhow::Result<(U256, TeamName)> {
+        let call: Vec<u8> = Gamelord::getPlayerInfoCall {
+            fundingAddress: funding_address,
         }
-    }
-
-    pub fn number(&self) -> anyhow::Result<U256> {
-        let call: Vec<u8> = Counter::numberCall {}.abi_encode();
+        .abi_encode();
         let tx_req = TransactionRequest::default();
+        println!("contract address: {:?}", self.contract_address);
         let to = match EthAddress::from_str(&self.contract_address) {
             Ok(to) => to,
             Err(e) => return Err(anyhow::anyhow!("Error parsing contract address: {:?}", e)),
         };
         let tx = tx_req.to(to).input(call.into());
-
         match self.provider.call(tx, None) {
             Ok(result) => {
-                let cost = U256::abi_decode(&result, false)?;
-                Ok(cost)
+                println!("result: {:?}", result);
+                let player_info = PlayerInfo::abi_decode(&result, false)?;
+                println!("player_info: {:?}", player_info);
+                let team = if player_info.team == 0 {
+                    TeamName::Team1
+                } else {
+                    TeamName::Team2
+                };
+                Ok((player_info.amountWagered, team))
             }
-            Err(e) => Err(anyhow::anyhow!("Error getting spawn cost: {:?}", e)),
+            Err(e) => Err(anyhow::anyhow!("Error getting player info: {:?}", e)),
         }
     }
 }

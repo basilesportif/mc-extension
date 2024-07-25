@@ -4,10 +4,10 @@
 //
 // here goes logic for applying diffs to lobby/state
 export function applyDiff(data, setLobby) {
-  // console.log("KEY", Object.keys(data)[0]);
+  console.log("KEY", Object.keys(data)[0]);
   switch (Object.keys(data)[0]) {
     case "EditLobby":
-      // console.log("Lobby edited:", data.EditLobby);
+      console.log("Lobby edited:", data.EditLobby);
       setLobby((prevLobby) => ({
         ...prevLobby,
         name: data.EditLobby.name,
@@ -15,7 +15,7 @@ export function applyDiff(data, setLobby) {
       }));
       break;
     case "AddPlayerToTeam":
-      // console.log("Player added to team:", data.AddPlayerToTeam);
+      console.log("Player added to team:", data.AddPlayerToTeam);
       if (data.AddPlayerToTeam.team === "Team1") {
         setLobby((prevLobby) => ({
           ...prevLobby,
@@ -45,11 +45,11 @@ export function applyDiff(data, setLobby) {
       }
       break;
     case "Init":
-      // console.log("INIT", data.Init);
+      console.log("INIT", data.Init);
       setLobby(data.Init);
       break;
     case "Message":
-      // console.log("Message received:", data.Message);
+      console.log("Message received:", data.Message);
       setLobby((prevLobby) => {
         let team = null;
         if (
@@ -77,10 +77,10 @@ export function applyDiff(data, setLobby) {
           },
         };
       });
-      // console.log("Message", data.Message);
+      console.log("Message", data.Message);
       break;
     case "ConfigurePoints":
-      // console.log("ConfigurePoints", data.ConfigurePoints);
+      console.log("ConfigurePoints", data.ConfigurePoints);
       setLobby((prevLobby) => ({
         ...prevLobby,
         goal_post: data.ConfigurePoints.goal_post,
@@ -95,7 +95,7 @@ export function applyDiff(data, setLobby) {
       }));
       break;
     case "WorldConfigRegion":
-      // console.log("WorldConfigRegion", data.WorldConfigRegion);
+      console.log("WorldConfigRegion", data.WorldConfigRegion);
       let team = data.WorldConfigRegion[0] === "Team1" ? "team1" : "team2";
       setLobby((prevLobby) => ({
         ...prevLobby,
@@ -106,7 +106,7 @@ export function applyDiff(data, setLobby) {
       }));
       break;
     default:
-      // console.log("Unknown websocket message:", data);
+      console.log("Unknown websocket message:", data);
       break;
   }
 }

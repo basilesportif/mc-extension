@@ -21,7 +21,3 @@ pub fn valid_position(
     return ("Player not in either Team.".to_string(), false);
 }
 //pub fn authorized_player()
-
-
-
-// Remember tomorrow to 

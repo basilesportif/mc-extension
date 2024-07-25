@@ -90,6 +90,8 @@ const InterfaceUI = () => {
       <Login
         ourInTeam={ourInTeam}
         setOurInTeam={setOurInTeam}
+        ourNode={ourNode}
+        setOurNode={setOurNode}
       />
     ) : (
     <div style={{ display: "flex", height: "100vh" }}>
