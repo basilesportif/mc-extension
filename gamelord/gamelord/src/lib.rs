@@ -185,7 +185,6 @@ fn handle_mcclient_request(
                 // );
             }
 
-
             let signature = match Signature::from_str(join_team.signature.as_str()) {
                 Ok(signature) => signature,
                 Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
@@ -213,7 +212,7 @@ fn handle_mcclient_request(
                 state,
                 node_id,
                 join_team.minecraft_id,
-                join_team.team_name,
+                team,
                 ws_channel_id,
             );
 
