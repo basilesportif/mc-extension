@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { ethers, parseEther } from "ethers";
-import Counter from "./abi/Counter.json";
+import Gamelord from "./abi/Gamelord.json";
 
 let signer = null;
 let provider;
-const CONTRACT_ADDRESS = "0x0B306BF915C4d645ff596e518fAf3F9669b97016";
+const CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 const Login = ({ ourInTeam, setOurInTeam }) => {
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();
   const [contract, setContract] = useState(null);
   const [number, setNumber] = useState();
+  const [ethWagered, setEthWagered] = useState();
+  const [teamRequested, setTeamRequested] = useState();
 
-  async function joinTeam(team_name) {
-    console.log("join team");
+  // allow button if eth wagered != 0
+  async function joinTeamRequest(team_name) {
     const minecraft_id = document.getElementById("minecraftId").value;
     const gamelord_id = document.getElementById("gamelordId").value;
 
@@ -41,6 +43,30 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
     }
   }
 
+  async function register(team_name) {
+    const eth_amount = document.getElementById("ethAmount").value;
+
+    try {
+      const team_name_as_num = team_name === "Team1" ? 0 : 1;
+      const tx = await contract.wager(team_name_as_num, { value: parseEther(eth_amount) });
+      const receipt = await tx.wait();
+
+      console.log("TX", receipt);
+      getPlayerInfo();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function getPlayerInfo() {
+    const tx = await contract.getPlayerInfo(userAccount);
+    const player_info = await tx.wait();
+    // setEthWagered(player_info.amount_wagered);
+    // setTeamRequested(player_info.team);
+    console.log("ETH WAGERED", player_info);
+    // console.log("TEAM REQUESTED", player_info.team);
+  }
+
   useEffect(() => {
     const loadEthers = async () => {
       if (window.ethereum == null) {
@@ -58,48 +84,16 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
         let address = await signer.getAddress();
         setUserAccount(address);
         console.log("ADDRESS", address);
-        const counter_contract = new ethers.Contract(
+        const gamelord_contract = new ethers.Contract(
           CONTRACT_ADDRESS,
-          Counter.abi,
+          Gamelord.abi,
           signer
         );
-        setContract(counter_contract);
+        setContract(gamelord_contract);
       }
     };
     loadEthers();
   }, []);
-
-  const increment = async () => {
-    try {
-      let tx = await contract.increment();
-      let receipt = await tx.wait();
-      console.log("TX", receipt);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-  const getNumber = async () => {
-    try {
-      let number = await contract.number();
-      console.log("NUMBER", number);
-      setNumber(number.toString());
-    } catch (error) {
-      console.error(error);
-    }
-  };
-  const sendEth = async () => {
-    try {
-      let tx = await signer.sendTransaction({
-        to: "0xc8637aadB7619fcaF1aD108682cF593cD124D499",
-        value: parseEther("0.1"),
-      });
-      let receipt = await tx.wait();
-
-      console.log(receipt);
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   return (
     <>
@@ -110,6 +104,11 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
           <form id="playerForm">
             <input
               type="text"
+              id="ethAmount"
+              placeholder="Eth Amount to Wager (Ether)"
+            />
+            <input
+              type="text"
               id="gamelordId"
               placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
             />
@@ -118,10 +117,10 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
               id="minecraftId"
               placeholder="Enter Your Minecraft ID"
             />
-            <button type="button" onClick={() => joinTeam("Team1")}>
+            <button type="button" onClick={() => register("Team1")}>
               Join Team1
             </button>
-            <button type="button" onClick={() => joinTeam("Team2")}>
+            <button type="button" onClick={() => register("Team2")}>
               Join Team2
             </button>
           </form>
@@ -130,16 +129,6 @@ const Login = ({ ourInTeam, setOurInTeam }) => {
       <hr />
       <div>Chain ID: {chainId}</div>
       <div>Address: {userAccount}</div>
-      <button className="incrementButton" onClick={increment}>
-        Increment
-      </button>
-      <button className="getNumberButton" onClick={getNumber}>
-        Get Number
-      </button>
-      <div>Number: {number}</div>
-      <button className="sendEthButton" onClick={sendEth}>
-        Send ETH
-      </button>
     </>
   );
 };
