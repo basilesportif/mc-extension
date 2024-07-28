@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { applyDiff } from "./shared";
 import App from "./App";
 import ThreeJsScene from "./MCWorld";
+import './index.css'
 
 let ws;
 
@@ -12,22 +13,23 @@ const InterfaceUI = () => {
     name: "",
     minecraft_server_address: "",
     world_config: {},
-    goal_post: { center: [0, 0, 0], side_length: 1 },
+    goal_post: { center: [0, 0, 0], side_length: 16 },
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: { center: [0, 0, 0], side_length: 1 },
+      spawn_point: { center: [0, 0, 0], side_length: 16 },
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: { center: [0, 0, 0], side_length: 1 },
+      spawn_point: { center: [0, 0, 0], side_length: 16 },
     },
   });
+
 
   useEffect(() => {
     webSocket();
@@ -54,23 +56,18 @@ const InterfaceUI = () => {
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
       console.log("data", data);
+      console.log("data in loby has been updated");
       applyDiff(data, setLobby);
       if (data.OurNode) {
         setOurNode(data.OurNode);
       }
+
     };
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      <div
-        style={{
-          width: "30%",
-          padding: "20px",
-          borderRight: "1px solid #ccc",
-          overflowY: "auto",
-        }}
-      >
+    <div className="container">
+      <div className="left-panel">
         <App
           ws={ws}
           ourNode={ourNode}
@@ -81,8 +78,12 @@ const InterfaceUI = () => {
           setLobby={setLobby}
         />
       </div>
-      <div style={{ width: "70%", position: "relative" }}>
-        <ThreeJsScene ws={ws} ourInTeam={ourInTeam} lobby={lobby} />
+      <div className="right-panel">
+        <ThreeJsScene
+          ws={ws}
+          ourInTeam={ourInTeam}
+          lobby={lobby}
+        />
       </div>
     </div>
   );

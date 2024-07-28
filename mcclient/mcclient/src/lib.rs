@@ -161,7 +161,7 @@ fn handle_gamelord_update(
 ) -> anyhow::Result<()> {
     println!("received update");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
-    // println!("deserialized update: {:#?}", deserialized);
+    println!("deserialized update: {:#?}", deserialized);
     state.lobby = match state.lobby.apply_diff(&deserialized) {
         Ok(lobby) => lobby,
         Err(e) => {
@@ -169,7 +169,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
-    // println!("state: {:#?}", state.lobby.world_config);
+    println!("state: {:#?}", state.lobby.world_config);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),

@@ -81,35 +81,40 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
   };
 
   return (
-    <div>
+    <div className="ClientBackground">
+      
       <h2>McClient</h2>
       {ourInTeam === null && (
         <>
           <h3>Join Team</h3>
-          <form id="playerForm">
-            <input
-              type="text"
-              id="gamelordId"
-              placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
-            />
-            <input
-              type="text"
-              id="minecraftId"
-              placeholder="Enter Your Minecraft ID"
-            />
-            <button type="button" onClick={() => joinTeam("Team1")}>
-              Join Team1
-            </button>
-            <button type="button" onClick={() => joinTeam("Team2")}>
-              Join Team2
-            </button>
-          </form>
+          <div className="form-container">
+            <form id="playerForm">
+              <input
+                type="text"
+                id="gamelordId"
+                placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
+              />
+              <input
+                type="text"
+                id="minecraftId"
+                placeholder="Enter Your Minecraft ID"
+              />
+              <div className="button-container">
+                <button type="button" onClick={() => joinTeam("Team1")}>
+                  Join Team1
+                </button>
+                <button type="button" onClick={() => joinTeam("Team2")}>
+                  Join Team2
+                </button>
+              </div>
+            </form>
+          </div>
         </>
       )}
-      <div style={{ textAlign: "left" }}>
+      <div className="status">
         <p>Game: {lobby.name}</p>
         <p>Minecraft Server Address: {lobby.minecraft_server_address}</p>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className="team-container">
           <div>
             <h4>Team 1</h4>
             <ul>
@@ -197,6 +202,7 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
         )}
       </div>
     </div>
+
   );
 }
 

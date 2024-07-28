@@ -8,7 +8,7 @@ import { CubeConstructor } from "./utils/CubeConstructor";
 import { Crosshair, Instructions, TeamAlert } from "./components/MCWorldElements";
 import  EffectMenu  from "./components/EffectMenu";
 
-const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
+const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
@@ -127,7 +127,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   };
 
   useEffect(() => {
-
     const handleLock = () => {
       setShowInstructions(false);
       setIsLocked(true); 
@@ -326,14 +325,14 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const handleMouseClick = useCallback(
     (event) => {
       if (!isLocked && !showEffectMenu) {
-        console.log("Entering movement mode");
-        console.log("Is locked:", isLocked);
+        //console.log("Entering movement mode");
+        //console.log("Is locked:", isLocked);
         enterMovementMode(event);
       }
       
       if (areCubesSelectable && !showEffectMenu) {
-        console.log("Are cubes selectable:", areCubesSelectable);
-        console.log("Is locked:", isLocked);
+        //console.log("Are cubes selectable:", areCubesSelectable);
+        //console.log("Is locked:", isLocked);
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0); // Center of the screen
 
@@ -509,7 +508,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
     let unpaintedCount = 0;
 
     if (world_config) {
-      const { Team1 = {}, team1 = {} } = world_config;
+      const { team1 = {}, team2 = {} } = world_config;
 
       cubesRef.current.forEach((cube) => {
         const cubePosition = cube.position;
@@ -519,11 +518,11 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
         const cubeCenter = { center: [x, y, z], side_length: cubeSize };
 
-        const team1Config = Team1.cubes?.find(([cubeConfig]) => {
+        const team1Config = team1.cubes?.find(([cubeConfig]) => {
           return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
         });
 
-        const team2Config = team1.cubes?.find(([cubeConfig]) => {
+        const team2Config = team2.cubes?.find(([cubeConfig]) => {
           return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
         });
 
