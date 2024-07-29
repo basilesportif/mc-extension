@@ -102,7 +102,7 @@ fn handle_mcclient_request(
                         .body(serde_json::to_vec(&diff)?)
                         .target(Address::new(
                             &player.kinode_id,
-                            ("mcclient", "mcclient", "astronaut.os"),
+                            ("mcclient", "mcclient", "uncenteredpub.os"),
                         ))
                         .send()?;
                 }
@@ -116,7 +116,7 @@ fn handle_mcclient_request(
                         .body(serde_json::to_vec(&diff)?)
                         .target(Address::new(
                             &player.kinode_id,
-                            ("mcclient", "mcclient", "astronaut.os"),
+                            ("mcclient", "mcclient", "uncenteredpub.os"),
                         ))
                         .send()?;
                 }

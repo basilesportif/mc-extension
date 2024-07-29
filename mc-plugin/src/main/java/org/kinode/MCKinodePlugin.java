@@ -21,7 +21,7 @@ import java.util.UUID;
 
 public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
-    private static final String kinodeUri = "ws://localhost:8080/mcdriver:mcdriver:astronaut.os";
+    private static final String kinodeUri = "ws://localhost:8080/mcdriver:mcdriver:uncenteredpub.os";
     private static MCKinodePlugin instance;
     private Location prevLocation;
     private static final int ALLOWED_BOUNDS = 50000;

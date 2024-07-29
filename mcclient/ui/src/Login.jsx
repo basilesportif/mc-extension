@@ -18,7 +18,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
     const minecraft_id = document.getElementById("minecraftId").value;
     const gamelord_id = document.getElementById("gamelordId").value;
 
-    const url = `/mcclient:mcclient:astronaut.os/join_team`;
+    const url = `/mcclient:mcclient:uncenteredpub.os/join_team`;
 
     const message = ourNode;
     const sig = await signer.signMessage(message);

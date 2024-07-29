@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 // import manifest from '../pkg/manifest.json'
 // import metadata from '../pkg/metadata.json'
 // const BASE_URL = `${manifest.process_name}:${manifest.package}:${metadata.publisher}`
-const BASE_URL = `/gamelord:gamelord:astronaut.os`;
+const BASE_URL = `/gamelord:gamelord:uncenteredpub.os`;
 
 // This is the proxy URL, it must match the node you are developing against
 // const PROXY_URL = (process.env.VITE_NODE_URL || 'http://127.0.0.1:8080').replace('localhost', '127.0.0.1');

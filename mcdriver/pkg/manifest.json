@@ -11,7 +11,7 @@
         "grant_capabilities": [
             "http_server:distro:sys",
             "vfs:distro:sys",
-            "gamelord:gamelord:astronaut.os"
+            "gamelord:gamelord:uncenteredpub.os"
         ],
         "public": false
     }

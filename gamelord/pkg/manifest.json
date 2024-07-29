@@ -9,8 +9,8 @@
             "vfs:distro:sys"
         ],
         "grant_capabilities": [
-            "gamelord:gamelord:astronaut.os",
-            "mcdriver:mcdriver:astronaut.os"
+            "gamelord:gamelord:uncenteredpub.os",
+            "mcdriver:mcdriver:uncenteredpub.os"
         ],
         "public": true
     }

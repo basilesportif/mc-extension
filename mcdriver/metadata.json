@@ -5,7 +5,7 @@
   "properties": {
     "package_name": "mcdriver",
     "current_version": "0.1.0",
-    "publisher": "astronaut.os",
+    "publisher": "uncenteredpub.os",
     "mirrors": [],
     "wit_version": 0,
     "code_hashes": {

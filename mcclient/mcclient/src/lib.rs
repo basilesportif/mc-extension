@@ -125,7 +125,7 @@ fn handle_http_request(
 
             let gamelord = Address::new(
                 ui_request.gamelord_id.clone(),
-                ("gamelord", "gamelord", "astronaut.os"),
+                ("gamelord", "gamelord", "uncenteredpub.os"),
             );
             let join_request =
                 serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;

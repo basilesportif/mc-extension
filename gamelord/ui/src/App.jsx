@@ -54,7 +54,7 @@ function App() {
         const text = e.target.result;
         try {
           const jsonData = JSON.parse(text);
-          const url = "/gamelord:gamelord:astronaut.os/api/loadWorld";
+          const url = "/gamelord:gamelord:uncenteredpub.os/api/loadWorld";
           const response = await fetch(url, {
             method: "POST",
             headers: {
@@ -86,7 +86,7 @@ function App() {
   }
 
   function deleteWorld() {
-    const url = "/gamelord:gamelord:astronaut.os/api/deleteWorld"; // Adjust the URL as needed
+    const url = "/gamelord:gamelord:uncenteredpub.os/api/deleteWorld"; // Adjust the URL as needed
 
     fetch(url, {
       method: "POST",
@@ -109,7 +109,7 @@ function App() {
   }
 
   function getWorldConfig() {
-    const url = "/gamelord:gamelord:astronaut.os/world_config";
+    const url = "/gamelord:gamelord:uncenteredpub.os/world_config";
 
     fetch(url, {
       method: "GET",
@@ -151,7 +151,7 @@ function App() {
   }
 
   const clearTeams = () => {
-    const url = "/gamelord:gamelord:astronaut.os/api/clearTeams";
+    const url = "/gamelord:gamelord:uncenteredpub.os/api/clearTeams";
 
     fetch(url, {
       method: "POST",
@@ -204,7 +204,7 @@ function App() {
       document.getElementById("minecraftServerAddress").value ||
       lobby.minecraft_server_address;
 
-    const url = "/gamelord:gamelord:astronaut.os/api/editLobby";
+    const url = "/gamelord:gamelord:uncenteredpub.os/api/editLobby";
 
     const data = {
       EditLobby: [lobbyName, minecraftServerAddress],
@@ -243,7 +243,7 @@ function App() {
       window.location.port === "5173" ? "localhost:8080" : window.location.host;
     if (!wsReady) {
       ws = new WebSocket(
-        `${protocol}//${host}/gamelord:gamelord:astronaut.os/`
+        `${protocol}//${host}/gamelord:gamelord:uncenteredpub.os/`
       );
     }
 

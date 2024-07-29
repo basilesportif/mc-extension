@@ -5,7 +5,7 @@
     "properties": {
         "package_name": "gamelord",
         "current_version": "0.1.0",
-        "publisher": "astronaut.os",
+        "publisher": "uncenteredpub.os",
         "mirrors": [],
         "code_hashes": {
             "0.1.0": ""
