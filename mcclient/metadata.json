@@ -6,7 +6,7 @@
         "package_name": "mcclient",
         "current_version": "0.1.0",
         "publisher": "astronaut.os",
-        "mirrors": [],
+        "mirrors": ["cosmonaut.os"],
         "code_hashes": {
             "0.1.0": "063e49d94b5ab0a468b32cbba6ddf5c4d7dde291b16a19dba1d951b0c52f92e9"
         },
