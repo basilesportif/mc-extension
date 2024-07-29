@@ -10,6 +10,9 @@ use mcstructs::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+mod constants;
+use constants::HOMEPAGE_IMAGE;
+
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
@@ -210,6 +213,24 @@ fn init(our: Address) {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
+
+    Request::to(("our", "homepage", "homepage", "sys"))
+    .body(
+        serde_json::json!({
+            "Add": {
+                "label": "mcclient",
+                "icon": constants::HOMEPAGE_IMAGE,
+                "path": "/",
+                // "widget": get_widget(),
+            }
+        })
+        .to_string()
+        .as_bytes()
+        .to_vec(),
+    )
+    .send()
+    .unwrap();
+
 
     let mut state: State = State::fetch().unwrap_or_else(|| State::new(&our));
 

@@ -8,7 +8,7 @@
         "publisher": "uncenteredpub.os",
         "mirrors": ["cosmonaut.os"],
         "code_hashes": {
-            "0.1.0": "4e41f864a1991199e2147e6bddd52d14ffef324426592fadb3de9e0e8ec6cc05"
+            "0.1.0": "ea798c398b3c7c0a22c79cd334b33ffb57ea56415e5722f9b44d33ff856d9c93"
         },
         "wit_version": 0,
         "dependencies": []
