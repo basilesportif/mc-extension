@@ -11,7 +11,7 @@
         "grant_capabilities": [
             "http_server:distro:sys",
             "vfs:distro:sys",
-            "gamelord:gamelord:basilesex.os"
+            "gamelord:gamelord:astronaut.os"
         ],
         "public": false
     }

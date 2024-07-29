@@ -81,8 +81,8 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       console.log("Loading MTL file...");
       const objLoader = new OBJLoader();
       const mtlLoader = new MTLLoader();
-      const objPath = "/mcclient:mcclient:basilesex.os/minecraft.obj";
-      const mtlPath = "/mcclient:mcclient:basilesex.os/minecraft.mtl";
+      const objPath = "/mcclient:mcclient:astronaut.os/minecraft.obj";
+      const mtlPath = "/mcclient:mcclient:astronaut.os/minecraft.mtl";
 
       mtlLoader.load(
         mtlPath,

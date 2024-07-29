@@ -46,7 +46,7 @@ const InterfaceUI = () => {
         ? "localhost:8081"
         : window.location.host;
 
-    ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
+    ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:astronaut.os/`);
 
     ws.onopen = function (event) {
       console.log("Connection opened on " + window.location.host + ":", event);

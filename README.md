@@ -11,7 +11,7 @@ cd gamelord
 kit bs
 ```
 
-Open UI at localhost:8080/gamelord:gamelord:basilesex.os. 
+Open UI at localhost:8080/gamelord:gamelord:astronaut.os. 
 Under "Edit Lobby" define the game name and server address. (these are only displayed to players, and not used for any logic.)
 Under "Configure Points" define the spawn points and goal post.
 These should be displayed during planning phase.
@@ -25,7 +25,7 @@ cd mcclient
 kit bs
 ```
 
-Open UI at localhost:8080/mcclient:mcclient:basilesex.os.
+Open UI at localhost:8080/mcclient:mcclient:astronaut.os.
 To join a team specify the server/gamelord node, i.e. uncentered.os (or whoever is running the server), and enter your minecraft ID which can be found in your minecraft launcher (both inputs are necessary and important for the game to work properly.)
 
 After joining the team, you can start making changes in the map. After pressing enter, the changes will propagate to all other players. You should also be able to see other players' changes in real time.

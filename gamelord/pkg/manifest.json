@@ -9,8 +9,8 @@
             "vfs:distro:sys"
         ],
         "grant_capabilities": [
-            "gamelord:gamelord:basilesex.os",
-            "mcdriver:mcdriver:basilesex.os"
+            "gamelord:gamelord:astronaut.os",
+            "mcdriver:mcdriver:astronaut.os"
         ],
         "public": true
     }

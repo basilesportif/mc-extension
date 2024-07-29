@@ -87,7 +87,7 @@ impl State {
                     .body(serde_json::to_vec(diff)?)
                     .target(Address::new(
                         &client.kinode_id,
-                        ("mcclient", "mcclient", "basilesex.os"),
+                        ("mcclient", "mcclient", "astronaut.os"),
                     ))
                     .send()?;
             }
