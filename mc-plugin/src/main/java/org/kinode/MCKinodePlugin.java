@@ -12,6 +12,10 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.block.Action;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.potion.PotionEffectType;
 
 import org.kinode.MCKinodeWS;
 import org.kinode.WorldInfo;
@@ -60,6 +64,30 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         } else {
             getLogger().info("Failed to connect to Kinode WS process");
         }
+        spawnBeacon(5, 251, 63);
+    }
+    private void spawnBeacon(int x, int y, int z) {
+        World world = Bukkit.getWorlds().get(0); // Get the first world
+        Location beaconLocation = new Location(world, x, y, z);
+        Block beaconBlock = world.getBlockAt(beaconLocation);
+
+        // Clear the area for the beacon pyramid
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                world.getBlockAt(x + dx, y - 1, z + dz).setType(Material.EMERALD_BLOCK);
+            }
+        }
+
+        // Place the beacon block
+        beaconBlock.setType(Material.BEACON);
+
+        // Set the beacon's properties
+        org.bukkit.block.Beacon beacon = (org.bukkit.block.Beacon) beaconBlock.getState();
+        beacon.setPrimaryEffect(PotionEffectType.REGENERATION); // Set the primary effect
+        beacon.setSecondaryEffect(PotionEffectType.DAMAGE_RESISTANCE); // Set the secondary effect (optional)
+        beacon.update();
+
+        getLogger().info("Spawned an activated beacon with a beam at " + x + ", " + y + ", " + z);
     }
 
     @Override
@@ -67,6 +95,7 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         // Plugin shutdown logic
         // here
     }
+
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {

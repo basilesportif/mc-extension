@@ -1,5 +1,3 @@
-import { useRef, useEffect } from 'react';
-
 const EffectMenu = ({
   showEffectMenu,
   effectOptions,

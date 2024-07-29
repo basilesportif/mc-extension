@@ -272,7 +272,14 @@ pub struct Cube {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Effect{
-    Slowness
+    Slowness,
+    Weakness,
+    Nausea,
+    Hunger,
+    Blindness,
+    Poison,
+    Wither,
+    Levitation,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CubeEffectList{

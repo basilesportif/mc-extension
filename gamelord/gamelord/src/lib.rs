@@ -212,6 +212,25 @@ fn handle_kinode_message(
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
+            if cube == state.lobby.goal_post {
+                println!("Goal post reached, game over!");
+
+                // Determine the team of the player
+                let winning_team = if let Some(active_player) = state.active_players.get(&minecraft_id) {
+                    active_player.team.clone()
+                } else {
+                    return Err(anyhow::anyhow!("Player not found in active players"));
+                };
+
+                let response = serde_json::to_vec(
+                    &GamelordResponseMinecraft::TransitionSilentResponse(
+                        format!("Game over! Team {:?} won!", winning_team),
+                    ),
+                )
+                .expect("failed to parse gamelord cube transition response");
+                Response::new().body(response).send().unwrap();
+                return Ok(());
+            }
             // we get information about what team the player is in based on Active players
             if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
                 println!(
@@ -252,8 +271,10 @@ fn handle_kinode_message(
                 // If we reach here, either the cube is not owned, or it's owned by the player's team
                 println!("Cube not in enemy region, you are clear");
                 let response =
-                    serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse)
-                        .expect("failed to parse gamelord cube transition response");
+                        serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse(
+                            "No effects applied".to_string(),
+                        ))
+                            .expect("failed to parse gamelord cube transition response");
                 Response::new().body(response).send().unwrap();
                 Ok(())
             } else {

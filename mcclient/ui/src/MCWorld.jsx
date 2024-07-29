@@ -35,7 +35,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
   const [showEffectMenu, setShowEffectMenu] = useState(false);
   const [selectedEffects, setSelectedEffects] = useState([]);
 
-  const effectOptions = ['Slowness', 'Weakness', 'Blindness'];
+  const effectOptions = ['Slowness', 'Weakness', 'Nausea', 'Hunger', 'Blindness', 'Poison', 'Wither', 'Levitation'];
 
   const velocityRef = useRef(new THREE.Vector3());
   const directionRef = useRef(new THREE.Vector3());

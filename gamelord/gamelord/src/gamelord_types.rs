@@ -150,7 +150,7 @@ impl GamelordRequestMinecraft {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum GamelordResponseMinecraft {
     TransitionTriggeredResponse(CubeEffectList),
-    TransitionSilentResponse,
+    TransitionSilentResponse(String),
     PlayerSpawnRequestAuthorized(bool, String, Cube),
     PlayerSpawnRequestDenied(bool ,String),
 }

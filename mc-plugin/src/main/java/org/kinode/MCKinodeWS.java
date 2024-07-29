@@ -9,6 +9,7 @@ import org.bukkit.Location; // Import the Location class
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
+import org.bukkit.entity.EntityType;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -17,6 +18,13 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.handshake.ServerHandshake;
+
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.Particle;
+
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 
 public class MCKinodeWS extends WebSocketClient {
 
@@ -34,6 +42,9 @@ public class MCKinodeWS extends WebSocketClient {
     public boolean isConnected() {
         return isConnected;
     }
+
+
+
 
     @Override
     public void onOpen(ServerHandshake handshakedata) {
@@ -127,7 +138,7 @@ public class MCKinodeWS extends WebSocketClient {
                 + "\"minecraft_id\": \"" + playerName + "\","
                 + "\"cube\": {"
                 + "\"center\": [" + x + ", " + y + ", " + z + "],"
-                + "\"side_length\": 50"
+                + "\"side_length\": 16"
                 + "}"
                 + "}"
                 + "}"
@@ -136,35 +147,44 @@ public class MCKinodeWS extends WebSocketClient {
         System.out.println("Sent ValidateMove message: " + message);
 
         onMessageResponse = (response) -> {
-            // Remove " from the response and convert it to a string
-            String cleanedResponse = response.trim().replace("\"", "");
-            System.err.println("cleaned responses: " + cleanedResponse);
-            if ("TransitionSilentResponse".equals(cleanedResponse)) {
-                MCKinodePlugin.getInstance().getLogger().info("Entering non-enemy territory");
-                Player player = Bukkit.getPlayer(playerName);
-                if (player != null) {
-                    player.sendMessage("You are entering non-enemy territory");
-                }
-            } else {
-                try {
-                    JSONObject jsonResponse = new JSONObject(response);
-                    if (jsonResponse.has("TransitionTriggeredResponse")) {
-                        JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
-                        JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
-                        MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
-                        Player player = Bukkit.getPlayer(playerName);
-                        if (player != null) {
-                            player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
+            try {
+                JSONObject jsonResponse = new JSONObject(response);
+                if (jsonResponse.has("TransitionSilentResponse")) {
+                    String message_response = jsonResponse.getString("TransitionSilentResponse");
+                    MCKinodePlugin.getInstance().getLogger().info("TransitionSilentResponse: " + message);
+                    Bukkit.broadcastMessage(message_response);
+                } else if (jsonResponse.has("TransitionTriggeredResponse")) {
+                    JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
+                    JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
+                    MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
+                    Player player = Bukkit.getPlayer(playerName);
+                    if (player != null) {
+                        player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
+
+                        // Apply effects to the player
+                        for (int i = 0; i < effectsArray.length(); i++) {
+                            String effectName = effectsArray.getString(i);
+                            PotionEffectType effectType = PotionEffectType.getByName(effectName);
+                            if (effectType != null) {
+                                PotionEffect effect = new PotionEffect(effectType, 200, 1); // Duration: 10 seconds, Amplifier: 1
+                                player.addPotionEffect(effect);
+
+                                // Spawn particles around the player
+                                player.getWorld().spawnParticle(Particle.SPELL_WITCH, player.getLocation().add(0, 1, 0), 50, 0.5, 0.5, 0.5, 0.1);
+                            } else {
+                                MCKinodePlugin.getInstance().getLogger().warning("Unknown effect: " + effectName);
+                            }
                         }
-                    } else {
-                        System.err.println("Unexpected JSON response format: " + response);
                     }
-                } catch (JSONException e) {
-                    System.err.println("Unexpected response format: " + response);
+                } else {
+                    System.err.println("Unexpected JSON response format: " + response);
                 }
+            } catch (JSONException e) {
+                System.err.println("Failed to parse JSON response: " + response);
             }
         };
         
+
     }
 
     // Define the WebSocketResponseHandler interface here
