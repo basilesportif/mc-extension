@@ -592,6 +592,7 @@ fn handle_terminal_message(
                             );
                             let serializable_wallet = SerializableWallet::from(parsed_wallet);
                             state.wallet = PrivateKey::Decrypted(serializable_wallet);
+                            state.save();
                         }
                         None => println!("Failed to parse wallet, try again."),
                     },
