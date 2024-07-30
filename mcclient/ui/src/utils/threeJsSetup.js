@@ -13,8 +13,8 @@ const setupCamera = (cameraRef, containerRef) => {
   if (containerRef.current) {
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.set(0, 50, 200);
+    const camera = new THREE.PerspectiveCamera(75, width / height, 5, 150);
+    camera.position.set(0, 200, 0);
     cameraRef.current = camera;
     console.log("Camera set up.");
   }

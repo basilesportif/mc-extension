@@ -38,7 +38,8 @@ You can only chat with your team, and the other team will not be able to see you
 
 ### Experimenting with Maps
 
-Currently, the map we are using is found in the /mcclient/ui/public folder. If you want to experiment with a different map, all players should manually replace that folder with a new one containing the new map/world object.
+
+Currently, the map we are using is found in the /mcclient/ui/public folder. If you want to experiment with a different map, all players should manually replace that folder with a new one containing the new map/world object. Additionally, make sure that the .obj file is derived from the Minecraft World file you intend to use in for the server. To create a .obj file from a Minecraft World, you can use the [jmc2obj/j-mc-2-obj](https://github.com/jmc2obj/j-mc-2-obj) repository.
 
 This will be done automatically in the future.
 
@@ -54,10 +55,11 @@ Java version minimum: 21 (OpenJDK 21): https://openjdk.java.net/install/
 1. Set up Paper MC server (https://docs.papermc.io/paper/getting-started) (remember to have the startup script in the same folder as the Paper jar file.)
 2. Compile a new version of the plugin: run `mvn clean install` in the `mc-plugin` folder.
 3. Add plugin to the server (https://docs.papermc.io/paper/adding-plugins). 
-4. Install(kit bs gamelord) and (kit bs mcdriver)
-5. Start Minecraft Server. (use `java -Xms4G -Xmx4G -jar paper-1.20.6-148.jar --nogui` or `sh {name of startup script}` in the folder with the Paper Jar with the appropriate plugin jar in the server's plugin folder).
+4. In your Paper MC server, replace the /world folder with the Minecraft world folder you want to use (remember to change the name of the name of the folder to /world before replacing it).
+5. Install(kit bs gamelord) and (kit bs mcdriver)
+6. Start Minecraft Server. (use `java -Xms4G -Xmx4G -jar paper-1.20.6-148.jar --nogui` or `sh {name of startup script}` in the folder with the Paper Jar with the appropriate plugin jar in the server's plugin folder).
 
-@punctumfix - please add instructions for loading the map (.obj files) into the server.
+
 
 ### Client/Player Setup
 

@@ -158,6 +158,7 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
                 width: "100%",
                 height: "50vh",
                 border: "1px solid #ccc",
+                backgroundColor: "rgba(255, 255, 255, 0.4)", // Added background color
               }}
             >
               <ChatContainer>
@@ -190,7 +191,10 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
                   )}
                 </MessageList>
                 <MessageInput
-                  style={{ border: "1px solid #ccc" }}
+                  style={{
+                    border: "1px solid #ccc",
+                    backgroundColor: "rgba(255, 255, 255, 0.4)", // Added background color
+                  }}
                   placeholder="Type message here"
                   attachButton={false}
                   sendButton={false}
