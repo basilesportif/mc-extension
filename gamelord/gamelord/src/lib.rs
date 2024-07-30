@@ -7,14 +7,16 @@ use kinode_process_lib::{
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
+mod encryption;
 mod sol_gamelord;
 use sol_gamelord::{Action, Caller, WALLET_KEY};
 mod gamelord_types;
 mod utilities;
+use alloy_signer::{LocalWallet, Signer};
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
 use gamelord_types::{
-    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft, State,
+    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft, State, PrivateKey, SerializableWallet
 };
 use mcstructs::{
     ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,
@@ -22,6 +24,9 @@ use mcstructs::{
 };
 use std::collections::HashMap;
 use std::str::FromStr;
+
+use crate::encryption::{encrypt_data, decrypt_data};
+
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -559,7 +564,43 @@ fn handle_terminal_message(
             let result = caller.get_player_info(funding_address);
             println!("result: {:?}", result);
         }
-        _ => println!("Invalid message"),
+        Action::SetWallet {private_key, password} => {
+            let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
+            state.wallet = PrivateKey::Encrypted(encrypted_wallet_data);
+            state.save();
+
+            if let Ok(parsed_wallet) = private_key.parse::<LocalWallet>() {
+                println!(
+                    "Loaded wallet with address: {:?}",
+                    parsed_wallet.address()
+                );
+            } else {
+                println!("Failed to parse wallet key, try again.");
+            }
+        }
+        Action::DecryptWallet(password) => {
+            if let PrivateKey::Encrypted(encrypted_key) = state.wallet.clone() {
+                match decrypt_data(&encrypted_key, &password) {
+                    Ok(decrypted_key) => match String::from_utf8(decrypted_key)
+                        .ok()
+                        .and_then(|wd| wd.parse::<LocalWallet>().ok())
+                    {
+                        Some(parsed_wallet) => {
+                            println!(
+                                "Trader: Loaded wallet with address: {:?}",
+                                parsed_wallet.address()
+                            );
+                            let serializable_wallet = SerializableWallet::from(parsed_wallet);
+                            state.wallet = PrivateKey::Decrypted(serializable_wallet);
+                        }
+                        None => println!("Failed to parse wallet, try again."),
+                    },
+                    Err(_) => println!("Decryption failed, try again."),
+                }
+            } else {
+            }
+        }
+        // _ => println!("Invalid message"),
     }
     return Ok(());
 }
@@ -611,12 +652,15 @@ fn init(our: Address) {
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
+
+
     let mut contract_caller = Caller::new(
         "0x5FbDB2315678afecb367f032d93F642f64180aa3",
         Provider::new(31337, 5),
         31337,
         WALLET_KEY,
     );
+
 
     let min_eth_wager: U256 = "50000000000000000".parse().unwrap(); // 0.05 eth
 

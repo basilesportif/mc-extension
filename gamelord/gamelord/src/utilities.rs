@@ -1,9 +1,9 @@
 use crate::gamelord_types::{Owner, Owner::TeamName};
-use mcstructs::{Player, GameLobby, Cube, Region};
+use mcstructs::{Cube, GameLobby, Player, Region};
 use std::collections::HashMap;
 
 // TODO: Change this function to determine effects that are applied, else do nothing
-/// Function that takes in Regions, player, and current coordinates, and returns a boolean whether a player is allowed to be there or not 
+/// Function that takes in Regions, player, and current coordinates, and returns a boolean whether a player is allowed to be there or not
 pub fn valid_position(
     lobby: &GameLobby,
     layout: &HashMap<Owner, Region>,
@@ -13,11 +13,15 @@ pub fn valid_position(
     if let Some(team_name) = lobby.player_in_team(player) {
         if let Some(region) = layout.get(&TeamName(team_name.clone())) {
             if region.to_hashmap().contains_key(&cube) {
-                return (format!("Access granted to player: {}", player.kinode_id), true);
+                return (
+                    format!("Access granted to player: {}", player.kinode_id),
+                    true,
+                );
             }
         }
-        return ("Owner not in map.".to_string(), false); 
-    } 
+        return ("Owner not in map.".to_string(), false);
+    }
     return ("Player not in either Team.".to_string(), false);
 }
 //pub fn authorized_player()
+

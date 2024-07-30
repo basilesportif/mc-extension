@@ -22,8 +22,10 @@ pub const WALLET_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efc
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Action {
+    SetWallet {private_key: String, password: String},
+    DecryptWallet(String),
     SetContractAddress(String),
-    GetPlayerInfo(EthAddress),
+    GetPlayerInfo(EthAddress)
 }
 pub struct Caller {
     contract_address: String,

@@ -24,8 +24,11 @@ alloy = { version = "0.1.2", features = [
     "consensus",
     "rpc-types"
 ]}
+alloy-signer = { git = "https://github.com/alloy-rs/alloy", rev = "098ad56" }
 lazy_static = "1.4"
 chrono = "0.4"
+rust-crypto-wasm = "0.3.1"
+rand = "0.8.5"
 
 [lib]
 crate-type = ["cdylib"]

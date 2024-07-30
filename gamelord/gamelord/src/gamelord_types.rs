@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
 use crate::sol_gamelord::{Caller, WALLET_KEY};
 use alloy_primitives::U256;
+use alloy_signer::{k256::ecdsa::SigningKey, Wallet, LocalWallet, Signer};
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActivePlayer {
@@ -49,6 +51,37 @@ pub enum Owner {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PrivateKey {
+    Encrypted(Vec<u8>),
+    Decrypted(SerializableWallet),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SerializableWallet {
+    address: String,
+    private_key: String,
+}
+
+impl From<LocalWallet> for SerializableWallet {
+    fn from(wallet: LocalWallet) -> Self {
+        SerializableWallet {
+            address: wallet.address().to_string(),
+            private_key: hex::encode(wallet.to_bytes()),
+        }
+    }
+}
+
+impl SerializableWallet {
+    pub fn new() -> Self {
+        SerializableWallet {
+            address: "".to_string(),
+            private_key: "".to_string(),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub our: Address,
     pub lobby: GameLobby,
@@ -56,6 +89,7 @@ pub struct State {
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
     pub node_to_eth: HashMap<NodeId, (EthAddress, U256)>, // nodeId to EthAddress and Eth Wagered amount
+    pub wallet: PrivateKey,
 }
 
 impl State {
@@ -67,6 +101,7 @@ impl State {
             active_players: HashMap::new(),
             allowed_players: HashMap::new(),
             node_to_eth: HashMap::new(),
+            wallet: PrivateKey::Decrypted(SerializableWallet::new()),
         }
     }
     pub fn fetch() -> Option<State> {
@@ -164,6 +199,7 @@ pub enum GamelordResponseMinecraft {
     PlayerSpawnRequestAuthorized(bool, String, Cube),
     PlayerSpawnRequestDenied(bool ,String),
 }
+
 /*
     data:
 - players in the game
