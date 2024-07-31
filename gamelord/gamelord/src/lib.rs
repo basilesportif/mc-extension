@@ -13,8 +13,9 @@ use kinode_process_lib::{
     println, Address, LazyLoadBlob, Message, Request, Response,
 };
 mod encryption;
+mod eth_utils;
+use eth_utils::{Caller};
 mod sol_gamelord;
-use sol_gamelord::{Caller};
 mod utilities;
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
