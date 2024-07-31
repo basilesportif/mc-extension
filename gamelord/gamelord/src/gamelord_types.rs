@@ -199,6 +199,13 @@ pub enum GamelordResponseMinecraft {
     PlayerSpawnRequestDenied(bool ,String),
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub enum Action {
+    EncryptWallet {private_key: Option<String>, password: String}, // if none, will use decrypted wallet key
+    DecryptWallet(String),
+    GetPlayerInfo(EthAddress)
+}
+
 /*
     data:
 - players in the game

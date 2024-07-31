@@ -14,15 +14,15 @@ use kinode_process_lib::{
 };
 mod encryption;
 mod sol_gamelord;
-use sol_gamelord::{Action, Caller};
-mod gamelord_types;
+use sol_gamelord::{Caller};
 mod utilities;
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
 use alloy_signer::{LocalWallet, Signer};
+mod gamelord_types;
 use gamelord_types::{
     ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,
-    PrivateKey, SerializableWallet, State,
+    PrivateKey, SerializableWallet, State, Action
 };
 use mcstructs::{
     ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,

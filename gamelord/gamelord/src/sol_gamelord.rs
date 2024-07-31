@@ -11,20 +11,11 @@ use alloy_primitives::{Bytes, FixedBytes, I256, U256};
 use alloy_rlp::Encodable;
 use alloy_sol_types::{sol, SolCall, SolEvent, SolValue};
 use kinode_process_lib::{
-    eth::{Address as EthAddress, BlockId, BlockNumberOrTag, EthError, Filter, Log, Provider},
-    kinode, println,
+    eth::{Address as EthAddress, BlockId, BlockNumberOrTag, EthError, Filter, Log, Provider}, println,
 };
 use mcstructs::TeamName;
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-
-#[derive(Serialize, Deserialize, Clone)]
-pub enum Action {
-    EncryptWallet {private_key: Option<String>, password: String}, // if none, will use decrypted wallet key
-    DecryptWallet(String),
-    GetPlayerInfo(EthAddress)
-}
 pub struct Caller {
     contract_address: String,
     provider: Provider,
