@@ -7,7 +7,7 @@ use chrono::Utc;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
     await_message, call_init,
-    eth::Provider,
+    eth::{EthConfigAction, NodeOrRpcUrl, Provider, ProviderConfig},
     get_blob,
     http::{self},
     println, Address, LazyLoadBlob, Message, Request, Response,
@@ -60,8 +60,20 @@ lazy_static! {
         }
     };
 
+    pub static ref RPC_URL: NodeOrRpcUrl = {
+        let env_content = include_str!("../../../.env");
+        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+        match *CURRENT_CHAIN_ID {
+            31337 => NodeOrRpcUrl::RpcUrl(env::var("VITE_ANVIL_RPC_URL").expect("RPC_URL must be set")),
+            11155111 => NodeOrRpcUrl::RpcUrl(env::var("VITE_SEPOLIA_RPC_URL").expect("RPC_URL must be set")),
+            1 => NodeOrRpcUrl::RpcUrl(env::var("VITE_MAINNET_RPC_URL").expect("RPC_URL must be set")),
+            10 => NodeOrRpcUrl::RpcUrl(env::var("VITE_OPTIMISM_RPC_URL").expect("RPC_URL must be set")),
+            _ => panic!("Invalid CURRENT_CHAIN_ID: {}", *CURRENT_CHAIN_ID),
+        }
+    };
+
     pub static ref MIN_ETH_WAGER: U256 = {
-        "5000000000000000".parse().unwrap() // 0.05 eth
+        "100000000000000".parse().unwrap() // 0.0001 eth
     };
 }
 
@@ -237,6 +249,7 @@ fn handle_mcclient_request(
                 Some(caller) => caller,
                 None => {
                     println!("no caller");
+                    println!("FIX: please use EncryptWallet and then DecryptWallet actions to make caller usable");
                     return Ok(());
                 }
             };
@@ -715,6 +728,13 @@ fn init(our: Address) {
     http::bind_http_path("/active_players", false, false).expect("failed to bind http path");
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
+    let _ = Request::to(("our", "eth", "distro", "sys"))
+        .body(serde_json::to_vec(&EthConfigAction::AddProvider(ProviderConfig {
+            chain_id: *CURRENT_CHAIN_ID,
+            trusted: true,
+            provider: RPC_URL.clone(),
+        })).unwrap())
+        .send();
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
     let mut gamelord_caller: Option<GamelordCaller> = None;
