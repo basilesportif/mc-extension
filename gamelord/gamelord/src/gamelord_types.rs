@@ -2,7 +2,7 @@ use kinode_process_lib::{get_state, println, set_state, Address, Request, NodeId
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
-use crate::sol_gamelord::{Caller, WALLET_KEY};
+use crate::sol_gamelord::{Caller};
 use alloy_primitives::U256;
 use alloy_signer::{k256::ecdsa::SigningKey, Wallet, LocalWallet, Signer};
 
@@ -58,8 +58,8 @@ pub enum PrivateKey {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SerializableWallet {
-    address: String,
-    private_key: String,
+    pub address: String,
+    pub private_key: String,
 }
 
 impl From<LocalWallet> for SerializableWallet {
@@ -79,7 +79,6 @@ impl SerializableWallet {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {

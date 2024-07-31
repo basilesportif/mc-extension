@@ -9,7 +9,7 @@ use kinode_process_lib::{
 };
 mod encryption;
 mod sol_gamelord;
-use sol_gamelord::{Action, Caller, WALLET_KEY};
+use sol_gamelord::{Action, Caller};
 mod gamelord_types;
 mod utilities;
 use alloy_signer::{LocalWallet, Signer};
@@ -179,6 +179,7 @@ fn handle_mcclient_request(
             println!("got join team");
             let node_id = message.source().node().to_string();
             if let Some(..) = state.node_to_eth.get(&node_id) {
+                println!("node already in team");
                 return Ok(());
                 // how to make this idempotent properly?
                 // return add_to_team(
@@ -189,29 +190,46 @@ fn handle_mcclient_request(
                 //     ws_channel_id,
                 // );
             }
+            println!("here");
 
             let signature = match Signature::from_str(join_team.signature.as_str()) {
                 Ok(signature) => signature,
                 Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
             };
+            println!("here1");
+
             let recovered_address = signature.recover_address_from_msg(node_id.clone())?;
             if recovered_address != join_team.eth_address {
+                println!("here2");
+
                 return Err(anyhow::anyhow!("Invalid signature"));
             }
+            println!("here3");
 
             // get eth wagered and team from chain
             let caller = match contract_caller {
-                Some(caller) => caller,
+                Some(caller) => {
+                    println!("here4");
+                    caller
+                }
                 None => return Ok(()),
             };
 
+            println!("here5");
+
             let (amount_wagered, team) = caller.get_player_info(recovered_address)?;
+            println!("here6");
+
             if amount_wagered < "50000000000000000".parse().unwrap() {
                 return Err(anyhow::anyhow!("Player has not wagered enough ETH."));
             }
 
+            println!("here7");
+
             state.node_to_eth.insert(node_id.clone(), (recovered_address, amount_wagered));
             state.save();
+
+            println!("here8");
 
             let _ = add_to_team(
                 state,
@@ -220,6 +238,8 @@ fn handle_mcclient_request(
                 team,
                 ws_channel_id,
             );
+
+            println!("here9");
 
             return Ok(());
         }
@@ -541,11 +561,6 @@ fn handle_terminal_message(
 ) -> anyhow::Result<()> {
     println!("terminal message received");
 
-    let caller = match contract_caller {
-        Some(caller) => caller,
-        None => return Ok(()),
-    };
-
     let action = match serde_json::from_slice::<Action>(&message.body()) {
         Ok(deserialized) => deserialized,
         Err(e) => {
@@ -557,21 +572,40 @@ fn handle_terminal_message(
     match action {
         Action::SetContractAddress(address) => {
             println!("Setting contract address to: {}", address);
-            *contract_caller =
-                Caller::new(address.as_str(), Provider::new(31337, 5), 31337, WALLET_KEY);
+            if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
+                *contract_caller =
+                    Caller::new(address.as_str(), Provider::new(31337, 5), 31337, wallet.private_key.as_str());
+            } else {
+                return Err(anyhow::anyhow!("please decrypt the wallet first before proceeding"))
+            }
         }
         Action::GetPlayerInfo(funding_address) => {
-            let result = caller.get_player_info(funding_address);
-            println!("result: {:?}", result);
+            if let Some(caller) = contract_caller {
+                let result = caller.get_player_info(funding_address);
+                println!("result: {:?}", result);
+            } else {
+                println!("No contract caller found");
+            }
         }
-        Action::SetWallet {private_key, password} => {
+        Action::EncryptWallet {private_key, password} => {
+            let private_key = 
+                match private_key {
+                    Some(private_key) => private_key,
+                    None => {
+                        if let PrivateKey::Decrypted(wallet) = state.wallet.clone() { 
+                            wallet.private_key
+                        } else {
+                            return Err(anyhow::anyhow!("Private key already encrypted."));
+                        }
+                    }
+                };
             let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
             state.wallet = PrivateKey::Encrypted(encrypted_wallet_data);
             state.save();
 
             if let Ok(parsed_wallet) = private_key.parse::<LocalWallet>() {
                 println!(
-                    "Loaded wallet with address: {:?}",
+                    "Loaded and encrypted wallet with address: {:?}",
                     parsed_wallet.address()
                 );
             } else {
@@ -587,7 +621,7 @@ fn handle_terminal_message(
                     {
                         Some(parsed_wallet) => {
                             println!(
-                                "Trader: Loaded wallet with address: {:?}",
+                                "Decrypted wallet with address: {:?}",
                                 parsed_wallet.address()
                             );
                             let serializable_wallet = SerializableWallet::from(parsed_wallet);
@@ -654,14 +688,15 @@ fn init(our: Address) {
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
-
-    let mut contract_caller = Caller::new(
-        "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-        Provider::new(31337, 5),
-        31337,
-        WALLET_KEY,
-    );
-
+    let mut contract_caller: Option<Caller> = None;
+    if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
+        contract_caller = Caller::new(
+            "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+            Provider::new(31337, 5),
+            31337,
+            &wallet.private_key,
+        );
+    }
 
     let min_eth_wager: U256 = "50000000000000000".parse().unwrap(); // 0.05 eth
 

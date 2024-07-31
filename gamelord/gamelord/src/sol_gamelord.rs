@@ -18,11 +18,10 @@ use mcstructs::TeamName;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-pub const WALLET_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Action {
-    SetWallet {private_key: String, password: String},
+    EncryptWallet {private_key: Option<String>, password: String}, // if none, will use decrypted wallet key
     DecryptWallet(String),
     SetContractAddress(String),
     GetPlayerInfo(EthAddress)
