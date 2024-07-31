@@ -1,4 +1,3 @@
-use crate::sol_gamelord::Gamelord::PlayerInfo;
 use alloy::{
     consensus::{SignableTransaction, TxEip1559, TxEnvelope},
     network::eip2718::Encodable2718,
@@ -19,7 +18,6 @@ use std::str::FromStr;
 pub struct Caller {
     contract_address: String,
     provider: Provider,
-    chain_id: u64,
     wallet: PrivateKeySigner,
 }
 /* ABI import */
@@ -100,7 +98,6 @@ impl Caller {
         Some(Self {
             contract_address: contract_address.to_string(),
             provider: Provider::new(chain_id, 5),
-            chain_id,
             wallet: wallet_address,
         })
     }
@@ -139,7 +136,7 @@ impl Caller {
         match self.provider.call(tx, None) {
             Ok(result) => {
                 println!("result: {:?}", result);
-                let player_info = PlayerInfo::abi_decode(&result, false)?;
+                let player_info = Gamelord::PlayerInfo::abi_decode(&result, false)?;
                 println!("player_info: {:?}", player_info);
                 let team = if player_info.team == 0 {
                     TeamName::Team1
