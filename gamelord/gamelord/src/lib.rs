@@ -42,37 +42,23 @@ lazy_static! {
     pub static ref CURRENT_CHAIN_ID: u64 = {
         let env_content = include_str!("../../../.env");
         from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("CURRENT_CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
+        env::var("VITE_CURRENT_CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
     };
 
-    pub static ref ANVIL_CONTRACT_ADDRESS: String = {
+    pub static ref CONTRACT_ADDRESS: String = {
         let env_content = include_str!("../../../.env");
         from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("VITE_ANVIL_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
-    };
-    pub static ref SEPOLIA_CONTRACT_ADDRESS: String = {
-        let env_content = include_str!("../../../.env");
-        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("VITE_SEPOLIA_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
-    };
-    pub static ref MAINNET_CONTRACT_ADDRESS: String = {
-        let env_content = include_str!("../../../.env");
-        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("VITE_MAINNET_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
+        match *CURRENT_CHAIN_ID {
+            31337 => env::var("VITE_ANVIL_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
+            11155111 => env::var("VITE_SEPOLIA_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
+            1 => env::var("VITE_MAINNET_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
+            _ => panic!("Invalid CURRENT_CHAIN_ID: {}", *CURRENT_CHAIN_ID),
+        }
     };
 
     pub static ref MIN_ETH_WAGER: U256 = {
         "50000000000000000".parse().unwrap() // 0.05 eth
     };
-}
-
-fn get_contract_address(chain_id: u64) -> Result<String, anyhow::Error> {
-    match chain_id {
-        31337 => Ok(ANVIL_CONTRACT_ADDRESS.to_string()),
-        11155111 => Ok(SEPOLIA_CONTRACT_ADDRESS.to_string()),
-        1 => Ok(MAINNET_CONTRACT_ADDRESS.to_string()),
-        _ => Err(anyhow::anyhow!("Invalid chain id")),
-    }
 }
 
 fn load_world(state: &mut State) {
@@ -647,7 +633,7 @@ fn handle_terminal_message(
                             state.wallets.insert(*CURRENT_CHAIN_ID, PrivateKey::Decrypted(serializable_wallet.clone()));
                             state.save();
                             *contract_caller = Caller::new(
-                                get_contract_address(*CURRENT_CHAIN_ID).unwrap().as_str(),
+                                CONTRACT_ADDRESS.as_str(),
                                 *CURRENT_CHAIN_ID,
                                 serializable_wallet.private_key.as_str(),
                             );
@@ -715,7 +701,7 @@ fn init(our: Address) {
     let mut contract_caller: Option<Caller> = None;
     if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CURRENT_CHAIN_ID) {
         contract_caller = Caller::new(
-            get_contract_address(*CURRENT_CHAIN_ID).unwrap().as_str(),
+            CONTRACT_ADDRESS.as_str(),
             *CURRENT_CHAIN_ID,
             &wallet.private_key,
         );

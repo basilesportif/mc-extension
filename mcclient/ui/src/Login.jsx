@@ -5,7 +5,23 @@ import Gamelord from "./abi/Gamelord.json";
 let signer = null;
 let provider;
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_ANVIL_CONTRACT_ADDRESS;
+const CURRENT_CHAIN_ID = import.meta.env.VITE_CURRENT_CHAIN_ID;
+let CONTRACT_ADDRESS;
+
+switch (CURRENT_CHAIN_ID) {
+  case '31337':
+    CONTRACT_ADDRESS = import.meta.env.VITE_ANVIL_CONTRACT_ADDRESS;
+    break;
+  case '11155111':
+    CONTRACT_ADDRESS = import.meta.env.VITE_SEPOLIA_CONTRACT_ADDRESS;
+    break;
+  case '1':
+    CONTRACT_ADDRESS = import.meta.env.VITE_MAINNET_CONTRACT_ADDRESS;
+    break;
+  default:
+    throw new Error(`Invalid CURRENT_CHAIN_ID`);
+}
+console.log("CONTRACT_ADDRESS", CONTRACT_ADDRESS);
 
 const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   const [userAccount, setUserAccount] = useState("");
