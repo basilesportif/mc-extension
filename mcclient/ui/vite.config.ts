@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // BASE_URL is process_name:package_name:publisher_node.
 // It represents the URL where the UI will be served from.

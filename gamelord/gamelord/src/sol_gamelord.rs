@@ -23,7 +23,6 @@ use std::str::FromStr;
 pub enum Action {
     EncryptWallet {private_key: Option<String>, password: String}, // if none, will use decrypted wallet key
     DecryptWallet(String),
-    SetContractAddress(String),
     GetPlayerInfo(EthAddress)
 }
 pub struct Caller {

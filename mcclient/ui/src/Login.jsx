@@ -4,7 +4,9 @@ import Gamelord from "./abi/Gamelord.json";
 
 let signer = null;
 let provider;
-const CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
+
 const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   const [userAccount, setUserAccount] = useState("");
   const [chainId, setChainId] = useState();

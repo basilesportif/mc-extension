@@ -1,6 +1,5 @@
 use dotenvy::from_read;
 use std::env;
-use std::path::Path;
 use lazy_static::lazy_static;
 use std::io::Cursor;
 
@@ -46,14 +45,16 @@ lazy_static! {
         env::var("CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
     };
 
-    pub static ref WETH: HashMap<u64, Address> = {
-        let mut m = HashMap::new();
-        m.insert(10, "0x4200000000000000000000000000000000000006".parse::<Address>().unwrap()); // Optimism
-        m.insert(11155111, "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9".parse::<Address>().unwrap()); // Sepolia
-        m
+    pub static ref CONTRACT_ADDRESS: String = {
+        let env_content = include_str!("../../../.env");
+        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+        env::var("VITE_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
+    };
+
+    pub static ref MIN_ETH_WAGER: U256 = {
+        "50000000000000000".parse().unwrap() // 0.05 eth
     };
 }
-
 
 fn load_world(state: &mut State) {
     let body = get_blob().unwrap_or_default();
@@ -212,53 +213,40 @@ fn handle_mcclient_request(
                 //     ws_channel_id,
                 // );
             }
-            println!("here");
 
             let signature = match Signature::from_str(join_team.signature.as_str()) {
                 Ok(signature) => signature,
                 Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
             };
-            println!("here1");
-
+            println!("signature: {:?}", signature);
             let recovered_address = signature.recover_address_from_msg(node_id.clone())?;
             if recovered_address != join_team.eth_address {
-                println!("here2");
-
                 return Err(anyhow::anyhow!("Invalid signature"));
             }
-            println!("here3");
-
             // get eth wagered and team from chain
             let caller = match contract_caller {
                 Some(caller) => {
-                    println!("here4");
                     caller
                 }
-                None => return Ok(()),
+                None => {
+                    println!("no caller");
+                    return Ok(());
+                }
             };
 
-            println!("here5");
-
             let (amount_wagered, team) = caller.get_player_info(recovered_address)?;
-            println!("here6");
-
-            if amount_wagered < "50000000000000000".parse().unwrap() {
+            if amount_wagered < *MIN_ETH_WAGER {
                 return Err(anyhow::anyhow!("Player has not wagered enough ETH."));
             }
 
-            println!("here7");
+            println!("amount wagered: {:?}", amount_wagered);
 
             state
                 .node_to_eth
                 .insert(node_id.clone(), (recovered_address, amount_wagered));
             state.save();
-
-            println!("here8");
-
+            println!("adding to team");
             let _ = add_to_team(state, node_id, join_team.minecraft_id, team, ws_channel_id);
-
-            println!("here9");
-
             return Ok(());
         }
         McClientToGamelordRequest::SendMessage(chat_message) => {
@@ -588,21 +576,6 @@ fn handle_terminal_message(
     };
 
     match action {
-        Action::SetContractAddress(address) => {
-            println!("Setting contract address to: {}", address);
-            if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
-                *contract_caller = Caller::new(
-                    address.as_str(),
-                    Provider::new(*CHAIN_ID, 5),
-                    *CHAIN_ID,
-                    wallet.private_key.as_str(),
-                );
-            } else {
-                return Err(anyhow::anyhow!(
-                    "please decrypt the wallet first before proceeding"
-                ));
-            }
-        }
         Action::GetPlayerInfo(funding_address) => {
             if let Some(caller) = contract_caller {
                 let result = caller.get_player_info(funding_address);
@@ -618,15 +591,15 @@ fn handle_terminal_message(
             let private_key = match private_key {
                 Some(private_key) => private_key,
                 None => {
-                    if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
-                        wallet.private_key
+                    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CHAIN_ID) {
+                        wallet.private_key.clone()
                     } else {
                         return Err(anyhow::anyhow!("Private key already encrypted."));
-                    }
+                    }   
                 }
             };
             let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
-            state.wallet = PrivateKey::Encrypted(encrypted_wallet_data);
+            state.wallets.insert(*CHAIN_ID, PrivateKey::Encrypted(encrypted_wallet_data));
             state.save();
 
             if let Ok(parsed_wallet) = private_key.parse::<LocalWallet>() {
@@ -637,9 +610,10 @@ fn handle_terminal_message(
             } else {
                 println!("Failed to parse wallet key, try again.");
             }
+            *contract_caller = None;
         }
         Action::DecryptWallet(password) => {
-            if let PrivateKey::Encrypted(encrypted_key) = state.wallet.clone() {
+            if let Some(PrivateKey::Encrypted(encrypted_key)) = state.wallets.get(&CHAIN_ID) {
                 match decrypt_data(&encrypted_key, &password) {
                     Ok(decrypted_key) => match String::from_utf8(decrypted_key)
                         .ok()
@@ -651,14 +625,21 @@ fn handle_terminal_message(
                                 parsed_wallet.address()
                             );
                             let serializable_wallet = SerializableWallet::from(parsed_wallet);
-                            state.wallet = PrivateKey::Decrypted(serializable_wallet);
+                            state.wallets.insert(*CHAIN_ID, PrivateKey::Decrypted(serializable_wallet.clone()));
                             state.save();
+                            *contract_caller = Caller::new(
+                                CONTRACT_ADDRESS.as_str(),
+                                Provider::new(*CHAIN_ID, 5),
+                                *CHAIN_ID,
+                                serializable_wallet.private_key.as_str(),
+                            );
                         }
                         None => println!("Failed to parse wallet, try again."),
                     },
                     Err(_) => println!("Decryption failed, try again."),
                 }
             } else {
+                println!("no wallet for chainid {}", *CHAIN_ID);
             }
         } // _ => println!("Invalid message"),
     }
@@ -693,7 +674,6 @@ fn handle_message(
 
 call_init!(init);
 fn init(our: Address) {
-
     println!("{our}: gamelord started");
     let mut ws_channel_id: Option<u32> = None;
     bind_ws_path("/", true, false).unwrap();
@@ -715,16 +695,14 @@ fn init(our: Address) {
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
     let mut contract_caller: Option<Caller> = None;
-    if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
+    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CHAIN_ID) {
         contract_caller = Caller::new(
-            "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+            CONTRACT_ADDRESS.as_str(),
             Provider::new(*CHAIN_ID, 5),
             *CHAIN_ID,
             &wallet.private_key,
         );
     }
-
-    let min_eth_wager: U256 = "50000000000000000".parse().unwrap(); // 0.05 eth
 
     loop {
         match handle_message(&mut state, &mut contract_caller, &mut ws_channel_id) {

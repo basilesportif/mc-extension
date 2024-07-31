@@ -88,7 +88,7 @@ pub struct State {
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
     pub node_to_eth: HashMap<NodeId, (EthAddress, U256)>, // nodeId to EthAddress and Eth Wagered amount
-    pub wallet: PrivateKey,
+    pub wallets: HashMap<u64, PrivateKey>, //chain id to wallet
 }
 
 impl State {
@@ -100,7 +100,7 @@ impl State {
             active_players: HashMap::new(),
             allowed_players: HashMap::new(),
             node_to_eth: HashMap::new(),
-            wallet: PrivateKey::Decrypted(SerializableWallet::new()),
+            wallets: HashMap::new(),
         }
     }
     pub fn fetch() -> Option<State> {
