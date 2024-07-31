@@ -96,7 +96,6 @@ fn send_tx(
 impl Caller {
     pub fn new(
         contract_address: &str,
-        provider: Provider,
         chain_id: u64,
         wallet_addr: &str,
     ) -> Option<Self> {
@@ -109,7 +108,7 @@ impl Caller {
         }
         Some(Self {
             contract_address: contract_address.to_string(),
-            provider,
+            provider: Provider::new(chain_id, 5),
             chain_id,
             wallet: wallet_address,
         })

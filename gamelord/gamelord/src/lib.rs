@@ -39,21 +39,40 @@ wit_bindgen::generate!({
 });
 
 lazy_static! {
-    pub static ref CHAIN_ID: u64 = {
+    pub static ref CURRENT_CHAIN_ID: u64 = {
         let env_content = include_str!("../../../.env");
         from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
+        env::var("CURRENT_CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
     };
 
-    pub static ref CONTRACT_ADDRESS: String = {
+    pub static ref ANVIL_CONTRACT_ADDRESS: String = {
         let env_content = include_str!("../../../.env");
         from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-        env::var("VITE_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
+        env::var("VITE_ANVIL_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
+    };
+    pub static ref SEPOLIA_CONTRACT_ADDRESS: String = {
+        let env_content = include_str!("../../../.env");
+        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+        env::var("VITE_SEPOLIA_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
+    };
+    pub static ref MAINNET_CONTRACT_ADDRESS: String = {
+        let env_content = include_str!("../../../.env");
+        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+        env::var("VITE_MAINNET_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set")
     };
 
     pub static ref MIN_ETH_WAGER: U256 = {
         "50000000000000000".parse().unwrap() // 0.05 eth
     };
+}
+
+fn get_contract_address(chain_id: u64) -> Result<String, anyhow::Error> {
+    match chain_id {
+        31337 => Ok(ANVIL_CONTRACT_ADDRESS.to_string()),
+        11155111 => Ok(SEPOLIA_CONTRACT_ADDRESS.to_string()),
+        1 => Ok(MAINNET_CONTRACT_ADDRESS.to_string()),
+        _ => Err(anyhow::anyhow!("Invalid chain id")),
+    }
 }
 
 fn load_world(state: &mut State) {
@@ -591,7 +610,7 @@ fn handle_terminal_message(
             let private_key = match private_key {
                 Some(private_key) => private_key,
                 None => {
-                    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CHAIN_ID) {
+                    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CURRENT_CHAIN_ID) {
                         wallet.private_key.clone()
                     } else {
                         return Err(anyhow::anyhow!("Private key already encrypted."));
@@ -599,7 +618,7 @@ fn handle_terminal_message(
                 }
             };
             let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
-            state.wallets.insert(*CHAIN_ID, PrivateKey::Encrypted(encrypted_wallet_data));
+            state.wallets.insert(*CURRENT_CHAIN_ID, PrivateKey::Encrypted(encrypted_wallet_data));
             state.save();
 
             if let Ok(parsed_wallet) = private_key.parse::<LocalWallet>() {
@@ -613,7 +632,7 @@ fn handle_terminal_message(
             *contract_caller = None;
         }
         Action::DecryptWallet(password) => {
-            if let Some(PrivateKey::Encrypted(encrypted_key)) = state.wallets.get(&CHAIN_ID) {
+            if let Some(PrivateKey::Encrypted(encrypted_key)) = state.wallets.get(&CURRENT_CHAIN_ID) {
                 match decrypt_data(&encrypted_key, &password) {
                     Ok(decrypted_key) => match String::from_utf8(decrypted_key)
                         .ok()
@@ -625,12 +644,11 @@ fn handle_terminal_message(
                                 parsed_wallet.address()
                             );
                             let serializable_wallet = SerializableWallet::from(parsed_wallet);
-                            state.wallets.insert(*CHAIN_ID, PrivateKey::Decrypted(serializable_wallet.clone()));
+                            state.wallets.insert(*CURRENT_CHAIN_ID, PrivateKey::Decrypted(serializable_wallet.clone()));
                             state.save();
                             *contract_caller = Caller::new(
-                                CONTRACT_ADDRESS.as_str(),
-                                Provider::new(*CHAIN_ID, 5),
-                                *CHAIN_ID,
+                                get_contract_address(*CURRENT_CHAIN_ID).unwrap().as_str(),
+                                *CURRENT_CHAIN_ID,
                                 serializable_wallet.private_key.as_str(),
                             );
                         }
@@ -639,7 +657,7 @@ fn handle_terminal_message(
                     Err(_) => println!("Decryption failed, try again."),
                 }
             } else {
-                println!("no wallet for chainid {}", *CHAIN_ID);
+                println!("no wallet for chainid {}", *CURRENT_CHAIN_ID);
             }
         } // _ => println!("Invalid message"),
     }
@@ -695,11 +713,10 @@ fn init(our: Address) {
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
     let mut contract_caller: Option<Caller> = None;
-    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CHAIN_ID) {
+    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CURRENT_CHAIN_ID) {
         contract_caller = Caller::new(
-            CONTRACT_ADDRESS.as_str(),
-            Provider::new(*CHAIN_ID, 5),
-            *CHAIN_ID,
+            get_contract_address(*CURRENT_CHAIN_ID).unwrap().as_str(),
+            *CURRENT_CHAIN_ID,
             &wallet.private_key,
         );
     }

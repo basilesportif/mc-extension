@@ -5,7 +5,7 @@ import Gamelord from "./abi/Gamelord.json";
 let signer = null;
 let provider;
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
+const CONTRACT_ADDRESS = import.meta.env.VITE_ANVIL_CONTRACT_ADDRESS;
 
 const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   const [userAccount, setUserAccount] = useState("");
