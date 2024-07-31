@@ -1,3 +1,9 @@
+use dotenvy::from_read;
+use std::env;
+use std::path::Path;
+
+use std::io::Cursor;
+
 use chrono::Utc;
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
@@ -12,11 +18,12 @@ mod sol_gamelord;
 use sol_gamelord::{Action, Caller};
 mod gamelord_types;
 mod utilities;
-use alloy_signer::{LocalWallet, Signer};
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
+use alloy_signer::{LocalWallet, Signer};
 use gamelord_types::{
-    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft, State, PrivateKey, SerializableWallet
+    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,
+    PrivateKey, SerializableWallet, State,
 };
 use mcstructs::{
     ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,
@@ -25,8 +32,7 @@ use mcstructs::{
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::encryption::{encrypt_data, decrypt_data};
-
+use crate::encryption::{decrypt_data, encrypt_data};
 
 wit_bindgen::generate!({
     path: "target/wit",
@@ -226,18 +232,14 @@ fn handle_mcclient_request(
 
             println!("here7");
 
-            state.node_to_eth.insert(node_id.clone(), (recovered_address, amount_wagered));
+            state
+                .node_to_eth
+                .insert(node_id.clone(), (recovered_address, amount_wagered));
             state.save();
 
             println!("here8");
 
-            let _ = add_to_team(
-                state,
-                node_id,
-                join_team.minecraft_id,
-                team,
-                ws_channel_id,
-            );
+            let _ = add_to_team(state, node_id, join_team.minecraft_id, team, ws_channel_id);
 
             println!("here9");
 
@@ -573,10 +575,16 @@ fn handle_terminal_message(
         Action::SetContractAddress(address) => {
             println!("Setting contract address to: {}", address);
             if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
-                *contract_caller =
-                    Caller::new(address.as_str(), Provider::new(31337, 5), 31337, wallet.private_key.as_str());
+                *contract_caller = Caller::new(
+                    address.as_str(),
+                    Provider::new(31337, 5),
+                    31337,
+                    wallet.private_key.as_str(),
+                );
             } else {
-                return Err(anyhow::anyhow!("please decrypt the wallet first before proceeding"))
+                return Err(anyhow::anyhow!(
+                    "please decrypt the wallet first before proceeding"
+                ));
             }
         }
         Action::GetPlayerInfo(funding_address) => {
@@ -587,18 +595,20 @@ fn handle_terminal_message(
                 println!("No contract caller found");
             }
         }
-        Action::EncryptWallet {private_key, password} => {
-            let private_key = 
-                match private_key {
-                    Some(private_key) => private_key,
-                    None => {
-                        if let PrivateKey::Decrypted(wallet) = state.wallet.clone() { 
-                            wallet.private_key
-                        } else {
-                            return Err(anyhow::anyhow!("Private key already encrypted."));
-                        }
+        Action::EncryptWallet {
+            private_key,
+            password,
+        } => {
+            let private_key = match private_key {
+                Some(private_key) => private_key,
+                None => {
+                    if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
+                        wallet.private_key
+                    } else {
+                        return Err(anyhow::anyhow!("Private key already encrypted."));
                     }
-                };
+                }
+            };
             let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
             state.wallet = PrivateKey::Encrypted(encrypted_wallet_data);
             state.save();
@@ -634,8 +644,7 @@ fn handle_terminal_message(
                 }
             } else {
             }
-        }
-        // _ => println!("Invalid message"),
+        } // _ => println!("Invalid message"),
     }
     return Ok(());
 }
@@ -668,6 +677,10 @@ fn handle_message(
 
 call_init!(init);
 fn init(our: Address) {
+    let env_content = include_str!("../../../.env");
+    from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+    let chain_id: u64 = env::var("CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap();
+
     println!("{our}: gamelord started");
     let mut ws_channel_id: Option<u32> = None;
     bind_ws_path("/", true, false).unwrap();
