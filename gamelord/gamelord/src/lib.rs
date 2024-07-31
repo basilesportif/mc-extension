@@ -1,6 +1,6 @@
 use dotenvy::from_read;
-use std::env;
 use lazy_static::lazy_static;
+use std::env;
 use std::io::Cursor;
 
 use chrono::Utc;
@@ -14,16 +14,18 @@ use kinode_process_lib::{
 };
 mod encryption;
 mod eth_utils;
-use eth_utils::{Caller};
-mod sol_gamelord;
+use eth_utils::Caller;
+mod gamelord_caller;
+use gamelord_caller::GamelordCaller;
 mod utilities;
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
 use alloy_signer::{LocalWallet, Signer};
+use utilities::get_env_str;
 mod gamelord_types;
 use gamelord_types::{
-    ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,
-    PrivateKey, SerializableWallet, State, Action
+    Action, ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,
+    PrivateKey, SerializableWallet, State,
 };
 use mcstructs::{
     ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,
@@ -166,7 +168,7 @@ fn add_to_team(
 
 fn handle_mcclient_request(
     state: &mut State,
-    contract_caller: &mut Option<Caller>,
+    gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
     request: &McClientToGamelordRequest,
     message: &Message,
@@ -230,10 +232,8 @@ fn handle_mcclient_request(
                 return Err(anyhow::anyhow!("Invalid signature"));
             }
             // get eth wagered and team from chain
-            let caller = match contract_caller {
-                Some(caller) => {
-                    caller
-                }
+            let caller = match gamelord_caller {
+                Some(caller) => caller,
                 None => {
                     println!("no caller");
                     return Ok(());
@@ -307,14 +307,14 @@ fn handle_mcclient_request(
 //have everything handled here
 fn handle_kinode_message(
     state: &mut State,
-    contract_caller: &mut Option<Caller>,
+    gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
     message: &Message,
 ) -> anyhow::Result<()> {
     println!("handle kinode message entered");
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
-        return handle_mcclient_request(state, contract_caller, ws_channel_id, &request, message);
+        return handle_mcclient_request(state, gamelord_caller, ws_channel_id, &request, message);
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
@@ -567,7 +567,7 @@ fn handle_http_request(
 // used for eth contract testing
 fn handle_terminal_message(
     state: &mut State,
-    contract_caller: &mut Option<Caller>,
+    gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
     message: &Message,
 ) -> anyhow::Result<()> {
@@ -583,7 +583,7 @@ fn handle_terminal_message(
 
     match action {
         Action::GetPlayerInfo(funding_address) => {
-            if let Some(caller) = contract_caller {
+            if let Some(caller) = gamelord_caller {
                 let result = caller.get_player_info(funding_address);
                 println!("result: {:?}", result);
             } else {
@@ -597,15 +597,20 @@ fn handle_terminal_message(
             let private_key = match private_key {
                 Some(private_key) => private_key,
                 None => {
-                    if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CURRENT_CHAIN_ID) {
+                    if let Some(PrivateKey::Decrypted(wallet)) =
+                        state.wallets.get(&CURRENT_CHAIN_ID)
+                    {
                         wallet.private_key.clone()
                     } else {
                         return Err(anyhow::anyhow!("Private key already encrypted."));
-                    }   
+                    }
                 }
             };
             let encrypted_wallet_data = encrypt_data(private_key.as_bytes(), password.as_str());
-            state.wallets.insert(*CURRENT_CHAIN_ID, PrivateKey::Encrypted(encrypted_wallet_data));
+            state.wallets.insert(
+                *CURRENT_CHAIN_ID,
+                PrivateKey::Encrypted(encrypted_wallet_data),
+            );
             state.save();
 
             if let Ok(parsed_wallet) = private_key.parse::<LocalWallet>() {
@@ -616,10 +621,11 @@ fn handle_terminal_message(
             } else {
                 println!("Failed to parse wallet key, try again.");
             }
-            *contract_caller = None;
+            *gamelord_caller = None;
         }
         Action::DecryptWallet(password) => {
-            if let Some(PrivateKey::Encrypted(encrypted_key)) = state.wallets.get(&CURRENT_CHAIN_ID) {
+            if let Some(PrivateKey::Encrypted(encrypted_key)) = state.wallets.get(&CURRENT_CHAIN_ID)
+            {
                 match decrypt_data(&encrypted_key, &password) {
                     Ok(decrypted_key) => match String::from_utf8(decrypted_key)
                         .ok()
@@ -631,13 +637,23 @@ fn handle_terminal_message(
                                 parsed_wallet.address()
                             );
                             let serializable_wallet = SerializableWallet::from(parsed_wallet);
-                            state.wallets.insert(*CURRENT_CHAIN_ID, PrivateKey::Decrypted(serializable_wallet.clone()));
+                            state.wallets.insert(
+                                *CURRENT_CHAIN_ID,
+                                PrivateKey::Decrypted(serializable_wallet.clone()),
+                            );
                             state.save();
-                            *contract_caller = Caller::new(
-                                CONTRACT_ADDRESS.as_str(),
+                            if let Some(caller) = Caller::new(
                                 *CURRENT_CHAIN_ID,
                                 serializable_wallet.private_key.as_str(),
-                            );
+                            ) {
+                                *gamelord_caller = Some(GamelordCaller {
+                                    caller: caller,
+                                    contract_address: CONTRACT_ADDRESS.to_string(),
+                                });
+                            } else {
+                                println!("Failed to create caller, try again.");
+                                *gamelord_caller = None;
+                            }
                         }
                         None => println!("Failed to parse wallet, try again."),
                     },
@@ -653,7 +669,7 @@ fn handle_terminal_message(
 
 fn handle_message(
     state: &mut State,
-    contract_caller: &mut Option<Caller>,
+    gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
 ) -> anyhow::Result<()> {
     let message = await_message()?;
@@ -668,9 +684,9 @@ fn handle_message(
         println!("Local message received from: {:?}", message.source());
 
         if message.source().process.package_name == "terminal" {
-            return handle_terminal_message(state, contract_caller, ws_channel_id, &message);
+            return handle_terminal_message(state, gamelord_caller, ws_channel_id, &message);
         }
-        handle_kinode_message(state, contract_caller, ws_channel_id, &message)?;
+        handle_kinode_message(state, gamelord_caller, ws_channel_id, &message)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
     }
@@ -699,17 +715,16 @@ fn init(our: Address) {
 
     let mut state = State::fetch().unwrap_or_else(|| State::new(&our));
 
-    let mut contract_caller: Option<Caller> = None;
+    let mut gamelord_caller: Option<GamelordCaller> = None;
     if let Some(PrivateKey::Decrypted(wallet)) = state.wallets.get(&CURRENT_CHAIN_ID) {
-        contract_caller = Caller::new(
-            CONTRACT_ADDRESS.as_str(),
-            *CURRENT_CHAIN_ID,
-            &wallet.private_key,
-        );
+        gamelord_caller = Some(GamelordCaller {
+            caller: Caller::new(*CURRENT_CHAIN_ID, &wallet.private_key).unwrap(),
+            contract_address: CONTRACT_ADDRESS.to_string(),
+        });
     }
 
     loop {
-        match handle_message(&mut state, &mut contract_caller, &mut ws_channel_id) {
+        match handle_message(&mut state, &mut gamelord_caller, &mut ws_channel_id) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);
