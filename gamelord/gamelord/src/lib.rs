@@ -61,7 +61,7 @@ lazy_static! {
     };
 
     pub static ref MIN_ETH_WAGER: U256 = {
-        "50000000000000000".parse().unwrap() // 0.05 eth
+        "5000000000000000".parse().unwrap() // 0.05 eth
     };
 }
 

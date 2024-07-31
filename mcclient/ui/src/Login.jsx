@@ -141,7 +141,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
         <input
           type="text"
           id="ethAmount"
-          placeholder="Amount to Wager (Ether). Min 0.05"
+          placeholder="Amount to Wager (Ether). Min 0.005"
         />
         <button type="button" onClick={() => register("Team1")}>
           Join Team1
@@ -160,7 +160,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
         <p>Team Requested: {teamRequested || "Not selected"}</p>
       </div>
       <hr />
-      {ethWagered && ethers.parseEther("0.05") <= ethWagered && (
+      {ethWagered && ethers.parseEther("0.005") <= ethWagered && (
         <>
           <h3>Enter Gamelord NodeId and Minecraft ID</h3>
           <form id="playerForm">
