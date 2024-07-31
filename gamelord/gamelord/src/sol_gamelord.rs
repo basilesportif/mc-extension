@@ -50,6 +50,7 @@ fn send_tx(
     max_fee_per_gas: u128,
     max_priority_fee_per_gas: u128,
     value: U256,
+    chain_id: u64,
 ) -> anyhow::Result<FixedBytes<32>> {
     // get nonce
     let mut nonce = 0;
@@ -70,7 +71,7 @@ fn send_tx(
     }
 
     let mut tx = TxEip1559 {
-        chain_id: 31337,
+        chain_id: chain_id,
         nonce: nonce,
         to: TxKind::Call(to),
         gas_limit: gas_limit,

@@ -1,7 +1,7 @@
 use dotenvy::from_read;
 use std::env;
 use std::path::Path;
-
+use lazy_static::lazy_static;
 use std::io::Cursor;
 
 use chrono::Utc;
@@ -38,6 +38,22 @@ wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
+
+lazy_static! {
+    pub static ref CHAIN_ID: u64 = {
+        let env_content = include_str!("../../../.env");
+        from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
+        env::var("CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap()
+    };
+
+    pub static ref WETH: HashMap<u64, Address> = {
+        let mut m = HashMap::new();
+        m.insert(10, "0x4200000000000000000000000000000000000006".parse::<Address>().unwrap()); // Optimism
+        m.insert(11155111, "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9".parse::<Address>().unwrap()); // Sepolia
+        m
+    };
+}
+
 
 fn load_world(state: &mut State) {
     let body = get_blob().unwrap_or_default();
@@ -577,8 +593,8 @@ fn handle_terminal_message(
             if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
                 *contract_caller = Caller::new(
                     address.as_str(),
-                    Provider::new(31337, 5),
-                    31337,
+                    Provider::new(*CHAIN_ID, 5),
+                    *CHAIN_ID,
                     wallet.private_key.as_str(),
                 );
             } else {
@@ -677,9 +693,6 @@ fn handle_message(
 
 call_init!(init);
 fn init(our: Address) {
-    let env_content = include_str!("../../../.env");
-    from_read(Cursor::new(env_content)).expect("Failed to parse .env content");
-    let chain_id: u64 = env::var("CHAIN_ID").expect("CHAIN_ID must be set").parse().unwrap();
 
     println!("{our}: gamelord started");
     let mut ws_channel_id: Option<u32> = None;
@@ -705,8 +718,8 @@ fn init(our: Address) {
     if let PrivateKey::Decrypted(wallet) = state.wallet.clone() {
         contract_caller = Caller::new(
             "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-            Provider::new(31337, 5),
-            31337,
+            Provider::new(*CHAIN_ID, 5),
+            *CHAIN_ID,
             &wallet.private_key,
         );
     }
