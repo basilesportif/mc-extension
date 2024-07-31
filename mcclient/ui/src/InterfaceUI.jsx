@@ -72,7 +72,7 @@ const InterfaceUI = () => {
     ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
 
     ws.onopen = function (event) {
-      // console.log("Connection opened on " + window.location.host + ":", event);
+      console.log("Connection opened on " + window.location.host + ":", event);
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);

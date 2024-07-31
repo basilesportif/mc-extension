@@ -9,14 +9,17 @@ const CURRENT_CHAIN_ID = import.meta.env.VITE_CURRENT_CHAIN_ID;
 let CONTRACT_ADDRESS;
 
 switch (CURRENT_CHAIN_ID) {
-  case '31337':
+  case "31337":
     CONTRACT_ADDRESS = import.meta.env.VITE_ANVIL_CONTRACT_ADDRESS;
     break;
-  case '11155111':
+  case "11155111":
     CONTRACT_ADDRESS = import.meta.env.VITE_SEPOLIA_CONTRACT_ADDRESS;
     break;
-  case '1':
+  case "1":
     CONTRACT_ADDRESS = import.meta.env.VITE_MAINNET_CONTRACT_ADDRESS;
+    break;
+  case "10":
+    CONTRACT_ADDRESS = import.meta.env.VITE_OPTIMISM_CONTRACT_ADDRESS;
     break;
   default:
     throw new Error(`Invalid CURRENT_CHAIN_ID`);

@@ -127,6 +127,7 @@ fn handle_http_request(
                 ui_request.gamelord_id.clone(),
                 ("gamelord", "gamelord", "basilesex.os"),
             );
+            println!("gamelord: {}", gamelord);
             let join_request =
                 serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
             let _ = Request::to(gamelord.clone()).body(join_request).send();

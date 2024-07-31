@@ -55,6 +55,7 @@ lazy_static! {
             31337 => env::var("VITE_ANVIL_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
             11155111 => env::var("VITE_SEPOLIA_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
             1 => env::var("VITE_MAINNET_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
+            10 => env::var("VITE_OPTIMISM_CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set"),
             _ => panic!("Invalid CURRENT_CHAIN_ID: {}", *CURRENT_CHAIN_ID),
         }
     };
@@ -460,6 +461,7 @@ fn handle_http_request(
     let our_http_request = serde_json::from_slice::<http::HttpServerRequest>(message.body())?;
     match our_http_request {
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
+            println!("got web socket open");
             *ws_channel_id = Some(channel_id);
             send_ws_push(
                 ws_channel_id.unwrap_or(0),
