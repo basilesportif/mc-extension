@@ -161,20 +161,22 @@ public class MCKinodeWS extends WebSocketClient {
                     if (player != null) {
                         player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
 
-                        // Apply effects to the player
-                        for (int i = 0; i < effectsArray.length(); i++) {
-                            String effectName = effectsArray.getString(i);
-                            PotionEffectType effectType = PotionEffectType.getByName(effectName);
-                            if (effectType != null) {
-                                PotionEffect effect = new PotionEffect(effectType, 200, 1); // Duration: 10 seconds, Amplifier: 1
-                                player.addPotionEffect(effect);
+                        // Schedule the effect application on the main server thread
+                        Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                            for (int i = 0; i < effectsArray.length(); i++) {
+                                String effectName = effectsArray.getString(i);
+                                PotionEffectType effectType = PotionEffectType.getByName(effectName);
+                                if (effectType != null) {
+                                    PotionEffect effect = new PotionEffect(effectType, 200, 1); // Duration: 10 seconds, Amplifier: 1
+                                    player.addPotionEffect(effect);
 
-                                // Spawn particles around the player
-                                player.getWorld().spawnParticle(Particle.SPELL_WITCH, player.getLocation().add(0, 1, 0), 50, 0.5, 0.5, 0.5, 0.1);
-                            } else {
-                                MCKinodePlugin.getInstance().getLogger().warning("Unknown effect: " + effectName);
+                                    // Spawn particles around the player
+                                    player.getWorld().spawnParticle(Particle.SPELL_WITCH, player.getLocation().add(0, 1, 0), 50, 0.5, 0.5, 0.5, 0.1);
+                                } else {
+                                    MCKinodePlugin.getInstance().getLogger().warning("Unknown effect: " + effectName);
+                                }
                             }
-                        }
+                        });
                     }
                 } else {
                     System.err.println("Unexpected JSON response format: " + response);
