@@ -34,6 +34,12 @@ const InfoPanel = ({ unpaintedCubesCount, team1CubesCount, team2CubesCount }) =>
       <div>
         <span style={{ color: 'purple' }}>Purple</span>: Goalpost
       </div>
+      <div>
+        <span style={{ color: 'yellow' }}>Yellow</span>: Team 1's spawn point
+      </div>
+      <div>
+        <span style={{ color: 'cyan' }}>Cyan</span>: Team 2's spawn point
+      </div>
     </div>
   );
 };

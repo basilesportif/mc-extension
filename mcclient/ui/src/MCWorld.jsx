@@ -498,14 +498,12 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
   }, [isLocked]);
 
   const paintCubes = useCallback(() => {
-    const { world_config, goal_post } = lobby;
+    const { world_config, goal_post, team1, team2 } = lobby;
     let unpaintedCount = 0;
     let team1Count = 0;
     let team2Count = 0;
 
     if (world_config) {
-      const { team1 = {}, team2 = {} } = world_config;
-
       cubesRef.current.forEach((cube) => {
         const cubePosition = cube.position;
         const cubeSize = 16;
@@ -515,12 +513,23 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
         const cubeCenter = { center: [x, y, z], side_length: cubeSize };
 
         // Check if the cube is the goalpost
-        const isGoalpost =
-          JSON.stringify(cubeCenter) === JSON.stringify(goal_post);
+        const isGoalpost = JSON.stringify(cubeCenter) === JSON.stringify(goal_post);
+
+        // Check if the cube is in Team 1's spawn point
+        const isTeam1SpawnPoint = JSON.stringify(cubeCenter) === JSON.stringify(team1.spawn_point);
+
+        // Check if the cube is in Team 2's spawn point
+        const isTeam2SpawnPoint = JSON.stringify(cubeCenter) === JSON.stringify(team2.spawn_point);
 
         if (isGoalpost) {
           cube.material.color.setHex(0x800080); // Purple color for the goalpost
-          cube.material.opacity = 0.5; // Adjust the opacity as desired
+          cube.material.opacity = 0.5;
+        } else if (isTeam1SpawnPoint) {
+          cube.material.color.setHex(0xffff00); // Yellow color for Team 1's spawn point
+          cube.material.opacity = 0.5;
+        } else if (isTeam2SpawnPoint) {
+          cube.material.color.setHex(0x00ffff); // Cyan color for Team 2's spawn point
+          cube.material.opacity = 0.5;
         } else {
           const team1Config = team1.cubes?.find(([cubeConfig]) => {
             return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
@@ -553,7 +562,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
     setUnpaintedCubesCount(unpaintedCount);
     setTeam1CubesCount(team1Count);
     setTeam2CubesCount(team2Count);
-  }, [lobby.world_config, lobby.goal_post]);
+  }, [lobby.world_config, lobby.goal_post, lobby.team1, lobby.team2]);
 
   useEffect(() => {
     console.log('lobby changed:', lobby);

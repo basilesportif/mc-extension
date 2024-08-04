@@ -101,11 +101,10 @@ public class MCKinodeWS extends WebSocketClient {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestAuthorized");
                 success = responseArray.getBoolean(0);
                 messageResponse = responseArray.getString(1);
-                //remember that the third element should be the cube that the player spawns in
+                JSONArray centerArray = responseArray.getJSONArray(2).getJSONArray("center");
             } else if (jsonResponse.has("PlayerSpawnRequestDenied")) {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestDenied");
                 success = responseArray.getBoolean(0);
-                // remember that the th
                 messageResponse = responseArray.getString(1);
             } else {
                 System.err.println("Unexpected response format: " + response);
@@ -113,12 +112,16 @@ public class MCKinodeWS extends WebSocketClient {
             }
 
             if (success) {
-                JSONObject cubeData = responseArray.getJSONObject(2);
-                JSONArray center = cubeData.getJSONArray("center");
-                int x = center.getInt(0);
-                int y = center.getInt(1);
-                int z = center.getInt(2);
+                int x = centerArray.getInt(0);
+                int y = centerArray.getInt(1);
+                int z = centerArray.getInt(2);
                 MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
+                MCKinodePlugin.getInstance().getLogger().info("Spawn point: (" + x + ", " + y + ", " + z + ")");
+                
+                // Teleport the player to the spawn point
+                Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                    event.getPlayer().teleport(new Location(event.getPlayer().getWorld(), x, y, z));
+                });
             } else {
                 MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
                 Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
