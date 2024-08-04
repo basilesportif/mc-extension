@@ -72,7 +72,7 @@ const setupLighting = (sceneRef) => {
   // Directional light (sun-like)
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increase directional light intensity
   directionalLight.position.set(200, 200, 100); // Adjust position for better lighting
-  directionalLight.castShadow = true;
+  directionalLight.castShadow = false;
 
   // Shadow map configuration
   directionalLight.shadow.mapSize.width = 2048; // Increase shadow map resolution

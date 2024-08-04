@@ -127,7 +127,7 @@ public class MCKinodeWS extends WebSocketClient {
             }
         };
     }
-
+    //change this to SendCubeTransitionRequest
     public void sendValidateMoveMessage(String playerName, int x, int y, int z) {
         String message = "{"
                 + "\"type\": \"WebSocketPush\","

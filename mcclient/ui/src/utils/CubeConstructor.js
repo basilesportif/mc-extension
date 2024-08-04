@@ -35,8 +35,6 @@ export const CubeConstructor = (
             color: 0xffffff,
             transparent: true,
             opacity: 0.0001,
-            side: THREE.DoubleSide,
-            frustumCulled: true,
           });
           const cube = new THREE.Mesh(geometry, material);
   
@@ -46,7 +44,6 @@ export const CubeConstructor = (
             transparent: true,
             opacity: 0.3,
             linewidth: 0.5,
-            frustumCulled: true,
           });
           const wireframe = new THREE.LineSegments(edgesGeometry, edgesMaterial);
           cube.add(wireframe);
