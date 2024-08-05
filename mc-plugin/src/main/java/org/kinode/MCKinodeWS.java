@@ -90,18 +90,36 @@ public class MCKinodeWS extends WebSocketClient {
                 + "}";
         send(message);
 
-        // Handle the response
         onMessageResponse = (response) -> {
             JSONObject jsonResponse = new JSONObject(response);
             JSONArray responseArray;
             boolean success;
             String messageResponse;
+            JSONObject centerObject = null; // Initialize centerObject with null
 
             if (jsonResponse.has("PlayerSpawnRequestAuthorized")) {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestAuthorized");
                 success = responseArray.getBoolean(0);
                 messageResponse = responseArray.getString(1);
-                JSONArray centerArray = responseArray.getJSONArray(2).getJSONArray("center");
+                centerObject = responseArray.getJSONObject(2); // Get the JSONObject at index 2
+
+                if (success) {
+                    JSONArray centerArray = centerObject.getJSONArray("center");
+                    int x = centerArray.getInt(0);
+                    int y = centerArray.getInt(1);
+                    int z = centerArray.getInt(2);
+                    MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
+                    MCKinodePlugin.getInstance().getLogger().info("Spawn point: (" + x + ", " + y + ", " + z + ")");
+
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        event.getPlayer().teleport(new Location(event.getPlayer().getWorld(), x, y, z));
+                    });
+                } else {
+                    MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        event.getPlayer().kickPlayer("You are not allowed to join the server.");
+                    });
+                }
             } else if (jsonResponse.has("PlayerSpawnRequestDenied")) {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestDenied");
                 success = responseArray.getBoolean(0);
@@ -111,14 +129,15 @@ public class MCKinodeWS extends WebSocketClient {
                 return;
             }
 
-            if (success) {
+            // Check if centerObject is not null before using it
+            if (success && centerObject != null) {
+                JSONArray centerArray = centerObject.getJSONArray("center");
                 int x = centerArray.getInt(0);
                 int y = centerArray.getInt(1);
                 int z = centerArray.getInt(2);
                 MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
                 MCKinodePlugin.getInstance().getLogger().info("Spawn point: (" + x + ", " + y + ", " + z + ")");
-                
-                // Teleport the player to the spawn point
+
                 Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
                     event.getPlayer().teleport(new Location(event.getPlayer().getWorld(), x, y, z));
                 });
