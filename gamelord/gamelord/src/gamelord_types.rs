@@ -149,10 +149,10 @@ impl GamelordRequestMinecraft {
 //have to figure this out, since these are responses read by mcdriver, so have to update on that side
 #[derive(Serialize, Deserialize, Debug)]
 pub enum GamelordResponseMinecraft {
-    TransitionTriggeredResponse(CubeEffectList),
-    TransitionSilentResponse(String),
+    TransitionTriggeredResponse(String, CubeEffectList),
+    TransitionSilentResponse(String, String),
     PlayerSpawnRequestAuthorized(bool, String, Cube),
-    PlayerSpawnRequestDenied(bool ,String),
+    PlayerSpawnRequestDenied(bool, String),
 }
 /*
     data:

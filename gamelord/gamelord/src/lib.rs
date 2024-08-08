@@ -224,6 +224,7 @@ fn handle_kinode_message(
 
                 let response = serde_json::to_vec(
                     &GamelordResponseMinecraft::TransitionSilentResponse(
+                        minecraft_id.clone(),
                         format!("Game over! Team {:?} won!", winning_team),
                     ),
                 )
@@ -257,6 +258,7 @@ fn handle_kinode_message(
                                     // Send cube effects to mcdriver
                                     let response = serde_json::to_vec(
                                         &GamelordResponseMinecraft::TransitionTriggeredResponse(
+                                            minecraft_id.clone(),
                                             cube_effects.clone(),
                                         ),
                                     )
@@ -272,6 +274,7 @@ fn handle_kinode_message(
                 println!("Cube not in enemy region, you are clear");
                 let response =
                         serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse(
+                            minecraft_id.clone(),
                             "No effects applied".to_string(),
                         ))
                             .expect("failed to parse gamelord cube transition response");

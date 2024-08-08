@@ -22,6 +22,8 @@ import org.kinode.WorldInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
@@ -36,8 +38,16 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
     private static final Location WORLD_CENTER = new Location(null, 0, 0, 0);
 
-    // Add a field to track the last cube the player was in
-    private String prevCube = "";
+    // Add a map to store player-specific data
+    private Map<String, PlayerData> playerDataMap = new HashMap<>();
+
+    // Define a PlayerData class to store player-specific data
+    private static class PlayerData {
+        public String prevCube;
+        public PlayerData(String initialCube) {
+            this.prevCube = initialCube;
+        }
+    }
 
     @Override
     public void onEnable() {
@@ -108,7 +118,9 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         int playerZ = playerLocation.getBlockZ();
 
         // Set the initial cube based on the player's position
-        setInitialCube(player, playerX, playerY, playerZ);
+        String initialCube = "Center: " + playerX + "," + playerY + "," + playerZ;
+        PlayerData playerData = new PlayerData(initialCube);
+        playerDataMap.put(player.getName(), playerData);
 
         // Get the player's UUID
         UUID playerUUID = player.getUniqueId();
@@ -128,45 +140,26 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
-        Location toLocation = event.getTo();
         Player player = event.getPlayer();
+        String playerName = player.getName();
 
-        // Calculate the player's position relative to the world center
+        // Get the player's data from the map
+        PlayerData playerData = playerDataMap.get(playerName);
+        if (playerData == null) {
+            // Handle the case where the player data is not found
+            return;
+        }
+
+        Location toLocation = event.getTo();
         int playerX = toLocation.getBlockX();
         int playerY = toLocation.getBlockY();
         int playerZ = toLocation.getBlockZ();
 
         // Check if the player has moved to a new cube
-        checkAndUpdateCube(player, playerX, playerY, playerZ);
+        checkAndUpdateCube(player, playerData, playerX, playerY, playerZ);
     }
 
-    private void setInitialCube(Player player, int playerX, int playerY, int playerZ) {
-        int cubeSize = 16;
-
-        // Adjust player's coordinates relative to the world center
-        int adjustedX = playerX - WORLD_CENTER.getBlockX();
-        int adjustedY = playerY - WORLD_CENTER.getBlockY();
-        int adjustedZ = playerZ - WORLD_CENTER.getBlockZ();
-
-        // Calculate the base coordinates of the cube the player is in
-        int baseX = (int) Math.floor((double) adjustedX / cubeSize) * cubeSize;
-        int baseY = (int) Math.floor((double) adjustedY / cubeSize) * cubeSize;
-        int baseZ = (int) Math.floor((double) adjustedZ / cubeSize) * cubeSize;
-
-        // Calculate the center of the cube
-        int centerX = baseX + (cubeSize / 2) + WORLD_CENTER.getBlockX();
-        int centerY = baseY + (cubeSize / 2) + WORLD_CENTER.getBlockY();
-        int centerZ = baseZ + (cubeSize / 2) + WORLD_CENTER.getBlockZ();
-
-        // Set the initial cube
-        String initialCube = "Center: " + centerX + "," + centerY + "," + centerZ;
-        prevCube = initialCube;
-
-        getLogger().info("Initial cube set to: " + initialCube);
-        player.sendMessage("Welcome! You're starting at the cube: " + initialCube);
-    }
-
-    private void checkAndUpdateCube(Player player, int playerX, int playerY, int playerZ) {
+    private void checkAndUpdateCube(Player player, PlayerData playerData, int playerX, int playerY, int playerZ) {
         int cubeSize = 16;
 
         // Adjust player's coordinates relative to the world center
@@ -188,10 +181,12 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         String currentCube = "Center: " + centerX + "," + centerY + "," + centerZ;
 
         // Check if the player has moved to a new cube
-        if (!currentCube.equals(prevCube)) {
-            getLogger().info("Player has moved to a new cube: " + currentCube);
+        if (!currentCube.equals(playerData.prevCube)) {
+            getLogger().info("Player " + player.getName() + " has moved to a new cube: " + currentCube);
             player.sendMessage("You are now in a new cube: " + currentCube);
-            prevCube = currentCube; // Update the previous cube tracker            // Send ValidateMove message
+            playerData.prevCube = currentCube; // Update the previous cube tracker
+
+            // Send ValidateMove message
             if (client != null && client.isConnected()) {
                 client.sendValidateMoveMessage(player.getName(), centerX, centerY, centerZ);
             }
