@@ -7,8 +7,9 @@ import * as threeJsSetup from "./utils/threeJsSetup";
 import { CubeConstructor } from "./utils/CubeConstructor";
 import { Crosshair, Instructions, TeamAlert } from "./components/MCWorldElements";
 import  EffectMenu  from "./components/EffectMenu";
+import InfoPanel from './components/InfoPanel';
 
-const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
+const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
@@ -35,7 +36,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const [showEffectMenu, setShowEffectMenu] = useState(false);
   const [selectedEffects, setSelectedEffects] = useState([]);
 
-  const effectOptions = ['Slowness', 'Weakness', 'Blindness'];
+  const effectOptions = ['Slowness', 'Weakness', 'Nausea', 'Hunger', 'Blindness', 'Poison', 'Wither', 'Levitation'];
 
   const velocityRef = useRef(new THREE.Vector3());
   const directionRef = useRef(new THREE.Vector3());
@@ -46,10 +47,11 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const [showTeamAlert, setShowTeamAlert] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(false);
 
-  const [storedPlayerPosition, setStoredPlayerPosition] = useState(null);
-  const [storedCameraDirection, setStoredCameraDirection] = useState(null);
+
 
   const [unpaintedCubesCount, setUnpaintedCubesCount] = useState(0);
+  const [team1CubesCount, setTeam1CubesCount] = useState(0);
+  const [team2CubesCount, setTeam2CubesCount] = useState(0);
 
   const init = async () => {
     if (sceneRef.current) {
@@ -98,6 +100,7 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
               object.traverse((child) => {
                 if (child.isMesh) {
                   child.userData.isMinecraftWorld = true;
+                  child.frustumCulled = false;
                   if (child.material.map) {
                     const textureType = getTextureType(child.material.map.name);
                     console.log(`Texture type: ${textureType}`);
@@ -127,7 +130,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   };
 
   useEffect(() => {
-
     const handleLock = () => {
       setShowInstructions(false);
       setIsLocked(true); 
@@ -185,29 +187,17 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
       ) {
         containerRef.current.requestPointerLock();
         setAreCubesSelectable(true);
-        
-        // Restore the player's position and camera direction
-        if (storedPlayerPosition && storedCameraDirection) {
-          controlsRef.current.getObject().position.copy(storedPlayerPosition);
-          cameraRef.current.getWorldDirection(storedCameraDirection);
-        }
       } else {
         // Handle case when pointer is already locked
         console.log("Pointer is already locked.");
       }
     },
-    [ourInTeam, storedPlayerPosition, storedCameraDirection]
+    [ourInTeam]
   );
 
   const exitMovementMode = useCallback(() => {
     if (controlsRef.current) {
       document.exitPointerLock();
-      // Store the player's position and camera direction
-      const playerPosition = controlsRef.current.getObject().position.clone();
-      const cameraDirection = cameraRef.current.getWorldDirection(new THREE.Vector3());
-
-      setStoredPlayerPosition(playerPosition);
-      setStoredCameraDirection(cameraDirection);
     }
     
     setShouldLoadWorld(false);
@@ -256,9 +246,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           break;
         case "ShiftLeft":
           setMoveDown(true);
-          break;
-        case "KeyR":
-          resetSelectedCubes();
           break;
         default:
           break;
@@ -326,14 +313,10 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   const handleMouseClick = useCallback(
     (event) => {
       if (!isLocked && !showEffectMenu) {
-        console.log("Entering movement mode");
-        console.log("Is locked:", isLocked);
         enterMovementMode(event);
       }
       
       if (areCubesSelectable && !showEffectMenu) {
-        console.log("Are cubes selectable:", areCubesSelectable);
-        console.log("Is locked:", isLocked);
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0); // Center of the screen
 
@@ -344,29 +327,19 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           if (intersects.length > 0) {
             const clickedCube = intersects[0].object;
             const cubePosition = clickedCube.position;
-
-            const cubeSize = 16;
-            const x =
-              Math.floor(cubePosition.x / cubeSize) * cubeSize + cubeSize / 2;
-            const y =
-              Math.floor(cubePosition.y / cubeSize) * cubeSize + cubeSize / 2;
-            const z =
-              Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
-
-            console.log(`Selected cube center: (${x}, ${y}, ${z})`);
             console.log(
               `Raw cube position: (${cubePosition.x}, ${cubePosition.y}, ${cubePosition.z})`
             );
 
             if (selectedCubes.includes(clickedCube)) {
-              clickedCube.material.opacity = 0.02;
+              clickedCube.material.opacity = 0.001;
               clickedCube.material.color.setHex(0xffffff);
               setSelectedCubes(
                 selectedCubes.filter((cube) => cube !== clickedCube)
               );
             } else {
-              clickedCube.material.opacity = 0.1;
-              clickedCube.material.color.setHex(0xffffff); // White color for selected cubes
+              clickedCube.material.opacity = 0.4;
+              clickedCube.material.color.setHex(0x808080); // White color for selected cubes
               setSelectedCubes([...selectedCubes, clickedCube]);
             }
           }
@@ -505,11 +478,15 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
   }, [isLocked]);
 
   const paintCubes = useCallback(() => {
-    const { world_config } = lobby;
+    const { world_config, goal_post } = lobby;
     let unpaintedCount = 0;
+    let team1Count = 0;
+    let team2Count = 0;
 
     if (world_config) {
-      const { Team1 = {}, team1 = {} } = world_config;
+      const { team1 = {}, team2 = {} } = world_config;
+      const { spawn_point: team1SpawnPoint } = lobby.team1;
+      const { spawn_point: team2SpawnPoint } = lobby.team2;
 
       cubesRef.current.forEach((cube) => {
         const cubePosition = cube.position;
@@ -519,33 +496,57 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
         const z = Math.floor(cubePosition.z / cubeSize) * cubeSize + cubeSize / 2;
         const cubeCenter = { center: [x, y, z], side_length: cubeSize };
 
-        const team1Config = Team1.cubes?.find(([cubeConfig]) => {
-          return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
-        });
+        // Check if the cube is the goalpost
+        const isGoalpost =
+          JSON.stringify(cubeCenter) === JSON.stringify(goal_post);
 
-        const team2Config = team1.cubes?.find(([cubeConfig]) => {
-          return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
-        });
+        // Check if the cube is a team spawn point
+        const isTeam1SpawnPoint =
+          JSON.stringify(cubeCenter) === JSON.stringify(team1SpawnPoint);
+        const isTeam2SpawnPoint =
+          JSON.stringify(cubeCenter) === JSON.stringify(team2SpawnPoint);
 
-        if (team1Config && team2Config) {
-          cube.material.color.setHex(0xff0000); // Red for double effects
-          cube.material.opacity = 0.05;
-        } else if (team1Config) {
-          cube.material.color.setHex(0x0000ff); // Blue for Team 1
-          cube.material.opacity = 0.05;
-        } else if (team2Config) {
-          cube.material.color.setHex(0x00ff00); // Green for Team 2
-          cube.material.opacity = 0.05;
+        if (isGoalpost) {
+          cube.material.color.setHex(0x800080); // Purple color for the goalpost
+          cube.material.opacity = 0.5; // Adjust the opacity as desired
+        } else if (isTeam1SpawnPoint) {
+          cube.material.color.setHex(0xffa500); // Orange color for Team 1 spawn point
+          cube.material.opacity = 0.5; // Adjust the opacity as desired
+        } else if (isTeam2SpawnPoint) {
+          cube.material.color.setHex(0xffc0cb); // Pink color for Team 2 spawn point
+          cube.material.opacity = 0.5; // Adjust the opacity as desired
         } else {
-          cube.material.color.setHex(0xffffff); // White for unpainted cubes
-          cube.material.opacity = 0.02;
-          unpaintedCount++;
+          const team1Config = team1.cubes?.find(([cubeConfig]) => {
+            return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
+          });
+
+          const team2Config = team2.cubes?.find(([cubeConfig]) => {
+            return JSON.stringify(cubeConfig) === JSON.stringify(cubeCenter);
+          });
+
+          if (team1Config && team2Config) {
+            cube.material.color.setHex(0xff0000); // Red for double effects
+            cube.material.opacity = 0.2;
+          } else if (team1Config) {
+            cube.material.color.setHex(0x0000ff); // Blue for Team 1
+            cube.material.opacity = 0.2;
+            team1Count++;
+          } else if (team2Config) {
+            cube.material.color.setHex(0x00ff00); // Green for Team 2
+            cube.material.opacity = 0.2;
+            team2Count++;
+          } else {
+            cube.material.color.setHex(0xffffff); // White for unpainted cubes
+            cube.material.opacity = 0.0001;
+            unpaintedCount++;
+          }
         }
       });
     }
-
     setUnpaintedCubesCount(unpaintedCount);
-  }, [lobby.world_config]);
+    setTeam1CubesCount(team1Count);
+    setTeam2CubesCount(team2Count);
+  }, [lobby.world_config, lobby.goal_post, lobby.team1.spawn_point, lobby.team2.spawn_point]);
 
   useEffect(() => {
     console.log('lobby changed:', lobby);
@@ -575,11 +576,16 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby }) => {
           containerRef={containerRef}
           setAreCubesSelectable={setAreCubesSelectable}
           selectedCubes={selectedCubes}
+          setSelectedCubes={setSelectedCubes}
           setShowEffectMenu={setShowEffectMenu}
           lobby={lobby}
           paintCubes={paintCubes}
          />}
-      <div>Unpainted Cubes: {unpaintedCubesCount}</div>
+      <InfoPanel
+        unpaintedCubesCount={unpaintedCubesCount}
+        team1CubesCount={team1CubesCount}
+        team2CubesCount={team2CubesCount}
+      />
     </div>
   );
 };

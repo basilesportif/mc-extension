@@ -186,6 +186,7 @@ fn handle_mcclient_request(
     request: &McClientToGamelordRequest,
     message: &Message,
 ) -> anyhow::Result<()> {
+    //TODO: just respond directly to the requestor
     match request.clone() {
         McClientToGamelordRequest::Init => {
             // sends init only to requestor, confirms that they are in team (loops just look dumb)
@@ -315,6 +316,16 @@ fn handle_mcclient_request(
             state.save();
             return state.update_clients(&diff);
         }
+        McClientToGamelordRequest::ReadyPlayer(kinode_id) => {
+            let diff = GameLobbyDiff::ReadyPlayer(kinode_id.clone());
+            let _ = state.lobby.apply_diff(&diff);
+            state.save();
+            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, LazyLoadBlob {
+                mime: Some("application/json".to_string()),
+                bytes: serde_json::to_vec(&diff)?,
+            });
+            return state.update_clients(&diff);
+        }
     }
 }
 
@@ -325,6 +336,7 @@ fn handle_kinode_message(
     ws_channel_id: &mut Option<u32>,
     message: &Message,
 ) -> anyhow::Result<()> {
+    //TODO: make sure the source of the message is mcclient
     println!("handle kinode message entered");
     if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
         println!("Received request: {:?}", request);
@@ -332,6 +344,66 @@ fn handle_kinode_message(
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
+            //check whether the playing phasehas started
+            if !state.lobby.game_started {
+                println!("Action denied, playing phase has not started.");
+
+                // Determine the player's team and spawn point
+                let (team_name, spawn_point) = if let Some(active_player) = state.active_players.get(&minecraft_id) {
+                    let team_name = active_player.team.clone();
+                    let spawn_point = match team_name {
+                        TeamName::Team1 => state.lobby.team1.spawn_point.clone(),
+                        TeamName::Team2 => state.lobby.team2.spawn_point.clone(),
+                    };
+                    (team_name, spawn_point)
+                } else {
+                    return Err(anyhow::anyhow!("Player not found in active players"));
+                };
+
+                // Send the response to the player
+                let response = serde_json::to_vec(
+                    &GamelordResponseMinecraft::TransitionDeniedResponse(
+                        "Action denied, playing phase has not started.".to_string(),
+                        spawn_point,
+                    ),
+                ).expect("failed to parse gamelord transition denied response");
+                Response::new().body(response).send().unwrap();
+                return Ok(());
+            }
+            // check if the game is over
+            if cube == state.lobby.goal_post {
+                println!("Goal post reached, game over!");
+
+                // Determine the winning team
+                let winning_team = if let Some(active_player) = state.active_players.get(&minecraft_id) {
+                    active_player.team.clone()
+                } else {
+                    return Err(anyhow::anyhow!("Player not found in active players"));
+                };
+
+                // Clear the world config
+                state.lobby.world_config.clear();
+
+                state.lobby.game_started = false;
+                state.cube_to_owner.clear();
+
+                // Send the GameOver diff to clients, including the cleared world_config
+                let diff = GameLobbyDiff::GameOver {
+                    game_started: false,
+                    world_config: state.lobby.world_config.clone(),
+                };
+                let _ = state.update_clients(&diff);
+                // Save the updated state
+                state.save();
+                // Send the response to the player
+                let response = serde_json::to_vec(
+                    &GamelordResponseMinecraft::GameOver(
+                        winning_team,
+                    ),
+                ).expect("failed to parse gamelord cube transition response");
+                Response::new().body(response).send().unwrap();
+                return Ok(());
+            }
             // we get information about what team the player is in based on Active players
             if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
                 println!(
@@ -358,6 +430,7 @@ fn handle_kinode_message(
                                     // Send cube effects to mcdriver
                                     let response = serde_json::to_vec(
                                         &GamelordResponseMinecraft::TransitionTriggeredResponse(
+                                            minecraft_id.clone(),
                                             cube_effects.clone(),
                                         ),
                                     )
@@ -372,8 +445,11 @@ fn handle_kinode_message(
                 // If we reach here, either the cube is not owned, or it's owned by the player's team
                 println!("Cube not in enemy region, you are clear");
                 let response =
-                    serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse)
-                        .expect("failed to parse gamelord cube transition response");
+                        serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse(
+                            minecraft_id.clone(),
+                            "No effects applied".to_string(),
+                        ))
+                            .expect("failed to parse gamelord cube transition response");
                 Response::new().body(response).send().unwrap();
                 Ok(())
             } else {
@@ -532,6 +608,18 @@ fn handle_http_request(
                         let response = serde_json::to_string(&state.active_players).unwrap();
                         http::send_response(http::StatusCode::OK, None, response.into_bytes());
                     }
+                    "/api/lockGame" => {
+                        state.lobby.game_started = true;
+                        state.save();
+                        let diff = GameLobbyDiff::GameStarted(true);
+                        let _ = state.update_clients(&diff);
+                        let blob = LazyLoadBlob {
+                            mime: Some("application/json".to_string()),
+                            bytes: serde_json::to_vec(&diff)?,
+                        };
+                        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
+                        http::send_response(http::StatusCode::OK, None, b"Game locked".to_vec());
+                    }
                     "/api/loadWorld" => load_world(state),
                     "/api/deleteWorld" => {
                         state.lobby.world_config.clear();
@@ -546,7 +634,8 @@ fn handle_http_request(
                         let _ = state.update_clients(&GameLobbyDiff::Init(
                             state.lobby.clone().clear_teams(),
                         ));
-                        state.clear_teams(); // different from lobby.clear_teams
+                        state.lobby.clear_teams();
+                        state.lobby.ready_players.clear(); 
                         state.save();
                         let blob = LazyLoadBlob {
                             mime: Some("application/json".to_string()),
@@ -722,6 +811,7 @@ fn init(our: Address) {
         "/api/deleteWorld",
         "/api/editLobby",
         "/api/clearTeams",
+        "/api/lockGame",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }

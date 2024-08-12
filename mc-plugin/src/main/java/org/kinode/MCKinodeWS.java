@@ -9,6 +9,7 @@ import org.bukkit.Location; // Import the Location class
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
+import org.bukkit.entity.EntityType;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -18,10 +19,24 @@ import org.java_websocket.drafts.Draft;
 import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.handshake.ServerHandshake;
 
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.Particle;
+
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+
+import java.util.HashMap;
+import java.util.Map;
+
 public class MCKinodeWS extends WebSocketClient {
 
     private boolean isConnected = false;
-    public WebSocketResponseHandler onMessageResponse;
+    // Remove the onMessageResponse field
+    // public WebSocketResponseHandler onMessageResponse;
+
+    // Add a map to store player-specific response handlers
+    private Map<String, WebSocketResponseHandler> playerResponseHandlers = new HashMap<>();
 
     public MCKinodeWS(URI serverUri, Draft draft) {
         super(serverUri, draft);
@@ -34,6 +49,9 @@ public class MCKinodeWS extends WebSocketClient {
     public boolean isConnected() {
         return isConnected;
     }
+
+
+
 
     @Override
     public void onOpen(ServerHandshake handshakedata) {
@@ -51,8 +69,10 @@ public class MCKinodeWS extends WebSocketClient {
     @Override
     public void onMessage(String message) {
         System.out.println("received message: " + message);
-        if (onMessageResponse != null) {
-            onMessageResponse.handleResponse(message);
+        // Assuming the response is related to the last sent request
+        for (Map.Entry<String, WebSocketResponseHandler> entry : playerResponseHandlers.entrySet()) {
+            entry.getValue().handleResponse(message);
+            break; // Handle only the first matching entry
         }
     }
 
@@ -79,35 +99,58 @@ public class MCKinodeWS extends WebSocketClient {
                 + "}";
         send(message);
 
-        // Handle the response
-        onMessageResponse = (response) -> {
+        // Create a player-specific response handler
+        WebSocketResponseHandler responseHandler = (response) -> {
             JSONObject jsonResponse = new JSONObject(response);
             JSONArray responseArray;
             boolean success;
             String messageResponse;
+            JSONObject centerObject = null; // Initialize centerObject with null
 
             if (jsonResponse.has("PlayerSpawnRequestAuthorized")) {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestAuthorized");
                 success = responseArray.getBoolean(0);
                 messageResponse = responseArray.getString(1);
-                //remember that the third element should be the cube that the player spawns in
+                centerObject = responseArray.getJSONObject(2); // Get the JSONObject at index 2
+
+                if (success) {
+                    JSONArray centerArray = centerObject.getJSONArray("center");
+                    int x = centerArray.getInt(0);
+                    int y = centerArray.getInt(1);
+                    int z = centerArray.getInt(2);
+                    MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
+                    MCKinodePlugin.getInstance().getLogger().info("Spawn point: (" + x + ", " + y + ", " + z + ")");
+
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        event.getPlayer().teleport(new Location(event.getPlayer().getWorld(), x, y, z));
+                    });
+                } else {
+                    MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        event.getPlayer().kickPlayer("You are not allowed to join the server.");
+                    });
+                }
             } else if (jsonResponse.has("PlayerSpawnRequestDenied")) {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestDenied");
                 success = responseArray.getBoolean(0);
-                // remember that the th
                 messageResponse = responseArray.getString(1);
             } else {
                 System.err.println("Unexpected response format: " + response);
                 return;
             }
 
-            if (success) {
-                JSONObject cubeData = responseArray.getJSONObject(2);
-                JSONArray center = cubeData.getJSONArray("center");
-                int x = center.getInt(0);
-                int y = center.getInt(1);
-                int z = center.getInt(2);
+            // Check if centerObject is not null before using it
+            if (success && centerObject != null) {
+                JSONArray centerArray = centerObject.getJSONArray("center");
+                int x = centerArray.getInt(0);
+                int y = centerArray.getInt(1);
+                int z = centerArray.getInt(2);
                 MCKinodePlugin.getInstance().getLogger().info("Player join allowed: " + messageResponse);
+                MCKinodePlugin.getInstance().getLogger().info("Spawn point: (" + x + ", " + y + ", " + z + ")");
+
+                Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                    event.getPlayer().teleport(new Location(event.getPlayer().getWorld(), x, y, z));
+                });
             } else {
                 MCKinodePlugin.getInstance().getLogger().info("Player join denied: " + messageResponse);
                 Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
@@ -115,8 +158,11 @@ public class MCKinodeWS extends WebSocketClient {
                 });
             }
         };
-    }
 
+        // Store the response handler in the map
+        playerResponseHandlers.put(playerName, responseHandler);
+    }
+    //change this to SendCubeTransitionRequest
     public void sendValidateMoveMessage(String playerName, int x, int y, int z) {
         String message = "{"
                 + "\"type\": \"WebSocketPush\","
@@ -127,7 +173,7 @@ public class MCKinodeWS extends WebSocketClient {
                 + "\"minecraft_id\": \"" + playerName + "\","
                 + "\"cube\": {"
                 + "\"center\": [" + x + ", " + y + ", " + z + "],"
-                + "\"side_length\": 50"
+                + "\"side_length\": 16"
                 + "}"
                 + "}"
                 + "}"
@@ -135,36 +181,65 @@ public class MCKinodeWS extends WebSocketClient {
         send(message);
         System.out.println("Sent ValidateMove message: " + message);
 
-        onMessageResponse = (response) -> {
-            // Remove " from the response and convert it to a string
-            String cleanedResponse = response.trim().replace("\"", "");
-            System.err.println("cleaned responses: " + cleanedResponse);
-            if ("TransitionSilentResponse".equals(cleanedResponse)) {
-                MCKinodePlugin.getInstance().getLogger().info("Entering non-enemy territory");
-                Player player = Bukkit.getPlayer(playerName);
-                if (player != null) {
-                    player.sendMessage("You are entering non-enemy territory");
-                }
-            } else {
-                try {
-                    JSONObject jsonResponse = new JSONObject(response);
-                    if (jsonResponse.has("TransitionTriggeredResponse")) {
-                        JSONObject transitionTriggeredResponse = jsonResponse.getJSONObject("TransitionTriggeredResponse");
-                        JSONArray effectsArray = transitionTriggeredResponse.getJSONArray("effects");
-                        MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
-                        Player player = Bukkit.getPlayer(playerName);
+        // Create a player-specific response handler
+        WebSocketResponseHandler responseHandler = (response) -> {
+            try {
+                JSONObject jsonResponse = new JSONObject(response);
+                if (jsonResponse.has("TransitionTriggeredResponse")) {
+                    JSONArray transitionTriggeredResponse = jsonResponse.getJSONArray("TransitionTriggeredResponse");
+                    String minecraftId = transitionTriggeredResponse.getString(0);
+                    // The second element is now a JSONObject instead of a JSONArray
+                    JSONObject effectsObject = transitionTriggeredResponse.getJSONObject(1);
+                    JSONArray effectsArray = effectsObject.getJSONArray("effects");
+                    MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        Player player = Bukkit.getPlayer(minecraftId);
                         if (player != null) {
                             player.sendMessage("Entering new territory with effects: " + effectsArray.toString());
+
+                            for (int i = 0; i < effectsArray.length(); i++) {
+                                String effectName = effectsArray.getString(i);
+                                PotionEffectType effectType = PotionEffectType.getByName(effectName);
+                                if (effectType != null) {
+                                    PotionEffect effect = new PotionEffect(effectType, 200, 1);
+                                    player.addPotionEffect(effect);
+
+                                    player.getWorld().spawnParticle(Particle.SPELL_WITCH, player.getLocation().add(0, 1, 0), 50, 0.5, 0.5, 0.5, 0.1);
+                                } else {
+                                    MCKinodePlugin.getInstance().getLogger().warning("Unknown effect: " + effectName);
+                                }
+                            }
                         }
-                    } else {
-                        System.err.println("Unexpected JSON response format: " + response);
-                    }
-                } catch (JSONException e) {
-                    System.err.println("Unexpected response format: " + response);
+                    });
+                } else if (jsonResponse.has("TransitionSilentResponse")) {
+                    JSONArray transitionSilentResponse = jsonResponse.getJSONArray("TransitionSilentResponse");
+                    String minecraftId = transitionSilentResponse.getString(0);
+                    String message_response = transitionSilentResponse.getString(1);
+                    MCKinodePlugin.getInstance().getLogger().info("TransitionSilentResponse: " + message_response);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        Player player = Bukkit.getPlayer(minecraftId);
+                        if (player != null) {
+                            player.sendMessage(message_response);
+                        }
+                    });
+                } else if (jsonResponse.has("GameOver")) {
+                    String winningTeam = jsonResponse.getString("GameOver");
+                    MCKinodePlugin.getInstance().getLogger().info("Game Over! Winning team: " + winningTeam);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        for (Player player : Bukkit.getOnlinePlayers()) {
+                            player.sendTitle("§c§lGame Over!", "§eWinning Team: §f" + winningTeam, 10, 70, 20);
+                        }
+                    });
+                } else {
+                    System.err.println("Unexpected JSON response format: " + response);
                 }
+            } catch (JSONException e) {
+                System.err.println("Failed to parse JSON response: " + response);
             }
         };
-        
+
+        // Store the response handler in the map
+        playerResponseHandlers.put(playerName, responseHandler);
     }
 
     // Define the WebSocketResponseHandler interface here

@@ -1,5 +1,3 @@
-import { useRef, useEffect } from 'react';
-
 const EffectMenu = ({
   showEffectMenu,
   effectOptions,
@@ -11,6 +9,7 @@ const EffectMenu = ({
   containerRef,
   setAreCubesSelectable,
   selectedCubes,
+  setSelectedCubes,
   setShowEffectMenu,
   lobby,
   paintCubes,
@@ -60,6 +59,7 @@ const EffectMenu = ({
       ws.send(JSON.stringify({ WorldConfigRegion: logData }));
 
     }
+    //setSelectedCubes([]);
 
     setShowEffectMenu(false);
     setSelectedEffects([]);

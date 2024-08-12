@@ -105,6 +105,28 @@ export function applyDiff(data, setLobby) {
         },
       }));
       break;
+    case "GameStarted":
+      console.log("GameStarted", data.GameStarted);
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        game_started: data.GameStarted,
+      }));
+      break;
+    case "ReadyPlayer":
+      console.log("ReadyPlayer", data.ReadyPlayer);
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        ready_players: [...prevLobby.ready_players, data.ReadyPlayer],
+      }));
+      break;
+    case "GameOver":
+      console.log("GameOver", data.GameOver);
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        game_started: data.GameOver.game_started,
+        world_config: data.GameOver.world_config,
+      }));
+      break;
     default:
       console.log("Unknown websocket message:", data);
       break;

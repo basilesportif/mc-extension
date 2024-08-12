@@ -13,8 +13,8 @@ const setupCamera = (cameraRef, containerRef) => {
   if (containerRef.current) {
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.set(0, 50, 200);
+    const camera = new THREE.PerspectiveCamera(60, width / height, 1, 150);
+    camera.position.set(0, 200, 0);
     cameraRef.current = camera;
     console.log("Camera set up.");
   }
@@ -66,21 +66,10 @@ const setupSky = (sceneRef, skyRef, rendererRef) => {
 };
 
 const setupLighting = (sceneRef) => {
-  // Ambient light
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.8); // Increase ambient light intensity
+  // Create a bright ambient light
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // White color, full intensity
 
-  // Directional light (sun-like)
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increase directional light intensity
-  directionalLight.position.set(200, 200, 100); // Adjust position for better lighting
-  directionalLight.castShadow = true;
-
-  // Shadow map configuration
-  directionalLight.shadow.mapSize.width = 2048; // Increase shadow map resolution
-  directionalLight.shadow.mapSize.height = 2048;
-  directionalLight.shadow.camera.near = 1; // Adjust near and far planes
-  directionalLight.shadow.camera.far = 500;
-
-  sceneRef.current.add(ambientLight, directionalLight);
+  sceneRef.current.add(ambientLight);
 
   console.log("Lighting set up.");
 };

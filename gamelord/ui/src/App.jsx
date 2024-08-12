@@ -21,6 +21,8 @@ function App() {
       players: [],
       spawn_point: {center: [0,0,0], side_length: 16},
     },
+    game_started: false,
+    ready_players: [],
   });
   const [activeTab, setActiveTab] = useState("tab1");
   const [wsReady, setWsReady] = useState(false);
@@ -35,6 +37,15 @@ function App() {
   useEffect(() => {
     console.log("LOBBY:", lobby);
   }, [lobby]);
+
+  // New effect to listen for changes in ready_players
+  useEffect(() => {
+    if (lobby.ready_players.length > 0) {
+      console.log("New ready players:", lobby.ready_players);
+      // You can add additional logic here to display the ready players
+      // or perform any other necessary actions
+    }
+  }, [lobby.ready_players]);
 
   useEffect(() => {
     // Remove 'active' class from all tabs
@@ -258,6 +269,44 @@ function App() {
     };
   };
 
+  const lockGame = () => {
+    const url = "/gamelord:gamelord:basilesex.os/api/lockGame";
+
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+      .then((response) => {
+        if (response.ok) {
+          return response.text();
+        } else {
+          throw new Error("Failed to lock game");
+        }
+      })
+      .then((result) => {
+        document.getElementById("response-output-tab2").innerText = result;
+      })
+      .catch((error) => {
+        console.error("Error locking game:", error);
+        document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
+      });
+  };
+
+  const ReadyPlayersList = ({ lobby }) => {
+    return (
+      <div>
+        <h3>Ready Players</h3>
+        <ul>
+          {lobby.ready_players.map((player, index) => (
+            <li key={index}>{player}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   return (
     <div>
       <h1>Gamelord</h1>
@@ -363,8 +412,10 @@ function App() {
               Clear Teams
             </button>
           </div>
-        </div>
-        <div className="container">
+          <div className="option">
+            <h2>Ready Players</h2>
+            <ReadyPlayersList lobby={lobby} />
+          </div>
           <div className="option">
             <h2>Configure Points</h2>
             <form id="configPointsForm">
@@ -433,6 +484,13 @@ function App() {
                 Submit Changes
               </button>
             </form>
+          </div>
+          <div className="option">
+            <h2>Begin Playing Phase</h2>
+            <p>Begin the playing phase of the game.</p>
+            <button type="button" onClick={() => lockGame()}>
+              Begin Playing Phase
+            </button>
           </div>
         </div>
         <pre id="response-output-tab2"></pre>

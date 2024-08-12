@@ -3,6 +3,7 @@ use kinode_process_lib::{
     await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
     Request,
 };
+use kinode_process_lib::NodeId;
 use mcstructs::{
     Cube, CubeEffectList, GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Region,
     WsPush,
@@ -148,6 +149,30 @@ fn handle_http_request(
             );
             Ok(())
         }
+        "/ready_player" => {
+            let ui_request: NodeId = serde_json::from_slice(&bytes)?;
+            let gamelord = state.gamelord_address.clone().ok_or_else(|| anyhow::anyhow!("No gamelord address"))?;
+            let gamelord = Address::new(
+                gamelord.node(),    
+                ("gamelord", "gamelord", "basilesex.os"),
+            );
+            let _ = Request::to(gamelord.clone())
+                .body(serde_json::to_vec(&McClientToGamelordRequest::ReadyPlayer(ui_request.clone()))?)
+                .send();
+            
+            // Save the state
+            state.save();
+
+            http::send_response(
+                http::StatusCode::OK,
+                Some(HashMap::from([(
+                    "Content-Type".to_string(),
+                    "application/json".to_string(),
+                )])),
+                b"{\"message\": \"success\"}".to_vec(),
+            );
+            Ok(())
+        }
         _ => {
             println!("mcclient: unknown http request: {:?}", path);
             Ok(())
@@ -162,7 +187,7 @@ fn handle_gamelord_update(
 ) -> anyhow::Result<()> {
     println!("received update");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
-    // println!("deserialized update: {:#?}", deserialized);
+    println!("deserialized update: {:#?}", deserialized);
     state.lobby = match state.lobby.apply_diff(&deserialized) {
         Ok(lobby) => lobby,
         Err(e) => {
@@ -170,7 +195,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
-    // println!("state: {:#?}", state.lobby.world_config);
+    println!("state: {:#?}", state.lobby.world_config);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),
@@ -207,7 +232,7 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-    for path in ["/join_team"] {
+    for path in ["/join_team", "/ready_player"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();

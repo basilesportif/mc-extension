@@ -1,34 +1,50 @@
-body {
-  margin: 0;
-  padding: 0;
-  font-family: "Arial", sans-serif;
-  background: url("https://i.imgur.com/ruVHPCX.jpeg")
-    no-repeat center center fixed;
-  background-size: cover;
-  color: #ffffff;
-  text-align: center;
-}
-h1 {
-  font-size: 4em;
-  margin-top: 10vh;
-  letter-spacing: 0.1em;
-  color: #ffffff;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-}
 .container {
   display: flex;
-  justify-content: space-around;
-  margin-top: 5vh;
+  width: 100vw; /* Set the width to 100vw to take up the full viewport width */
+  height: 100vh; /* Set the height to 100vh to take up the full viewport height */
+  margin: 0; /* Remove any default margin */
+  padding: 0; /* Remove any default padding */
+  position: fixed; /* Fix the position to cover the entire viewport */
+  top: 0;
+  left: 0;
+  overflow: hidden; /* Prevent scrolling */
 }
+
+.left-panel {
+  width: 30%;
+  padding: 20px;
+  border-right: 1px solid #a1a1a1;
+  overflow-y: auto;
+  background-image: url('https://i.imgur.com/NVi3pqo.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.right-panel {
+  width: 70%;
+  position: relative;
+  background-color: #4c4b4b; /* Ensure the right panel has a background color */
+}
+
 .option {
   padding: 20px;
   border-radius: 5px;
   background-color: rgba(0, 0, 0, 0.5);
   width: 40%;
+  height: 100%; /* Ensure the option takes up the full height of the container */
+  display: flex;
+  flex-direction: column;
 }
+
 .form-group {
   margin: 20px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
+
 input[type="text"],
 input[type="file"] {
   padding: 10px;
@@ -41,19 +57,23 @@ input[type="file"] {
   color: #333;
   background-color: #ffffff;
 }
+
 button {
   padding: 10px 20px;
   font-size: 1em;
-  background-color: rgba(255, 69, 0, 0.8);
+  background-color: rgb(73, 216, 29);
   color: #fff;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   margin: 5px;
+  align-self: center;
 }
+
 button:hover {
-  background-color: rgba(224, 62, 0, 0.8);
+  background-color: rgba(73, 216, 29, 0.444);
 }
+
 .disclaimer {
   margin-top: 20px;
   font-size: 0.9em;

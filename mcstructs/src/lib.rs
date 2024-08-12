@@ -54,6 +54,7 @@ pub enum McClientToGamelordRequest {
     SendMessage(String),// sends message to chat to which they belong
     WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
     WorldConfigRegion(TeamName, Region),
+    ReadyPlayer(NodeId),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -76,6 +77,8 @@ pub struct GameLobby {
     pub goal_post: Cube,
     pub team1: Team,
     pub team2: Team,
+    pub game_started: bool,
+    pub ready_players: HashSet<NodeId>,
 }
 impl GameLobby {
     pub fn new() -> GameLobby {
@@ -98,6 +101,8 @@ impl GameLobby {
             },
             world_config: HashMap::new(),
             goal_post: Cube::new(),
+            game_started: false,
+            ready_players: HashSet::new(),
         }
     }
     pub fn player_in_team(&self, player: &Player) -> Option<TeamName> {
@@ -222,6 +227,19 @@ impl GameLobby {
                 self.team2.spawn_point = team2_spawn.clone();
                 self.goal_post = goal_post.clone();
                 Ok(self.clone())
+            }   
+            GameLobbyDiff::GameStarted(game_started) => {
+                self.game_started = *game_started;
+                Ok(self.clone())
+            }
+            GameLobbyDiff::ReadyPlayer(kinode_id) => {
+                self.ready_players.insert(kinode_id.clone());
+                Ok(self.clone())
+            }
+            GameLobbyDiff::GameOver { game_started, world_config } => {
+                self.game_started = game_started.clone();
+                self.world_config = world_config.clone();
+                Ok(self.clone())
             }
         }
     }
@@ -236,6 +254,12 @@ pub enum GameLobbyDiff {
     WorldConfigFull(TeamNameToRegion),
     WorldConfigRegion(TeamName, Region),
     ConfigurePoints { team1_spawn: Cube, team2_spawn: Cube, goal_post: Cube },
+    GameStarted(bool),
+    ReadyPlayer(NodeId),
+    GameOver {
+        game_started: bool,
+        world_config: TeamNameToRegion,
+    },
     // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),
 }
@@ -274,7 +298,14 @@ pub struct Cube {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Effect{
-    Slowness
+    Slowness,
+    Weakness,
+    Nausea,
+    Hunger,
+    Blindness,
+    Poison,
+    Wither,
+    Levitation,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CubeEffectList{
