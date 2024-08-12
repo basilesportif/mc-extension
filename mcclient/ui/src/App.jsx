@@ -10,7 +10,7 @@ import {
 } from "@chatscope/chat-ui-kit-react";
 import Msg from "./components/Msg";
 
-function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}) {
+function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby, isReady, setIsReady}) {
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
@@ -74,6 +74,35 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
     }
   };
 
+  async function readyPlayer() {
+    console.log("ready player");
+    const url = `/mcclient:mcclient:basilesex.os/ready_player`;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(ourNode),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.text();
+      document.getElementById(
+        "response-output"
+      ).innerText = `Ready player request made.`;
+      setIsReady(true); // Set isReady to true
+    } catch (error) {
+      console.error("Error readying player:", error);
+      document.getElementById(
+        "response-output"
+      ).innerText = `Error: ${error.message}`;
+    }
+  }
 
   const onSend = (message) => {
     console.log("sending:", message);
@@ -142,6 +171,11 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby}
         </div>
       </div>
       <pre id="response-output"></pre>
+      {ourInTeam !== null && (
+        <button type="button" onClick={readyPlayer}>
+          Ready Player
+        </button>
+      )}
       <div
         style={{
           position: "relative",

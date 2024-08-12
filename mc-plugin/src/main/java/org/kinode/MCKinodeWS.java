@@ -222,6 +222,14 @@ public class MCKinodeWS extends WebSocketClient {
                             player.sendMessage(message_response);
                         }
                     });
+                } else if (jsonResponse.has("GameOver")) {
+                    String winningTeam = jsonResponse.getString("GameOver");
+                    MCKinodePlugin.getInstance().getLogger().info("Game Over! Winning team: " + winningTeam);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        for (Player player : Bukkit.getOnlinePlayers()) {
+                            player.sendTitle("§c§lGame Over!", "§eWinning Team: §f" + winningTeam, 10, 70, 20);
+                        }
+                    });
                 } else {
                     System.err.println("Unexpected JSON response format: " + response);
                 }

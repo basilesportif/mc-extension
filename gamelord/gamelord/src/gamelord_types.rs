@@ -151,8 +151,10 @@ impl GamelordRequestMinecraft {
 pub enum GamelordResponseMinecraft {
     TransitionTriggeredResponse(String, CubeEffectList),
     TransitionSilentResponse(String, String),
+    TransitionDeniedResponse(String, Cube), //cube is spawnpoint
     PlayerSpawnRequestAuthorized(bool, String, Cube),
     PlayerSpawnRequestDenied(bool, String),
+    GameOver(TeamName),
 }
 /*
     data:
