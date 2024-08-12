@@ -119,6 +119,14 @@ export function applyDiff(data, setLobby) {
         ready_players: [...prevLobby.ready_players, data.ReadyPlayer],
       }));
       break;
+    case "GameOver":
+      console.log("GameOver", data.GameOver);
+      setLobby((prevLobby) => ({
+        ...prevLobby,
+        game_started: data.GameOver.game_started,
+        world_config: data.GameOver.world_config,
+      }));
+      break;
     default:
       console.log("Unknown websocket message:", data);
       break;

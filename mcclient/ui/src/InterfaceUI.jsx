@@ -86,46 +86,7 @@ const InterfaceUI = () => {
       }
     };
   };
-
-  return (
-    <div className="container">
-      {showOverlay ? (
-        <OverlayComponent />
-      ) : (
-        <>
-          <div className="left-panel">
-            <App
-              ws={ws}
-              ourNode={ourNode}
-              setOurNode={setOurNode}
-              ourInTeam={ourInTeam}
-              setOurInTeam={setOurInTeam}
-              lobby={lobby}
-              setLobby={setLobby}
-              isReady={isReady} // Pass isReady as a prop
-              setIsReady={setIsReady} // Pass setIsReady as a prop
-              nodeInTeam={nodeInTeam}
-            />
-          </div>
-          <div className="right-panel">
-            <ThreeJsScene
-              ws={ws}
-              ourInTeam={ourInTeam}
-              lobby={lobby}
-            />
-            {isReady && (
-              <div className="overlay">
-                <p>Waiting for other players...</p>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
-// Create a new component for the overlay
+  // Create a new component for the overlay
 const OverlayComponent = () => {
   return (
     <div className="overlay">
@@ -134,4 +95,63 @@ const OverlayComponent = () => {
   );
 };
 
+return (
+  <div>
+    {ourInTeam === null ? (
+      <Login
+        ourInTeam={ourInTeam}
+        setOurInTeam={setOurInTeam}
+        ourNode={ourNode}
+        setOurNode={setOurNode}
+      />
+    ) : (
+      <div style={{ display: "flex", height: "100vh" }}>
+        <div  
+          style={{
+            width: "30%",
+            padding: "20px",
+            borderRight: "1px solid #ccc",
+            overflowY: "auto",
+          }}
+        >
+          <div className="container">
+            {showOverlay ? (
+              <OverlayComponent />
+            ) : (
+              <>
+                <div className="left-panel">
+                  <App
+                    ws={ws}
+                    ourNode={ourNode}
+                    setOurNode={setOurNode}
+                    ourInTeam={ourInTeam}
+                    setOurInTeam={setOurInTeam}
+                    lobby={lobby}
+                    setLobby={setLobby}
+                    isReady={isReady} // Pass isReady as a prop
+                    setIsReady={setIsReady} // Pass setIsReady as a prop
+                    nodeInTeam={nodeInTeam}
+                  />
+                </div>
+                <div className="right-panel">
+                  <ThreeJsScene
+                    ws={ws}
+                    ourInTeam={ourInTeam}
+                    lobby={lobby}
+                  />
+                  {isReady && (
+                    <div className="overlay">
+                      <p>Waiting for other players...</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+}
 export default InterfaceUI;

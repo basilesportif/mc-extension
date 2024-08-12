@@ -1,4 +1,3 @@
-use crate::utilities::get_env_str;
 use alloy::{
     consensus::{SignableTransaction, TxEip1559, TxEnvelope},
     network::eip2718::Encodable2718,

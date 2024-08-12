@@ -10,7 +10,7 @@ import {
 } from "@chatscope/chat-ui-kit-react";
 import Msg from "./components/Msg";
 
-function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby, isReady, setIsReady, nodeInTeam}) {
+function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby, isReady, setIsReady}) {
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("playerForm");
@@ -27,42 +27,6 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby,
     console.log("ourNode", ourNode);
     console.log("ourInTeam", ourInTeam);
   }, [ourNode, ourInTeam]);
-
-  async function joinTeam(team_name) {
-    console.log("join team");
-    const minecraft_id = document.getElementById("minecraftId").value;
-    const gamelord_id = document.getElementById("gamelordId").value;
-
-    const url = `/mcclient:mcclient:basilesex.os/join_team`;
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          gamelord_id: gamelord_id,
-          minecraft_id: minecraft_id,
-          team_name: team_name,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.text();
-      document.getElementById(
-        "response-output"
-      ).innerText = `${minecraft_id} join request made.`;
-    } catch (error) {
-      console.error("Error adding player:", error);
-      document.getElementById(
-        "response-output"
-      ).innerText = `Error: ${error.message}`;
-    }
-  }
 
   const nodeInTeam = (node, lobby) => {
     if (lobby.team1.players.some((p) => p.kinode_id === node)) {

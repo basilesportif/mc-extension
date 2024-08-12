@@ -17,11 +17,11 @@ mod eth_utils;
 use eth_utils::Caller;
 mod gamelord_caller;
 use gamelord_caller::GamelordCaller;
-mod utilities;
+
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
 use alloy_signer::{LocalWallet, Signer};
-use utilities::get_env_str;
+
 mod gamelord_types;
 use gamelord_types::{
     Action, ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,

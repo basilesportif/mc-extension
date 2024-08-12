@@ -235,7 +235,7 @@ fn init(our: Address) {
     for path in ["/join_team", "/ready_player"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
-    //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
+    http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();
 
     let mut state: State = State::fetch().unwrap_or_else(|| State::new(&our));
 
