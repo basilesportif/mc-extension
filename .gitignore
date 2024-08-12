@@ -18,4 +18,6 @@ mc-driver/pkg/*.wasm
 /mcclient/pkg/ui/minecraft.mtl
 /mcclient/pkg/ui/minecraft.obj
 /mcclient/pkg/ui/assets
-
+/sol-contracts/broadcast
+/sol-contracts/cache
+/sol-contracts/out
