@@ -5,7 +5,7 @@ import "forge-std/console.sol";
 error Gamelord__NotOwner();
 
 contract Gamelord {
-    uint256 public constant MINIMUM_ETH = 0.0001 ether;
+    uint256 public constant REQUIRED_ETH = 0.00003 ether; // cca 8 cents
     enum Team {
         Team1,
         Team2
@@ -18,7 +18,7 @@ contract Gamelord {
     address[] private s_players;
 
     function wager(Team team) public payable {
-        require(msg.value >= MINIMUM_ETH, "You need to spend more ETH!");
+        require(msg.value == REQUIRED_ETH, "You need to spend more ETH!");
         s_addressToPlayerInfo[msg.sender].amountWagered += msg.value;
         s_addressToPlayerInfo[msg.sender].team = team;
         s_players.push(msg.sender);

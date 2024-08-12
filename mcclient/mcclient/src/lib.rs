@@ -84,7 +84,7 @@ fn handle_http_request(
             let ws_push = serde_json::from_slice::<WsPush>(&blob.bytes)?;
             match ws_push {
                 WsPush::SendMessage(message) => {
-                    println!("mcclient: received message: {}", message);
+                    // println!("mcclient: received message: {}", message);
                     if let Some(gamelord) = &state.gamelord_address {
                         let msg_request: Vec<u8> = serde_json::to_vec(
                             &McClientToGamelordRequest::SendMessage(message.clone()),
@@ -110,7 +110,6 @@ fn handle_http_request(
         _ => {}
     }
 
-    println!("http request: {:#?}", http_request);
     let http_request = http_request
         .request()
         .ok_or_else(|| anyhow::anyhow!("Failed to parse http request"))?;
@@ -121,6 +120,8 @@ fn handle_http_request(
 
     match path.as_str() {
         "/join_team" => {
+            println!("http request: join_team");
+
             let ui_request: JoinTeam = serde_json::from_slice(&bytes)?;
             // println!("mcclient: {:#?}", ui_request);
 
@@ -128,7 +129,6 @@ fn handle_http_request(
                 ui_request.gamelord_id.clone(),
                 ("gamelord", "gamelord", "basilesex.os"),
             );
-            println!("gamelord: {}", gamelord);
             let join_request =
                 serde_json::to_vec(&McClientToGamelordRequest::JoinTeam(ui_request.clone()))?;
             let _ = Request::to(gamelord.clone()).body(join_request).send();
@@ -150,6 +150,8 @@ fn handle_http_request(
             Ok(())
         }
         "/ready_player" => {
+            println!("http request: ready_player");
+
             let ui_request: NodeId = serde_json::from_slice(&bytes)?;
             let gamelord = state.gamelord_address.clone().ok_or_else(|| anyhow::anyhow!("No gamelord address"))?;
             let gamelord = Address::new(
@@ -185,7 +187,7 @@ fn handle_gamelord_update(
     ws_channel_id: &mut Option<u32>,
     body: &[u8],
 ) -> anyhow::Result<()> {
-    println!("received update");
+    println!("received update from gamelord");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
     println!("deserialized update: {:#?}", deserialized);
     state.lobby = match state.lobby.apply_diff(&deserialized) {
@@ -195,7 +197,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
-    println!("state: {:#?}", state.lobby.world_config);
+    // println!("state: {:#?}", state.lobby.world_config);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),

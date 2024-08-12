@@ -69,8 +69,17 @@ const InterfaceUI = () => {
   };
 
   const webSocket = () => {
-    const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-    const host = window.location.host;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    // jurij's dev setup
+    // 5173 - 8080
+    // 5174 - 8080
+    // 5175 - 8081
+    const host =
+      window.location.port === "5173" || window.location.port === "5174"
+        ? "localhost:8080"
+        : window.location.port === "5175"
+        ? "localhost:8081"
+        : window.location.host;
 
     ws = new WebSocket(`${protocol}//${host}/mcclient:mcclient:basilesex.os/`);
 

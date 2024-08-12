@@ -73,7 +73,7 @@ lazy_static! {
     };
 
     pub static ref MIN_ETH_WAGER: U256 = {
-        "100000000000000".parse().unwrap() // 0.0001 eth
+        "30000000000000".parse().unwrap() // 0.00003 eth
     };
 }
 
@@ -634,7 +634,7 @@ fn handle_http_request(
                         let _ = state.update_clients(&GameLobbyDiff::Init(
                             state.lobby.clone().clear_teams(),
                         ));
-                        state.lobby.clear_teams();
+                        state.clear_teams();
                         state.lobby.ready_players.clear(); 
                         state.save();
                         let blob = LazyLoadBlob {

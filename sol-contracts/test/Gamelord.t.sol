@@ -9,7 +9,8 @@ contract GamelordTest is Test {
 
     address USER = makeAddr("user");
     address USER2 = makeAddr("user2");
-    uint256 constant SEND_VALUE = 0.1 ether;
+    uint256 constant CORRECT_SEND_VALUE = 0.00003 ether;
+    uint256 constant WRONG_SEND_VALUE = 0.00001 ether;
     uint256 constant STARTING_BALANCE = 10 ether;
     uint256 constant GAS_PRICE = 1;
 
@@ -19,13 +20,11 @@ contract GamelordTest is Test {
         vm.deal(USER2, STARTING_BALANCE);
     }
 
-    function testMinimumEthIs005() public view {
-        assertEq(gamelord.MINIMUM_ETH(), 0.05 ether);
-    }
-
-    function testWagerFailsWithoutEnoughEth() public {
+    function testWagerFailsWithWrongEthAmount() public {
         vm.expectRevert(); // means that the next line should revert for the test to pass
         gamelord.wager(Gamelord.Team.Team1); // send 0 eth, meaning tx will revert, and test will succeed
+        vm.expectRevert();
+        gamelord.wager{value: WRONG_SEND_VALUE}(Gamelord.Team.Team1);
     }
 
     // wager amount is correct
@@ -33,17 +32,17 @@ contract GamelordTest is Test {
     // get player info works correctly
     function test_Wager() public {
         vm.prank(USER);
-        gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team1);
+        gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team1);
         Gamelord.PlayerInfo memory playerInfo = gamelord.getPlayerInfo(USER);
         assertEq(uint256(playerInfo.team), uint256(Gamelord.Team.Team1));
-        assertEq(playerInfo.amountWagered, SEND_VALUE);
+        assertEq(playerInfo.amountWagered, CORRECT_SEND_VALUE);
     }
 
     function test_getPlayers() public {
         vm.prank(USER);
-        gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team1);
+        gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team1);
         vm.prank(USER2);
-        gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team2);
+        gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team2);
         address[] memory players = gamelord.getPlayers();
         assertEq(players.length, 2);
     }
@@ -53,19 +52,19 @@ contract GamelordTest is Test {
         assertEq(startingContractBalance, 0);
 
         vm.prank(USER);
-        gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team1);
+        gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team1);
         vm.prank(USER2);
-        gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team2);
+        gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team2);
 
-        assertEq(2 * SEND_VALUE, address(gamelord).balance);
+        assertEq(2 * CORRECT_SEND_VALUE, address(gamelord).balance);
 
-        assertEq(USER.balance, STARTING_BALANCE - SEND_VALUE);
-        assertEq(USER2.balance, STARTING_BALANCE - SEND_VALUE);
+        assertEq(USER.balance, STARTING_BALANCE - CORRECT_SEND_VALUE);
+        assertEq(USER2.balance, STARTING_BALANCE - CORRECT_SEND_VALUE);
 
         gamelord.releaseFunds(Gamelord.Team.Team1);
 
-        assertEq(USER.balance, STARTING_BALANCE + SEND_VALUE);
-        assertEq(USER2.balance, STARTING_BALANCE - SEND_VALUE);
+        assertEq(USER.balance, STARTING_BALANCE + CORRECT_SEND_VALUE);
+        assertEq(USER2.balance, STARTING_BALANCE - CORRECT_SEND_VALUE);
     }
 
     function test_releaseFundsMultiplePlayers() public {
@@ -78,14 +77,14 @@ contract GamelordTest is Test {
             hoax(address(i*2), STARTING_BALANCE); // really weird bug if i use address(i)
                                                   // contract errors when sending eth to 0x0...09
             if (i % 2 == 0) {
-                gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team1);
+                gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team1);
             } else {
-                gamelord.wager{value: SEND_VALUE}(Gamelord.Team.Team2);
+                gamelord.wager{value: CORRECT_SEND_VALUE}(Gamelord.Team.Team2);
             }
         }
 
         uint256 newContractBalance = address(gamelord).balance;
-        assertEq(newContractBalance, SEND_VALUE * numberOfPlayers);
+        assertEq(newContractBalance, CORRECT_SEND_VALUE * numberOfPlayers);
 
 
         // testing with Team2 == winning team
@@ -95,10 +94,10 @@ contract GamelordTest is Test {
         for (uint160 i = 0; i < numberOfPlayers; i++) {
             if (i % 2 == 0) {
                 // team1
-                assertEq(address(i*2).balance, STARTING_BALANCE - SEND_VALUE);
+                assertEq(address(i*2).balance, STARTING_BALANCE - CORRECT_SEND_VALUE);
             } else {
                 // team2
-                assertEq(address(i*2).balance, STARTING_BALANCE + SEND_VALUE);
+                assertEq(address(i*2).balance, STARTING_BALANCE + CORRECT_SEND_VALUE);
             }
         }
     }

@@ -72,15 +72,14 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   }
 
   async function register(team_name) {
-    const eth_amount = document.getElementById("ethAmount").value;
+    const eth_amount = "30000000000000"; //0.00003 eth
 
     try {
       const team_name_as_num = team_name === "Team1" ? 0 : 1;
       console.log("TEAM NAME AS NUM", team_name_as_num);
       console.log("ETH AMOUNT", eth_amount);
-      console.log("PARSED ETH AMOUNT", parseEther(eth_amount));
       const tx = await contract.wager(team_name_as_num, {
-        value: parseEther(eth_amount),
+        value: eth_amount,
       });
       console.log("TX", tx);
       const receipt = await tx.wait();
@@ -138,11 +137,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
       <h1>Login</h1>
       <h3>Join Team</h3>
       <form id="playerForm">
-        <input
-          type="text"
-          id="ethAmount"
-          placeholder="Amount to Wager (Ether). Min 0.0001"
-        />
+        <p>Wager 0.00003 ETH to join a team</p>
         <button type="button" onClick={() => register("Team1")}>
           Join Team1
         </button>
@@ -160,7 +155,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
         <p>Team Requested: {teamRequested || "Not selected"}</p>
       </div>
       <hr />
-      {ethWagered && ethers.parseEther("0.0001") <= ethWagered && (
+      {ethWagered && ethers.parseEther("0.00003") <= ethWagered && (
         <>
           <h3>Enter Gamelord NodeId and Minecraft ID</h3>
           <form id="playerForm">
