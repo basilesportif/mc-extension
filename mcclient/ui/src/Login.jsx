@@ -45,7 +45,6 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
     const sig = await signer.signMessage(message);
 
     console.log(sig);
-
     try {
       const response = await fetch(url, {
         method: "POST",

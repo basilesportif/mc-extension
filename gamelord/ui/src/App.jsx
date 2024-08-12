@@ -6,20 +6,20 @@ function App() {
     name: "",
     minecraft_server_address: "",
     world_config: {},
-    goal_post: {center: [0,0,0], side_length: 16},
+    goal_post: { center: [0, 0, 0], side_length: 16 },
     team1: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 16},
+      spawn_point: { center: [0, 0, 0], side_length: 16 },
     },
     team2: {
       last_message_id: 0,
       messages: [],
       name: "",
       players: [],
-      spawn_point: {center: [0,0,0], side_length: 16},
+      spawn_point: { center: [0, 0, 0], side_length: 16 },
     },
     game_started: false,
     ready_players: [],
@@ -135,21 +135,23 @@ function App() {
       .then((data) => {
         console.log("World configuration:", data);
         // Create a Blob with the JSON data
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+          type: "application/json",
+        });
+
         // Create a temporary URL for the Blob
         const url = window.URL.createObjectURL(blob);
-        
+
         // Create a temporary anchor element
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
-        a.download = 'world_config.json';
-        
+        a.download = "world_config.json";
+
         // Append the anchor to the body, click it, and remove it
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        
+
         // Revoke the temporary URL
         window.URL.revokeObjectURL(url);
       })
@@ -169,6 +171,7 @@ function App() {
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify(document.getElementById("teamSelect").value === "team1" ? "Team1" : "Team2"),
     })
       .then((response) => {
         if (response.ok) {
@@ -189,19 +192,52 @@ function App() {
   };
 
   const configurePoints = () => {
-    const team1SpawnX = parseInt(document.getElementById("team1SpawnX").value || "0", 10);
-    const team1SpawnY = parseInt(document.getElementById("team1SpawnY").value || "0", 10);
-    const team1SpawnZ = parseInt(document.getElementById("team1SpawnZ").value || "0", 10);
-    const team2SpawnX = parseInt(document.getElementById("team2SpawnX").value || "0", 10);
-    const team2SpawnY = parseInt(document.getElementById("team2SpawnY").value || "0", 10);
-    const team2SpawnZ = parseInt(document.getElementById("team2SpawnZ").value || "0", 10);
-    const goalPostX = parseInt(document.getElementById("goalPostX").value || "0", 10);
-    const goalPostY = parseInt(document.getElementById("goalPostY").value || "0", 10);
-    const goalPostZ = parseInt(document.getElementById("goalPostZ").value || "0", 10);
+    const team1SpawnX = parseInt(
+      document.getElementById("team1SpawnX").value || "0",
+      10
+    );
+    const team1SpawnY = parseInt(
+      document.getElementById("team1SpawnY").value || "0",
+      10
+    );
+    const team1SpawnZ = parseInt(
+      document.getElementById("team1SpawnZ").value || "0",
+      10
+    );
+    const team2SpawnX = parseInt(
+      document.getElementById("team2SpawnX").value || "0",
+      10
+    );
+    const team2SpawnY = parseInt(
+      document.getElementById("team2SpawnY").value || "0",
+      10
+    );
+    const team2SpawnZ = parseInt(
+      document.getElementById("team2SpawnZ").value || "0",
+      10
+    );
+    const goalPostX = parseInt(
+      document.getElementById("goalPostX").value || "0",
+      10
+    );
+    const goalPostY = parseInt(
+      document.getElementById("goalPostY").value || "0",
+      10
+    );
+    const goalPostZ = parseInt(
+      document.getElementById("goalPostZ").value || "0",
+      10
+    );
 
     const data = {
-      team1_spawn: { center: [team1SpawnX, team1SpawnY, team1SpawnZ], side_length: 16 },
-      team2_spawn: { center: [team2SpawnX, team2SpawnY, team2SpawnZ], side_length: 16 },
+      team1_spawn: {
+        center: [team1SpawnX, team1SpawnY, team1SpawnZ],
+        side_length: 16,
+      },
+      team2_spawn: {
+        center: [team2SpawnX, team2SpawnY, team2SpawnZ],
+        side_length: 16,
+      },
       goal_post: { center: [goalPostX, goalPostY, goalPostZ], side_length: 16 },
     };
 
@@ -290,7 +326,9 @@ function App() {
       })
       .catch((error) => {
         console.error("Error locking game:", error);
-        document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
+        document.getElementById(
+          "response-output-tab2"
+        ).innerText = `Error: ${error.message}`;
       });
   };
 
@@ -322,7 +360,11 @@ function App() {
         <div className="container">
           <div className="option">
             <h2>Load Preconfigured Effects</h2>
-            <p>Insert world_config.json and overwrite current world_config. NOT necessary to use, players can start by editing an empty world config.</p>
+            <p>
+              Insert world_config.json and overwrite current world_config. NOT
+              necessary to use, players can start by editing an empty world
+              config.
+            </p>
             <form>
               <div className="form-group">
                 <input type="file" id="fileInput" accept=".json" />
@@ -408,9 +450,18 @@ function App() {
                 )}
               </ul>
             </div>
-            <button type="button" onClick={() => clearTeams()}>
-              Clear Teams
-            </button>
+            <div>
+              <div className="form-group">
+                <label htmlFor="teamSelect">Select Winning Team:</label>
+                <select id="teamSelect" name="teamSelect">
+                  <option value="team1">Team 1</option>
+                  <option value="team2">Team 2</option>
+                </select>
+              </div>
+              <button type="button" onClick={() => clearTeams()}>
+                Clear Teams
+              </button>
+            </div>
           </div>
           <div className="option">
             <h2>Ready Players</h2>

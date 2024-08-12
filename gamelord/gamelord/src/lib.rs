@@ -544,6 +544,7 @@ fn handle_kinode_message(
 
 fn handle_http_request(
     state: &mut State,
+    gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
     message: &Message,
 ) -> anyhow::Result<()> {
@@ -637,6 +638,18 @@ fn handle_http_request(
                         state.clear_teams();
                         state.lobby.ready_players.clear(); 
                         state.save();
+
+                        let bytes = get_blob()
+                        .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
+                        .bytes;
+                        let winning_team = serde_json::from_slice::<TeamName>(&bytes)?;
+                        println!("winning team: {:?}", winning_team);
+                        if let Some(caller) = gamelord_caller {
+                            let result = caller.release_funds(winning_team);
+                            println!("result: {:?}", result);
+                        } else {
+                            println!("No contract caller found");   
+                        }
                         let blob = LazyLoadBlob {
                             mime: Some("application/json".to_string()),
                             bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
@@ -782,7 +795,7 @@ fn handle_message(
         message.source().process.to_string().as_str()
     {
         println!("HTTP request received.");
-        return handle_http_request(state, ws_channel_id, &message);
+        return handle_http_request(state, gamelord_caller, ws_channel_id, &message);
     }
     if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
