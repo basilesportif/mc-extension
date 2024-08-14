@@ -1,7 +1,0 @@
-{
-  "transactions": [
-    {
-      "rpc": "ws://localhost:8545"
-    }
-  ]
-}

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ethers, parseEther } from "ethers";
 import Gamelord from "./abi/Gamelord.json";
+import "./App.css"; // Import the same CSS file used in App.jsx
+import "./Login.css"; // Import the new CSS file
 
 let signer = null;
 let provider;
@@ -132,30 +134,37 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
   }, []);
 
   return (
-    <>
-      <h1>Login</h1>
-      <h3>Join Team</h3>
-      <form id="playerForm">
+    <div className="ClientBackground centered-container">
+      <img src="https://i.imgur.com/y2zRXme.png" alt="Logo" className="corner-logo" />
+      <h2>McClient Login</h2>
+      <div className="status shaded-container">
+        <h3>Join Team</h3>
         <p>Wager 0.00003 ETH to join a team</p>
-        <button type="button" onClick={() => register("Team1")}>
-          Join Team1
-        </button>
-        <button type="button" onClick={() => register("Team2")}>
-          Join Team2
-        </button>
-      </form>
-      <div>
-        <p>
-          ETH Wagered:{" "}
-          {ethWagered !== null
-            ? `${ethers.formatEther(ethWagered)} ETH`
-            : "Not set"}
-        </p>
-        <p>Team Requested: {teamRequested || "Not selected"}</p>
+        <div className="team-container">
+          <div>
+            <button type="button" onClick={() => register("Team1")}>
+              Join Team 1
+            </button>
+          </div>
+          <div>
+            <button type="button" onClick={() => register("Team2")}>
+              Join Team 2
+            </button>
+          </div>
+        </div>
+        <div>
+          <p>
+            ETH Wagered:{" "}
+            {ethWagered !== null
+              ? `${ethers.formatEther(ethWagered)} ETH`
+              : "Not set"}
+          </p>
+          <p>Team Requested: {teamRequested || "Not selected"}</p>
+        </div>
       </div>
-      <hr />
+
       {ethWagered && ethers.parseEther("0.00003") <= ethWagered && (
-        <>
+        <div className="status shaded-container">
           <h3>Enter Gamelord NodeId and Minecraft ID</h3>
           <form id="playerForm">
             <input
@@ -172,12 +181,14 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
           <button type="button" onClick={() => joinTeamRequest(teamRequested)}>
             Join
           </button>
-          <hr />
-        </>
+        </div>
       )}
-      <div>Chain ID: {chainId}</div>
-      <div>Address: {userAccount}</div>
-    </>
+
+      <div className="status shaded-container">
+        <p>Chain ID: {chainId}</p>
+        <p>Address: {userAccount}</p>
+      </div>
+    </div>
   );
 };
 

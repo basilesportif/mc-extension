@@ -26,6 +26,7 @@ function App() {
   });
   const [activeTab, setActiveTab] = useState("tab1");
   const [wsReady, setWsReady] = useState(false);
+  const [winningTeam, setWinningTeam] = useState(null);
 
   useEffect(() => {
     setActiveTab("tab2");
@@ -265,6 +266,9 @@ function App() {
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
+      if (data.winning_team) {
+        setWinningTeam(data.winning_team);
+      }
       applyDiff(data, setLobby);
     };
   };
@@ -290,6 +294,32 @@ function App() {
       })
       .catch((error) => {
         console.error("Error locking game:", error);
+        document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
+      });
+  };
+
+  const disperseFunds = () => {
+    const url = "/gamelord:gamelord:basilesex.os/api/disperseFunds";
+    const data = { winning_team: winningTeam };
+
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    })
+      .then((response) => {
+        if (response.ok) {
+          console.log("Funds dispersed successfully.");
+          document.getElementById("response-output-tab2").innerText =
+            "Funds dispersed successfully.";
+        } else {
+          throw new Error("Failed to disperse funds");
+        }
+      })
+      .catch((error) => {
+        console.error("Error dispersing funds:", error);
         document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
       });
   };
@@ -491,6 +521,15 @@ function App() {
             <button type="button" onClick={() => lockGame()}>
               Begin Playing Phase
             </button>
+          </div>
+          <div className="option">
+            <h2>Winning Team</h2>
+            <p>{winningTeam ? `Winning Team: ${winningTeam}` : "No winning team yet."}</p>
+            {winningTeam && (
+              <button type="button" onClick={() => disperseFunds()}>
+                Disperse Funds to Winning Team
+              </button>
+            )}
           </div>
         </div>
         <pre id="response-output-tab2"></pre>

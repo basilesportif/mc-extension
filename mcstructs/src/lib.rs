@@ -144,7 +144,10 @@ impl GameLobby {
         }
         lobby
     }
+    // Clears the WHOLE lobby, including the teams
     pub fn clear_teams(&mut self) -> Self {
+        self.name = String::new();
+        self.minecraft_server_address = String::new();
         self.team1 = Team {
             name: TeamName::Team1,
             players: HashSet::new(),
@@ -159,6 +162,10 @@ impl GameLobby {
             last_message_id: 0,
             spawn_point: Cube::new(),
         };
+        self.world_config.clear();
+        self.goal_post = Cube::new();
+        self.game_started = false;
+        self.ready_players.clear();
         self.clone()
     }
     pub fn apply_diff(&mut self, diff: &GameLobbyDiff) -> Result<GameLobby, String> {
@@ -236,14 +243,16 @@ impl GameLobby {
                 self.ready_players.insert(kinode_id.clone());
                 Ok(self.clone())
             }
-            GameLobbyDiff::GameOver { game_started, world_config } => {
-                self.game_started = game_started.clone();
-                self.world_config = world_config.clone();
+            GameLobbyDiff::GameOver { game_started } => {
+                self.clear_teams();
+                self.game_started = *game_started;
                 Ok(self.clone())
             }
+            }
+            //
         }
     }
-}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum GameLobbyDiff {
@@ -258,7 +267,6 @@ pub enum GameLobbyDiff {
     ReadyPlayer(NodeId),
     GameOver {
         game_started: bool,
-        world_config: TeamNameToRegion,
     },
     // WorldConfigDiff
     // RemovePlayerFromTeam(Player, TeamName),

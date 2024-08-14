@@ -195,10 +195,16 @@ impl GamelordRequestMinecraft {
 pub enum GamelordResponseMinecraft {
     TransitionTriggeredResponse(String, CubeEffectList),
     TransitionSilentResponse(String, String),
-    TransitionDeniedResponse(String, Cube), //cube is spawnpoint
+    TransitionDeniedResponse(String), //cube is spawnpoint
     PlayerSpawnRequestAuthorized(bool, String, Cube),
     PlayerSpawnRequestDenied(bool, String),
-    GameOver(TeamName),
+    GameOver {
+        winning_team: TeamName,
+        team1_players: HashSet<Player>,
+        team2_players: HashSet<Player>,
+        team1_spawn: Cube,
+        team2_spawn: Cube,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone)]

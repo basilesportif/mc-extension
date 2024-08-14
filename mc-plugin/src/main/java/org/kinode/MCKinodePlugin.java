@@ -193,6 +193,21 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
         }
     }
 
+    public void teleportToPreviousCube(Player player) {
+        PlayerData playerData = playerDataMap.get(player.getName());
+        if (playerData != null && playerData.prevCube != null) {
+            String[] coords = playerData.prevCube.replace("Center: ", "").split(",");
+            int x = Integer.parseInt(coords[0]);
+            int y = Integer.parseInt(coords[1]);
+            int z = Integer.parseInt(coords[2]);
+            Location prevCubeLocation = new Location(player.getWorld(), x, y, z);
+            player.teleport(prevCubeLocation);
+            player.sendMessage("You have been teleported back to your previous cube: " + playerData.prevCube);
+        } else {
+            getLogger().warning("No previous cube found for player: " + player.getName());
+        }
+    }
+
     /**
      * @return The Minecraft Plugin Instance
      */

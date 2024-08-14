@@ -344,27 +344,14 @@ fn handle_kinode_message(
     }
     match GamelordRequestMinecraft::parse(message.body())? {
         GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
-            //check whether the playing phasehas started
+            //check whether the playing phase has started ()
             if !state.lobby.game_started {
                 println!("Action denied, playing phase has not started.");
-
-                // Determine the player's team and spawn point
-                let (team_name, spawn_point) = if let Some(active_player) = state.active_players.get(&minecraft_id) {
-                    let team_name = active_player.team.clone();
-                    let spawn_point = match team_name {
-                        TeamName::Team1 => state.lobby.team1.spawn_point.clone(),
-                        TeamName::Team2 => state.lobby.team2.spawn_point.clone(),
-                    };
-                    (team_name, spawn_point)
-                } else {
-                    return Err(anyhow::anyhow!("Player not found in active players"));
-                };
 
                 // Send the response to the player
                 let response = serde_json::to_vec(
                     &GamelordResponseMinecraft::TransitionDeniedResponse(
-                        "Action denied, playing phase has not started.".to_string(),
-                        spawn_point,
+                        "Action denied".to_string(),
                     ),
                 ).expect("failed to parse gamelord transition denied response");
                 Response::new().body(response).send().unwrap();
@@ -380,28 +367,47 @@ fn handle_kinode_message(
                 } else {
                     return Err(anyhow::anyhow!("Player not found in active players"));
                 };
+                 // Fetch team players and their spawn points
+                 let team1_players = state.lobby.team1.players.clone();
+                 let team2_players = state.lobby.team2.players.clone();
+                 let team1_spawn = state.lobby.team1.spawn_point.clone();
+                 let team2_spawn = state.lobby.team2.spawn_point.clone();
 
+                state.clear_teams(); // clear state on gamelord
                 // Clear the world config
-                state.lobby.world_config.clear();
-
-                state.lobby.game_started = false;
-                state.cube_to_owner.clear();
+                state.lobby.clear_teams(); // clear_lobby
 
                 // Send the GameOver diff to clients, including the cleared world_config
                 let diff = GameLobbyDiff::GameOver {
                     game_started: false,
-                    world_config: state.lobby.world_config.clone(),
                 };
-                let _ = state.update_clients(&diff);
+                let _ = state.update_clients(&diff); //send the clear lobby diff to clients
                 // Save the updated state
                 state.save();
                 // Send the response to the player
                 let response = serde_json::to_vec(
-                    &GamelordResponseMinecraft::GameOver(
-                        winning_team,
-                    ),
+                    &GamelordResponseMinecraft::GameOver {
+                        winning_team: winning_team.clone(),
+                        team1_players,
+                        team2_players,
+                        team1_spawn,
+                        team2_spawn,
+                    },
                 ).expect("failed to parse gamelord cube transition response");
+                let blob = LazyLoadBlob {
+                    mime: Some("application/json".to_string()),
+                    bytes: serde_json::to_vec(&winning_team)?,
+                };
+                send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
                 Response::new().body(response).send().unwrap();
+                // here we release the funds to the winning team
+                println!("winning team: {:?}", winning_team.clone());
+                if let Some(caller) = gamelord_caller {
+                    let result = caller.release_funds(winning_team.clone());
+                    println!("result: {:?}", result);
+                } else {
+                    println!("No contract caller found");   
+                }
                 return Ok(());
             }
             // we get information about what team the player is in based on Active players
@@ -525,7 +531,7 @@ fn handle_kinode_message(
             Response::new().body(response).send().unwrap();
             Ok(())
         }
-        // Think about whether I need this
+        // have the option that someone can leave the game
         GamelordRequestMinecraft::PlayerLeaveRequest { minecraft_id } => {
             if state.active_players.contains_key(&minecraft_id) {
                 state.active_players.remove(&minecraft_id);
@@ -629,32 +635,34 @@ fn handle_http_request(
                         println!("World deleted from request");
                         http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
                     }
+                    "/api/disperseFunds" => {
+                        let bytes = get_blob()
+                            .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
+                            .bytes;
+                        let winning_team = serde_json::from_slice::<TeamName>(&bytes)?;
+                        println!("Dispersing funds to winning team: {:?}", winning_team);
+                        if let Some(caller) = gamelord_caller {
+                            let result = caller.release_funds(winning_team);
+                            println!("Funds dispersed result: {:?}", result);
+                            http::send_response(http::StatusCode::OK, None, b"Funds Dispersed".to_vec());
+                        } else {
+                            println!("No contract caller found");
+                            http::send_response(http::StatusCode::INTERNAL_SERVER_ERROR, None, b"No contract caller found".to_vec());
+                        }
+                        let _ = state.update_clients(&GameLobbyDiff::Init(
+                            state.lobby.clone().clear_teams(), // clears the WHOLE lobby, including the teams (for dispering diffs to clients)
+                        ));
+                        state.clear_teams(); // clears the state on gamelord
+                        state.save();
+                    }
                     "/api/clearTeams" => {
                         // need to update clients with lobby with empty teams before actually clearing teams,
                         // because it sends update to team members
                         let _ = state.update_clients(&GameLobbyDiff::Init(
-                            state.lobby.clone().clear_teams(),
+                            state.lobby.clone().clear_teams(), // clears the WHOLE lobby, including the teams (for dispering diffs to clients)
                         ));
-                        state.clear_teams();
-                        state.lobby.ready_players.clear(); 
+                        state.clear_teams(); // clears the state on gamelord
                         state.save();
-
-                        let bytes = get_blob()
-                        .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
-                        .bytes;
-                        let winning_team = serde_json::from_slice::<TeamName>(&bytes)?;
-                        println!("winning team: {:?}", winning_team);
-                        if let Some(caller) = gamelord_caller {
-                            let result = caller.release_funds(winning_team);
-                            println!("result: {:?}", result);
-                        } else {
-                            println!("No contract caller found");   
-                        }
-                        let blob = LazyLoadBlob {
-                            mime: Some("application/json".to_string()),
-                            bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
-                        };
-                        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
                         http::send_response(http::StatusCode::OK, None, b"Teams Cleared".to_vec());
                     }
                     "/api/editLobby" => edit_lobby(state, ws_channel_id).unwrap_or(()),

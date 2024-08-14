@@ -230,6 +230,16 @@ public class MCKinodeWS extends WebSocketClient {
                             player.sendTitle("§c§lGame Over!", "§eWinning Team: §f" + winningTeam, 10, 70, 20);
                         }
                     });
+                } else if (jsonResponse.has("TransitionDeniedResponse")) {
+                    JSONArray transitionDeniedResponse = jsonResponse.getJSONArray("TransitionDeniedResponse");
+                    String minecraftId = transitionDeniedResponse.getString(0);
+                    MCKinodePlugin.getInstance().getLogger().info("TransitionDeniedResponse for player: " + minecraftId);
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        Player player = Bukkit.getPlayer(minecraftId);
+                        if (player != null) {
+                            MCKinodePlugin.getInstance().teleportToPreviousCube(player);
+                        }
+                    });
                 } else {
                     System.err.println("Unexpected JSON response format: " + response);
                 }

@@ -21,3 +21,5 @@ mc-driver/pkg/*.wasm
 /sol-contracts/broadcast
 /sol-contracts/cache
 /sol-contracts/out
+
+
