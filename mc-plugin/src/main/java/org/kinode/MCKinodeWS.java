@@ -188,7 +188,6 @@ public class MCKinodeWS extends WebSocketClient {
                 if (jsonResponse.has("TransitionTriggeredResponse")) {
                     JSONArray transitionTriggeredResponse = jsonResponse.getJSONArray("TransitionTriggeredResponse");
                     String minecraftId = transitionTriggeredResponse.getString(0);
-                    // The second element is now a JSONObject instead of a JSONArray
                     JSONObject effectsObject = transitionTriggeredResponse.getJSONObject(1);
                     JSONArray effectsArray = effectsObject.getJSONArray("effects");
                     MCKinodePlugin.getInstance().getLogger().info("TransitionTriggeredResponse effects: " + effectsArray.toString());
@@ -223,16 +222,23 @@ public class MCKinodeWS extends WebSocketClient {
                         }
                     });
                 } else if (jsonResponse.has("GameOver")) {
-                    String winningTeam = jsonResponse.getString("GameOver");
+                    JSONObject gameOverObject = jsonResponse.getJSONObject("GameOver");
+                    String winningTeam = gameOverObject.getString("winning_team");
                     MCKinodePlugin.getInstance().getLogger().info("Game Over! Winning team: " + winningTeam);
                     Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
                         for (Player player : Bukkit.getOnlinePlayers()) {
                             player.sendTitle("§c§lGame Over!", "§eWinning Team: §f" + winningTeam, 10, 70, 20);
                         }
+                        // Schedule a task to kick all players after 5 seconds
+                        Bukkit.getScheduler().runTaskLater(MCKinodePlugin.getInstance(), () -> {
+                            for (Player player : Bukkit.getOnlinePlayers()) {
+                                player.kickPlayer("Game Over! Winning Team: " + winningTeam);
+                            }
+                        }, 100L); // 100 ticks = 5 seconds
                     });
                 } else if (jsonResponse.has("TransitionDeniedResponse")) {
-                    JSONArray transitionDeniedResponse = jsonResponse.getJSONArray("TransitionDeniedResponse");
-                    String minecraftId = transitionDeniedResponse.getString(0);
+                    // Handle TransitionDeniedResponse as a JSON object
+                    String minecraftId = jsonResponse.getString("TransitionDeniedResponse");
                     MCKinodePlugin.getInstance().getLogger().info("TransitionDeniedResponse for player: " + minecraftId);
                     Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
                         Player player = Bukkit.getPlayer(minecraftId);

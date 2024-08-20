@@ -33,7 +33,7 @@ fn is_expected_channel_id(
 // forward messages to gamelord
 fn process_gamelord_request(request: &[u8]) -> anyhow::Result<Vec<u8>> {
     let response = Request::new()
-        .target(Address::new("uncentered-gamelord.os", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
+        .target(Address::new("gohlubwnst.os", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
         .body(request.to_vec())
         .send_and_await_response(2)?;
 

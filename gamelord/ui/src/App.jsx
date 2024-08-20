@@ -266,9 +266,20 @@ function App() {
     };
     ws.onmessage = function (event) {
       const data = JSON.parse(event.data);
+      console.log("Received WebSocket message:", data); // Debugging line
+
+      // Check if the data contains a winning_team field
       if (data.winning_team) {
-        setWinningTeam(data.winning_team);
+        console.log("Winning team received:", data.winning_team);
+        if (data.winning_team === "Team1" || data.winning_team === "Team2") {
+          setWinningTeam(data.winning_team);
+        } else {
+          console.warn("Unexpected winning_team value:", data.winning_team);
+        }
+      } else {
+        console.warn("Unexpected WebSocket message:", data);
       }
+
       applyDiff(data, setLobby);
     };
   };
@@ -314,6 +325,8 @@ function App() {
           console.log("Funds dispersed successfully.");
           document.getElementById("response-output-tab2").innerText =
             "Funds dispersed successfully.";
+          // Clear the winning team
+          setWinningTeam(null);
         } else {
           throw new Error("Failed to disperse funds");
         }

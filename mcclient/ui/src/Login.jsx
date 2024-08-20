@@ -67,13 +67,15 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
       }
 
       const data = await response.text();
+      // Set the team as joined
+      setOurInTeam(team_name);
     } catch (error) {
       console.error("Error adding player:", error);
     }
   }
 
   async function register(team_name) {
-    const eth_amount = "30000000000000"; //0.00003 eth
+    const eth_amount = "187500000000000"; //0.0001875 eth
 
     try {
       const team_name_as_num = team_name === "Team1" ? 0 : 1;
@@ -133,13 +135,18 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
     loadEthers();
   }, []);
 
+  // Conditionally render the login UI based on whether the user has joined a team
+  if (ourInTeam !== null) {
+    return null; // Return null to hide the component
+  }
+
   return (
     <div className="ClientBackground centered-container">
       <img src="https://i.imgur.com/y2zRXme.png" alt="Logo" className="corner-logo" />
       <h2>McClient Login</h2>
       <div className="status shaded-container">
         <h3>Join Team</h3>
-        <p>Wager 0.00003 ETH to join a team</p>
+        <p>Wager 0.0001875 ETH to join a team</p>
         <div className="team-container">
           <div>
             <button type="button" onClick={() => register("Team1")}>
@@ -163,7 +170,7 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
         </div>
       </div>
 
-      {ethWagered && ethers.parseEther("0.00003") <= ethWagered && (
+      {ethWagered && ethers.parseEther("0.0001875") <= ethWagered && (
         <div className="status shaded-container">
           <h3>Enter Gamelord NodeId and Minecraft ID</h3>
           <form id="playerForm">

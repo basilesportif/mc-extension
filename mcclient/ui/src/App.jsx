@@ -74,8 +74,7 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby,
   };
 
   return (
-    <div className="ClientBackground">
-      
+    <div className="AppBackground">
       <h2>McClient</h2>
       <div className="status">
         <p>Game: {lobby.name}</p>
@@ -110,7 +109,7 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby,
       <pre id="response-output"></pre>
       {ourInTeam !== null && (
         <button type="button" onClick={readyPlayer}>
-          Ready Player
+          Ready Players
         </button>
       )}
       <div
@@ -177,7 +176,6 @@ function App({ws, ourNode, setOurNode, ourInTeam, setOurInTeam, lobby, setLobby,
         )}
       </div>
     </div>
-
   );
 }
 

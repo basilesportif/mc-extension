@@ -93,7 +93,21 @@ ul p:hover {
 
 /* Style the status container */
 .status {
-  background-color: rgba(0, 0, 0, 0.3); /* Slight black background */
+  background-color: rgba(160, 82, 82, 0.1); /* Slight black background */
   padding: 20px;
   border-radius: 5px;
+  margin: 0 auto; /* Center horizontally */
+  width: 100%; /* Full width of the parent container */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+/* Add styles for the App background */
+.AppBackground {
+  width: 80%;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }

@@ -5,6 +5,8 @@
     "mcdriver/mcdriver/Cargo.toml",
     "mcclient/mcclient/Cargo.toml",
     "mcstructs/Cargo.toml"
-  ]
+  ],
+  "search.useGlobalIgnoreFiles": true,
+  "search.useParentIgnoreFiles": true
 
 }

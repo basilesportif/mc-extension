@@ -5,7 +5,7 @@ import "forge-std/console.sol";
 error Gamelord__NotOwner();
 
 contract Gamelord {
-    uint256 public constant REQUIRED_ETH = 0.00003 ether; // cca 8 cents
+    uint256 public constant REQUIRED_ETH = 0.0001875 ether; // cca 50 cents
     enum Team {
         Team1,
         Team2

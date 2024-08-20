@@ -9,7 +9,7 @@ contract GamelordTest is Test {
 
     address USER = makeAddr("user");
     address USER2 = makeAddr("user2");
-    uint256 constant CORRECT_SEND_VALUE = 0.00003 ether;
+    uint256 constant CORRECT_SEND_VALUE = 0.0001875 ether;
     uint256 constant WRONG_SEND_VALUE = 0.00001 ether;
     uint256 constant STARTING_BALANCE = 10 ether;
     uint256 constant GAS_PRICE = 1;

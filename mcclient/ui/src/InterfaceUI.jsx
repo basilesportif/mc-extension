@@ -54,8 +54,8 @@ const InterfaceUI = () => {
   }, [lobby]);
 
   useEffect(() => {
-    // console.log("ourNode", ourNode);
-    // console.log("ourInTeam", ourInTeam);
+     console.log("ourNode", ourNode);
+     console.log("ourInTeam", ourInTeam);
   }, [ourNode, ourInTeam]);
 
   const nodeInTeam = (node, lobby) => {
@@ -103,7 +103,8 @@ const OverlayComponent = () => {
     </div>
   );
 };
-
+// Possible bug with ourInTeam not being set/read correctly
+// 
 return (
   <div>
     {ourInTeam === null ? (

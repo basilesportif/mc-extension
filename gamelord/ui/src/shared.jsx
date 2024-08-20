@@ -124,7 +124,6 @@ export function applyDiff(data, setLobby) {
       setLobby((prevLobby) => ({
         ...prevLobby,
         game_started: data.GameOver.game_started,
-        world_config: data.GameOver.world_config,
       }));
       break;
     default:

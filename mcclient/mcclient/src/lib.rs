@@ -197,7 +197,7 @@ fn handle_gamelord_update(
             return Ok(());
         }
     };
-    // println!("state: {:#?}", state.lobby.world_config);
+    println!("state: {:#?}", state.lobby);
     state.save();
     let blob = LazyLoadBlob {
         mime: Some("application/json".to_string()),
