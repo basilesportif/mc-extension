@@ -88,7 +88,8 @@ pub struct State {
     pub active_players: HashMap<String, ActivePlayer>, // Remember to change the type key type here to Address. (maybe not, it might be a MC username)
     pub allowed_players: HashMap<String, Player>,
     pub node_to_eth: HashMap<NodeId, (EthAddress, U256)>, // nodeId to EthAddress and Eth Wagered amount
-    pub wallets: HashMap<u64, PrivateKey>, //chain id to wallet
+    pub wallets: HashMap<u64, PrivateKey>,
+    pub mc_id_to_wallet: HashMap<String, EthAddress>, //chain id to wallet
 }
 
 impl State {
@@ -101,6 +102,7 @@ impl State {
             allowed_players: HashMap::new(),
             node_to_eth: HashMap::new(),
             wallets: HashMap::new(),
+            mc_id_to_wallet: HashMap::new(),
         }
     }
     pub fn fetch() -> Option<State> {
@@ -205,6 +207,7 @@ pub enum GamelordResponseMinecraft {
         team1_spawn: Cube,
         team2_spawn: Cube,
     },
+
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -213,6 +216,48 @@ pub enum Action {
     DecryptWallet(String),
     GetPlayerInfo(EthAddress)
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NFTApiResponse {
+    pub nfts: Vec<NFTApiData>,
+    pub next: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NFTApiData {
+    pub identifier: String,
+    pub collection: String,
+    pub contract: String,
+    pub token_standard: String,
+    pub name: String,
+    pub description: String,
+    pub image_url: String,
+    pub display_image_url: String,
+    pub display_animation_url: String,
+    pub metadata_url: String,
+    pub opensea_url: String,
+    pub updated_at: String,
+    pub is_disabled: bool,
+    pub is_nsfw: bool,
+}
+pub fn convert_to_nft_entries(api_response: NFTApiResponse) -> Vec<NFTMetadata> {
+    api_response.nfts.into_iter().map(|nft| {
+        NFTMetadata {
+            name: nft.name,
+            image_url: nft.image_url,
+        }
+    }).collect()
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NFTMetadata {
+    pub name: String,
+    pub image_url: String,
+}
+
+
+
 
 /*
     data:

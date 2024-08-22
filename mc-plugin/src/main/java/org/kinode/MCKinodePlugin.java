@@ -53,6 +53,10 @@ public final class MCKinodePlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         Bukkit.getPluginManager().registerEvents(this, this);
         instance = this;
+
+        // Register the NFT command
+        this.getCommand("nft").setExecutor(new org.kinode.commands.NFTCommand());
+
         // Set the server's spawn location
         //World world = Bukkit.getWorlds().get(0); // Get the first world
         //world.setSpawnLocation(50, 50, 50); // Set the spawn location

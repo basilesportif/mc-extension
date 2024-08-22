@@ -48,6 +48,14 @@ pub struct JoinTeam {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AssociateMinecraftId {
+    pub gamelord_id: NodeId,
+    pub kinode_id: NodeId,
+    pub minecraft_id: String,
+    pub eth_address: EthAddress,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum McClientToGamelordRequest {
     Init,               // requests for all gamelobby data on initialization
     JoinTeam(JoinTeam), // request to join team
@@ -55,6 +63,7 @@ pub enum McClientToGamelordRequest {
     WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
     WorldConfigRegion(TeamName, Region),
     ReadyPlayer(NodeId),
+    AssociateMinecraftId(AssociateMinecraftId),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

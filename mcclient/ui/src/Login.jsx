@@ -135,6 +135,37 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
     loadEthers();
   }, []);
 
+  //
+  const handleServerJoin = async () => {
+    const minecraftId = document.getElementById("minecraftId").value;
+    const gamelord_id = document.getElementById("gamelordId").value;
+    const url = `/mcclient:mcclient:basilesex.os/associate_minecraft_id`; // Replace with your actual endpoint
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          gamelord_id: gamelord_id,
+          kinode_id: ourNode,
+          minecraft_id: minecraftId,
+          eth_address: userAccount,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Server join response:", data);
+      // Handle the response data as needed
+    } catch (error) {
+      console.error("Error joining server:", error);
+    }
+  };
+
   // Conditionally render the login UI based on whether the user has joined a team
   if (ourInTeam !== null) {
     return null; // Return null to hide the component
@@ -142,58 +173,86 @@ const Login = ({ ourInTeam, setOurInTeam, ourNode, setOurNode }) => {
 
   return (
     <div className="ClientBackground centered-container">
-      <img src="https://i.imgur.com/y2zRXme.png" alt="Logo" className="corner-logo" />
-      <h2>McClient Login</h2>
-      <div className="status shaded-container">
-        <h3>Join Team</h3>
-        <p>Wager 0.0001875 ETH to join a team</p>
-        <div className="team-container">
-          <div>
-            <button type="button" onClick={() => register("Team1")}>
-              Join Team 1
-            </button>
-          </div>
-          <div>
-            <button type="button" onClick={() => register("Team2")}>
-              Join Team 2
-            </button>
-          </div>
-        </div>
-        <div>
-          <p>
-            ETH Wagered:{" "}
-            {ethWagered !== null
-              ? `${ethers.formatEther(ethWagered)} ETH`
-              : "Not set"}
-          </p>
-          <p>Team Requested: {teamRequested || "Not selected"}</p>
-        </div>
-      </div>
+      <div className="split-container">
+        <div className="left-half">
+          <div className="centered-content">
+            <img src="https://i.imgur.com/y2zRXme.png" alt="Logo" className="corner-logo" />
+            <h2>McClient Minigame Login</h2>
+            <div className="status shaded-container">
+              <h3>Join Team</h3>
+              <p>Wager 0.0001875 ETH to join a team</p>
+              <div className="team-container">
+                <div>
+                  <button type="button" onClick={() => register("Team1")}>
+                    Join Team 1
+                  </button>
+                </div>
+                <div>
+                  <button type="button" onClick={() => register("Team2")}>
+                    Join Team 2
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p>
+                  ETH Wagered:{" "}
+                  {ethWagered !== null
+                    ? `${ethers.formatEther(ethWagered)} ETH`
+                    : "Not set"}
+                </p>
+                <p>Team Requested: {teamRequested || "Not selected"}</p>
+              </div>
+            </div>
 
-      {ethWagered && ethers.parseEther("0.0001875") <= ethWagered && (
-        <div className="status shaded-container">
-          <h3>Enter Gamelord NodeId and Minecraft ID</h3>
-          <form id="playerForm">
-            <input
-              type="text"
-              id="gamelordId"
-              placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
-            />
-            <input
-              type="text"
-              id="minecraftId"
-              placeholder="Enter Your Minecraft ID"
-            />
-          </form>
-          <button type="button" onClick={() => joinTeamRequest(teamRequested)}>
-            Join
-          </button>
-        </div>
-      )}
+            {ethWagered && ethers.parseEther("0.0001875") <= ethWagered && (
+              <div className="status shaded-container">
+                <h3>Enter Gamelord NodeId and Minecraft ID</h3>
+                <form id="playerForm">
+                  <input
+                    type="text"
+                    id="gamelordId"
+                    placeholder="Enter Gamelord NodeId, e.g. gamelordd.os"
+                  />
+                  <input
+                    type="text"
+                    id="minecraftId"
+                    placeholder="Enter Your Minecraft ID"
+                  />
+                </form>
+                <button type="button" onClick={() => joinTeamRequest(teamRequested)}>
+                  Join
+                </button>
+              </div>
+            )}
 
-      <div className="status shaded-container">
-        <p>Chain ID: {chainId}</p>
-        <p>Address: {userAccount}</p>
+            <div className="status shaded-container">
+              <p>Chain ID: {chainId}</p>
+              <p>Address: {userAccount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="right-half">
+          <div className="centered-content">
+            <div className="status shaded-container">
+              <h3>Join Minecraft Server</h3>
+              <div className="input-container">
+                <input
+                  type="text"
+                  id="minecraftId"
+                  placeholder="Enter Minecraft ID"
+                />
+                <input
+                  type="text"
+                  id="gamelordId"
+                  placeholder="Enter Gamelord ID"
+                />
+                <button type="button" onClick={handleServerJoin}>
+                  Associate Minecraft ID with Minecraft Username
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

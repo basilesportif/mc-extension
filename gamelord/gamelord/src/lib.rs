@@ -73,7 +73,7 @@ lazy_static! {
     };
 
     pub static ref MIN_ETH_WAGER: U256 = {
-        "30000000000000".parse().unwrap() // 0.00003 eth
+        "187500000000000".parse().unwrap() //  0.0001875 eth
     };
 }
 
@@ -325,6 +325,16 @@ fn handle_mcclient_request(
                 bytes: serde_json::to_vec(&diff)?,
             });
             return state.update_clients(&diff);
+        }
+        McClientToGamelordRequest::AssociateMinecraftId(associate_minecraft_id) => {
+            let minecraft_id = associate_minecraft_id.minecraft_id.clone();
+            let wallet = associate_minecraft_id.eth_address.clone();
+            state.mc_id_to_wallet.insert(minecraft_id, wallet);
+            state.save();
+            
+            println!("Associated Minecraft ID with wallet");
+            println!("got associate minecraft id");
+            return Ok(());
         }
     }
 }

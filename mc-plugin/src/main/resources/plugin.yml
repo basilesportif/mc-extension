@@ -2,4 +2,12 @@ name: MC-Kinode-Interface-Plugin
 version: 1.0
 main: org.kinode.MCKinodePlugin
 description: A plugin to log player movements to the console.
-
+commands:
+  nft:
+    description: Wrapper command for NFT plugin
+    usage: /nft <subcommand>
+    permission: mcplugin.nft
+permissions:
+  mcplugin.nft:
+    description: Allows use of the /nft command
+    default: op

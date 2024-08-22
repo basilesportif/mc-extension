@@ -5,7 +5,7 @@ use kinode_process_lib::{
 };
 use kinode_process_lib::NodeId;
 use mcstructs::{
-    Cube, CubeEffectList, GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Region,
+    Cube, CubeEffectList, GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Region, AssociateMinecraftId,
     WsPush,
 };
 use serde::{Deserialize, Serialize};
@@ -165,6 +165,27 @@ fn handle_http_request(
             // Save the state
             state.save();
 
+            http::send_response(
+                http::StatusCode::OK,
+                Some(HashMap::from([(
+                    "Content-Type".to_string(),
+                    "application/json".to_string(),
+                )])),
+                b"{\"message\": \"success\"}".to_vec(),
+            );
+            Ok(())
+        }
+        //TO DO: send to gamelord
+        "/associate_minecraft_id" => {
+            let ui_request: AssociateMinecraftId = serde_json::from_slice(&bytes)?;
+            let gamelord = Address::new(
+                ui_request.gamelord_id.clone(),
+                ("gamelord", "gamelord", "basilesex.os"),
+            );
+            let _ = Request::to(gamelord.clone())
+                .body(serde_json::to_vec(&McClientToGamelordRequest::AssociateMinecraftId(ui_request.clone()))?)
+                .send();
+            
             http::send_response(
                 http::StatusCode::OK,
                 Some(HashMap::from([(

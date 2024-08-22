@@ -52,7 +52,6 @@ public class MCKinodeWS extends WebSocketClient {
 
 
 
-
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         isConnected = true;
@@ -134,6 +133,31 @@ public class MCKinodeWS extends WebSocketClient {
                 responseArray = jsonResponse.getJSONArray("PlayerSpawnRequestDenied");
                 success = responseArray.getBoolean(0);
                 messageResponse = responseArray.getString(1);
+            } else if (jsonResponse.has("NFTOwnership")) {
+                // Handle NFTOwnership response
+                JSONArray nftOwnershipArray = jsonResponse.getJSONArray("NFTOwnership");
+                if (nftOwnershipArray.length() == 0) {
+                    // Send a message to the player if they have no NFTs
+                    Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                        Player player = Bukkit.getPlayer(playerName);
+                        if (player != null) {
+                            player.sendMessage("You have no NFTs");
+                        }
+                    });
+                } else {
+                    for (int i = 0; i < nftOwnershipArray.length(); i++) {
+                        JSONObject nftOwnership = nftOwnershipArray.getJSONObject(i);
+                        String name = nftOwnership.getString("name");
+                        String url = nftOwnership.getString("url");
+                        int width = nftOwnership.getInt("width");
+                        int height = nftOwnership.getInt("height");
+
+                        // Execute the imageframe create command on behalf of the player
+                        Bukkit.getScheduler().runTask(MCKinodePlugin.getInstance(), () -> {
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "/imageframe create " + name + " " + url + " " + width + " " + height);
+                        });
+                    }
+                }
             } else {
                 System.err.println("Unexpected response format: " + response);
                 return;

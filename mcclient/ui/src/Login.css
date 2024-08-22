@@ -97,3 +97,53 @@ input {
   width: 50px; /* Adjust size as needed */
   height: auto;
 }
+
+.split-container {
+  display: flex;
+}
+
+.left-half, .right-half {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+}
+
+.left-half {
+  border-right: 1px solid #ccc; /* Optional: Add a border to separate the halves */
+}
+
+.centered-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center; /* Center text */
+}
+
+.status {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.shaded-container {
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.input-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+button {
+  display: block; /* Ensure buttons are block elements */
+  margin: 10px auto; /* Center buttons horizontally */
+}
