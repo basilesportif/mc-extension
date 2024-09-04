@@ -3,20 +3,20 @@ use lazy_static::lazy_static;
 use std::env;
 use std::io::Cursor;
 
-use chrono::Utc;
-use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
+// use folder_transfer::FolderTransfer;
+use kinode_process_lib::http::bind_ws_path;
 use kinode_process_lib::{
     await_message, call_init,
-    eth::{EthConfigAction, NodeOrRpcUrl, Provider, ProviderConfig},
-    get_blob,
+    eth::{EthConfigAction, NodeOrRpcUrl, ProviderConfig},
     http::{self},
-    println, Address, LazyLoadBlob, Message, Request, Response,
+    println, Address, Message, Request, spawn,
+    OnExit, our_capabilities
 };
-mod encryption;
-mod eth_utils;
-use eth_utils::Caller;
-mod gamelord_caller;
-use gamelord_caller::GamelordCaller;
+use std::sync::RwLock;
+
+mod contract_utils;
+use contract_utils::{encrypt_data, decrypt_data, Caller, GamelordCaller};
+
 
 use alloy::signers::{local::PrivateKeySigner, SignerSync};
 use alloy_primitives::{Signature, U256};
@@ -24,22 +24,46 @@ use alloy_signer::{LocalWallet, Signer};
 
 mod gamelord_types;
 use gamelord_types::{
-    Action, ActivePlayer, CubeToOwnerTrait, GamelordRequestMinecraft, GamelordResponseMinecraft,
+    Action, ActivePlayer, GamelordRequestMinecraft, GamelordResponseMinecraft,
     PrivateKey, SerializableWallet, State,
 };
 use mcstructs::{
-    ChatMessage, Cube, CubeEffectList, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Player,
-    Region, TeamName, TeamNameToRegion, WsPush,
+    ChatMessage, GameLobbyDiff, McClientToGamelordRequest, Player, TeamName, WorkerRequest, WorkerStatus,
+    get_worker_address, clear_worker_address,
 };
-use std::collections::HashMap;
-use std::str::FromStr;
 
-use crate::encryption::{decrypt_data, encrypt_data};
+mod handlers;
+use handlers::{handle_driver_message, handle_http_request, handle_mcclient_request};
+
 
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
+
+// spawns a worker process for folder transfer (whether it will be for receiving or sending)
+fn initialize_worker(
+    our: Address,
+    current_worker_address: &mut Option<Address>,
+) -> anyhow::Result<()> {
+    let our_worker = spawn(
+        None,
+        &format!("{}/pkg/worker.wasm", our.package_id()),
+        OnExit::None,
+        our_capabilities(),
+        vec![],
+        false,
+    )?;
+    //
+    // temporarily stores worker address while the worker is alive
+    *current_worker_address = Some(Address {
+        node: our.node.clone(),
+        process: our_worker.clone(),
+    });
+    println!("worker address: {:?}", current_worker_address);
+    println!("worker initialized");
+    Ok(())
+}
 
 lazy_static! {
     pub static ref CURRENT_CHAIN_ID: u64 = {
@@ -76,616 +100,11 @@ lazy_static! {
         "30000000000000".parse().unwrap() // 0.00003 eth
     };
 }
-
-fn load_world(state: &mut State) {
-    let body = get_blob().unwrap_or_default();
-    println!("body: {:?}", body);
-    let body_str = String::from_utf8_lossy(&body.bytes);
-    println!("body_str: {:?}", body_str); // This should be the raw bytes of the body
-    match serde_json::from_str::<TeamNameToRegion>(&body_str) {
-        Ok(new_world_config) => {
-            state.lobby.world_config = new_world_config;
-            let _ = state
-                .cube_to_owner
-                .sync_with_world_config(&state.lobby.world_config);
-            state.save();
-
-            println!("World loaded from request");
-            http::send_response(http::StatusCode::OK, None, b"World Loaded".to_vec());
-        }
-        Err(e) => {
-            println!("Failed to parse world data: {:?}", e);
-            http::send_response(
-                http::StatusCode::BAD_REQUEST,
-                None,
-                b"Invalid world data".to_vec(),
-            );
-        }
-    }
+// worker address for folder transfer
+lazy_static! {  
+    pub static ref WORKER_ADDRESS: RwLock<Option<Address>> = RwLock::new(None);
 }
 
-fn edit_lobby(state: &mut State, ws_channel_id: &mut Option<u32>) -> anyhow::Result<()> {
-    let bytes = get_blob()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
-        .bytes;
-    let edit_lobby = serde_json::from_slice::<GameLobbyDiff>(&bytes)?;
-    if let GameLobbyDiff::EditLobby {
-        name,
-        minecraft_server_address,
-    } = edit_lobby.clone()
-    {
-        if let Err(e) = state.lobby.apply_diff(&edit_lobby) {
-            return Err(anyhow::anyhow!("Failed to apply lobby diff: {}", e));
-        }
-        state.save();
-
-        let blob = LazyLoadBlob {
-            mime: Some("application/json".to_string()),
-            bytes: serde_json::to_vec(&edit_lobby)?,
-        };
-        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-
-        let _ = state.update_clients(&GameLobbyDiff::EditLobby {
-            name: name.clone(),
-            minecraft_server_address: minecraft_server_address.clone(),
-        });
-
-        http::send_response(http::StatusCode::OK, None, b"Lobby updated.".to_vec());
-        return Ok(());
-    } else {
-        http::send_response(
-            http::StatusCode::BAD_REQUEST,
-            None,
-            b"Invalid lobby update request.".to_vec(),
-        );
-        return Err(anyhow::anyhow!("Invalid lobby update request."));
-    }
-}
-
-fn add_to_team(
-    state: &mut State,
-    kinode_id: String,
-    minecraft_id: String,
-    team_name: TeamName,
-    ws_channel_id: &mut Option<u32>,
-) -> anyhow::Result<()> {
-    let player = Player {
-        kinode_id: kinode_id,
-        minecraft_player_name: minecraft_id,
-    };
-    let diff = &GameLobbyDiff::AddPlayerToTeam {
-        player: player.clone(),
-        team: team_name.clone(),
-    };
-    match state.lobby.apply_diff(diff) {
-        Ok(lobby) => {
-            state.lobby = lobby;
-            state.save();
-            let blob = LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(diff)?,
-            };
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-
-            return state.update_clients(&GameLobbyDiff::AddPlayerToTeam {
-                player: player.clone(),
-                team: team_name.clone(),
-            });
-        }
-        Err(e) => {
-            println!("mcclient: error applying diff: {}", e);
-            return Ok(());
-        }
-    };
-}
-
-fn handle_mcclient_request(
-    state: &mut State,
-    gamelord_caller: &mut Option<GamelordCaller>,
-    ws_channel_id: &mut Option<u32>,
-    request: &McClientToGamelordRequest,
-    message: &Message,
-) -> anyhow::Result<()> {
-    //TODO: just respond directly to the requestor
-    match request.clone() {
-        McClientToGamelordRequest::Init => {
-            // sends init only to requestor, confirms that they are in team (loops just look dumb)
-            for player in state.lobby.team1.players.iter() {
-                if player.kinode_id == message.source().node() {
-                    let diff =
-                        GameLobbyDiff::Init(state.lobby.clone().lobby_for_team(TeamName::Team1));
-                    println!("Sending {:?} to {:?}", diff, player.kinode_id);
-                    Request::new()
-                        .body(serde_json::to_vec(&diff)?)
-                        .target(Address::new(
-                            &player.kinode_id,
-                            ("mcclient", "mcclient", "basilesex.os"),
-                        ))
-                        .send()?;
-                }
-            }
-            for player in state.lobby.team2.players.iter() {
-                if player.kinode_id == message.source().node() {
-                    let diff =
-                        GameLobbyDiff::Init(state.lobby.clone().lobby_for_team(TeamName::Team1));
-                    println!("Sending {:?} to {:?}", diff, player.kinode_id);
-                    Request::new()
-                        .body(serde_json::to_vec(&diff)?)
-                        .target(Address::new(
-                            &player.kinode_id,
-                            ("mcclient", "mcclient", "basilesex.os"),
-                        ))
-                        .send()?;
-                }
-            }
-            return Ok(());
-        }
-        McClientToGamelordRequest::JoinTeam(join_team) => {
-            println!("got join team");
-            let node_id = message.source().node().to_string();
-            if let Some(..) = state.node_to_eth.get(&node_id) {
-                println!("node already in team");
-                return Ok(());
-                // how to make this idempotent properly?
-                // return add_to_team(
-                //     state,
-                //     node_id,
-                //     join_team.minecraft_id,
-                //     join_team.team_name,
-                //     ws_channel_id,
-                // );
-            }
-
-            let signature = match Signature::from_str(join_team.signature.as_str()) {
-                Ok(signature) => signature,
-                Err(e) => return Err(anyhow::anyhow!("Error: {}", e)),
-            };
-            println!("signature: {:?}", signature);
-            let recovered_address = signature.recover_address_from_msg(node_id.clone())?;
-            if recovered_address != join_team.eth_address {
-                return Err(anyhow::anyhow!("Invalid signature"));
-            }
-            // get eth wagered and team from chain
-            let caller = match gamelord_caller {
-                Some(caller) => caller,
-                None => {
-                    println!("no caller");
-                    println!("FIX: please use EncryptWallet and then DecryptWallet actions to make caller usable");
-                    return Ok(());
-                }
-            };
-
-            let (amount_wagered, team) = caller.get_player_info(recovered_address)?;
-            if amount_wagered < *MIN_ETH_WAGER {
-                return Err(anyhow::anyhow!("Player has not wagered enough ETH."));
-            }
-
-            println!("amount wagered: {:?}", amount_wagered);
-
-            state
-                .node_to_eth
-                .insert(node_id.clone(), (recovered_address, amount_wagered));
-            state.save();
-            println!("adding to team");
-            let _ = add_to_team(state, node_id, join_team.minecraft_id, team, ws_channel_id);
-            return Ok(());
-        }
-        McClientToGamelordRequest::SendMessage(chat_message) => {
-            let sender_kinode_id = message.source().node().to_string();
-            let sender_team = state.lobby.kinode_id_in_team(&sender_kinode_id);
-            let last_msg_id = if let Some(sender_team) = sender_team {
-                match sender_team {
-                    TeamName::Team1 => state.lobby.team1.last_message_id,
-                    TeamName::Team2 => state.lobby.team2.last_message_id,
-                }
-            } else {
-                return Err(anyhow::anyhow!("Sender is not in a team"));
-            };
-            let id = last_msg_id + 1;
-            let diff = GameLobbyDiff::Message({
-                ChatMessage {
-                    id,
-                    time: Utc::now().timestamp() as u64,
-                    from: state.lobby.kinode_id_to_player(&sender_kinode_id).unwrap(),
-                    msg: chat_message.clone(),
-                }
-            });
-            println!("diff: {:?}", diff);
-            if let Ok(lobby) = state.lobby.apply_diff(&diff) {
-                state.lobby = lobby;
-                state.save();
-                println!("updated clients");
-                return state.update_clients(&diff);
-            }
-            return Ok(());
-        }
-        McClientToGamelordRequest::WorldConfigFull(world_config) => {
-            state.lobby.world_config = world_config.clone();
-            let _ = state
-                .cube_to_owner
-                .sync_with_world_config(&state.lobby.world_config);
-            state.save();
-            return state.update_clients(&GameLobbyDiff::WorldConfigFull(world_config.clone()));
-        }
-        McClientToGamelordRequest::WorldConfigRegion(team, region) => {
-            let diff = GameLobbyDiff::WorldConfigRegion(team, region);
-            let _ = state.lobby.apply_diff(&diff);
-            let _ = state
-                .cube_to_owner
-                .sync_with_world_config(&state.lobby.world_config);
-            state.save();
-            return state.update_clients(&diff);
-        }
-        McClientToGamelordRequest::ReadyPlayer(kinode_id) => {
-            let diff = GameLobbyDiff::ReadyPlayer(kinode_id.clone());
-            let _ = state.lobby.apply_diff(&diff);
-            state.save();
-            send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, LazyLoadBlob {
-                mime: Some("application/json".to_string()),
-                bytes: serde_json::to_vec(&diff)?,
-            });
-            return state.update_clients(&diff);
-        }
-    }
-}
-
-//have everything handled here
-fn handle_kinode_message(
-    state: &mut State,
-    gamelord_caller: &mut Option<GamelordCaller>,
-    ws_channel_id: &mut Option<u32>,
-    message: &Message,
-) -> anyhow::Result<()> {
-    //TODO: make sure the source of the message is mcclient
-    println!("handle kinode message entered");
-    if let Ok(request) = serde_json::from_slice::<McClientToGamelordRequest>(&message.body()) {
-        println!("Received request: {:?}", request);
-        return handle_mcclient_request(state, gamelord_caller, ws_channel_id, &request, message);
-    }
-    match GamelordRequestMinecraft::parse(message.body())? {
-        GamelordRequestMinecraft::CubeTransitionRequest { minecraft_id, cube } => {
-            //check whether the playing phase has started ()
-            if !state.lobby.game_started {
-                println!("Action denied, playing phase has not started.");
-
-                // Send the response to the player
-                let response = serde_json::to_vec(
-                    &GamelordResponseMinecraft::TransitionDeniedResponse(
-                        "Action denied".to_string(),
-                    ),
-                ).expect("failed to parse gamelord transition denied response");
-                Response::new().body(response).send().unwrap();
-                return Ok(());
-            }
-            // check if the game is over
-            if cube == state.lobby.goal_post {
-                println!("Goal post reached, game over!");
-
-                // Determine the winning team
-                let winning_team = if let Some(active_player) = state.active_players.get(&minecraft_id) {
-                    active_player.team.clone()
-                } else {
-                    return Err(anyhow::anyhow!("Player not found in active players"));
-                };
-                 // Fetch team players and their spawn points
-                let team1_players = state.lobby.team1.players.clone();
-                let team2_players = state.lobby.team2.players.clone();
-                let team1_spawn = state.lobby.team1.spawn_point.clone();
-                let team2_spawn = state.lobby.team2.spawn_point.clone();
-                state.save();
-                // Send the response to the player
-                let response = serde_json::to_vec(
-                    &GamelordResponseMinecraft::GameOver {
-                        winning_team: winning_team.clone(),
-                        team1_players,
-                        team2_players,
-                        team1_spawn,
-                        team2_spawn,
-                    }
-                ).expect("failed to parse gamelord cube transition response");
-                let message = serde_json::to_vec(&serde_json::json!({ "winning_team": winning_team }))
-                    .expect("failed to serialize JSON");
-                let blob = LazyLoadBlob {
-                    mime: Some("application/json".to_string()),
-                    bytes: message,
-                };
-                send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-                Response::new().body(response).send().unwrap();
-                
-                println!("winning team: {:?}", winning_team.clone());
-                return Ok(());
-            }
-            // we get information about what team the player is in based on Active players
-            if let Some(active_player) = state.active_players.get_mut(&minecraft_id) {
-                println!(
-                    "Player {} is active in the game on team {:?}.",
-                    minecraft_id, active_player.team
-                );
-
-                // Update the player's current cube
-                active_player.current_cube = cube.clone();
-
-                let world_config = &state.lobby.world_config;
-                let cube_to_owner = &state.cube_to_owner;
-
-                if let Some(owners) = cube_to_owner.get(&cube) {
-                    if !owners.contains(&active_player.team) {
-                        // Cube is owned by enemy team(s)
-                        for owner in owners {
-                            if let Some(team_cubes) = world_config.get(owner) {
-                                if let Some(cube_effects) = team_cubes.to_hashmap().get(&cube) {
-                                    println!(
-                                        "Cube effects for enemy owner {:?}: {:?}",
-                                        owner, cube_effects
-                                    );
-                                    // Send cube effects to mcdriver
-                                    let response = serde_json::to_vec(
-                                        &GamelordResponseMinecraft::TransitionTriggeredResponse(
-                                            minecraft_id.clone(),
-                                            cube_effects.clone(),
-                                        ),
-                                    )
-                                    .expect("failed to parse gamelord cube transition response");
-                                    Response::new().body(response).send().unwrap();
-                                    return Ok(());
-                                }
-                            }
-                        }
-                    }
-                }
-                // If we reach here, either the cube is not owned, or it's owned by the player's team
-                println!("Cube not in enemy region, you are clear");
-                let response =
-                        serde_json::to_vec(&GamelordResponseMinecraft::TransitionSilentResponse(
-                            minecraft_id.clone(),
-                            "No effects applied".to_string(),
-                        ))
-                            .expect("failed to parse gamelord cube transition response");
-                Response::new().body(response).send().unwrap();
-                Ok(())
-            } else {
-                println!("Player {} is not active in the game.", minecraft_id);
-                Err(anyhow::anyhow!("Player not found in active players"))
-            }
-        }
-
-        // this comes from MC-Driver
-        // TO DO, connect this to the team registration interface for checking
-        GamelordRequestMinecraft::PlayerSpawnRequest { minecraft_id } => {
-            println!(
-                "Player spawn request received for player: {:?}",
-                minecraft_id
-            );
-
-            let team_name = if state
-                .lobby
-                .team1
-                .players
-                .iter()
-                .any(|p| p.minecraft_player_name == minecraft_id)
-            {
-                TeamName::Team1
-            } else if state
-                .lobby
-                .team2
-                .players
-                .iter()
-                .any(|p| p.minecraft_player_name == minecraft_id)
-            {
-                TeamName::Team2
-            } else {
-                println!("Player {} is not assigned to a team", minecraft_id);
-                let response =
-                    serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestDenied(
-                        false,
-                        "Player is not assigned to a team.".to_string(),
-                    ))
-                    .expect("Failed to serialize response");
-                Response::new().body(response).send().unwrap();
-                return Ok(());
-            };
-
-            let spawn_cube = match team_name {
-                TeamName::Team1 => &state.lobby.team1.spawn_point,
-                TeamName::Team2 => &state.lobby.team2.spawn_point,
-            };
-
-            let active_player = ActivePlayer {
-                kinode_id: minecraft_id.clone(),
-                minecraft_player_name: minecraft_id.clone(),
-                current_cube: spawn_cube.clone(),
-                team: team_name.clone(),
-            };
-
-            state
-                .active_players
-                .insert(minecraft_id.clone(), active_player);
-
-            println!(
-                "Player {} added to active players on team {:?}",
-                minecraft_id, &team_name
-            );
-
-            let response =
-                serde_json::to_vec(&GamelordResponseMinecraft::PlayerSpawnRequestAuthorized(
-                    true,
-                    format!("Player added to team {:?}.", &team_name),
-                    spawn_cube.clone(),
-                ))
-                .expect("Failed to serialize response");
-            Response::new().body(response).send().unwrap();
-            Ok(())
-        }
-        // have the option that someone can leave the game
-        GamelordRequestMinecraft::PlayerLeaveRequest { minecraft_id } => {
-            if state.active_players.contains_key(&minecraft_id) {
-                state.active_players.remove(&minecraft_id);
-                println!("Player with kinode_id {} has left the game.", &minecraft_id);
-                state.save();
-            } else {
-                println!(
-                    "Player with kinode_id {} is not in the active players list.",
-                    &minecraft_id
-                );
-            }
-            Ok(())
-        }
-    }
-}
-
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct DisperseFundsRequest {
-    winning_team: TeamName,
-}
-
-fn handle_http_request(
-    state: &mut State,
-    gamelord_caller: &mut Option<GamelordCaller>,
-    ws_channel_id: &mut Option<u32>,
-    message: &Message,
-) -> anyhow::Result<()> {
-    let our_http_request = serde_json::from_slice::<http::HttpServerRequest>(message.body())?;
-    match our_http_request {
-        http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
-            println!("got web socket open");
-            *ws_channel_id = Some(channel_id);
-            send_ws_push(
-                ws_channel_id.unwrap_or(0),
-                WsMessageType::Text,
-                LazyLoadBlob {
-                    mime: Some("application/json".to_string()),
-                    bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone()))?,
-                },
-            );
-
-            return Ok(());
-        }
-        http::HttpServerRequest::WebSocketClose { .. } => {
-            *ws_channel_id = None;
-            return Ok(());
-        }
-        http::HttpServerRequest::WebSocketPush {
-            channel_id,
-            message_type,
-        } => {
-            let Some(blob) = get_blob() else {
-                return Ok(());
-            };
-
-            let ws_push = serde_json::from_slice::<WsPush>(&blob.bytes)?;
-            match ws_push {
-                WsPush::ConfigurePoints {
-                    team1_spawn,
-                    team2_spawn,
-                    goal_post,
-                } => {
-                    let diff = GameLobbyDiff::ConfigurePoints {
-                        team1_spawn,
-                        team2_spawn,
-                        goal_post,
-                    };
-                    println!("diff: {:?}", diff);
-                    let _ = state.lobby.apply_diff(&diff);
-                    state.save();
-                    let _ = state.update_clients(&diff);
-                }
-                _ => {}
-            }
-            return Ok(());
-        }
-        http::HttpServerRequest::Http(http_request) => {
-            let _resp = if let Ok(path) = http_request.path() {
-                println!("HTTP request path: {:?}", path);
-                match path.as_str() {
-                    "/world_config" => {
-                        let response = serde_json::to_string(&state.lobby.world_config).unwrap();
-                        http::send_response(http::StatusCode::OK, None, response.into_bytes());
-                    }
-                    "/active_players" => {
-                        let response = serde_json::to_string(&state.active_players).unwrap();
-                        http::send_response(http::StatusCode::OK, None, response.into_bytes());
-                    }
-                    "/api/lockGame" => {
-                        state.lobby.game_started = true;
-                        state.save();
-                        let diff = GameLobbyDiff::GameStarted(true);
-                        let _ = state.update_clients(&diff);
-                        let blob = LazyLoadBlob {
-                            mime: Some("application/json".to_string()),
-                            bytes: serde_json::to_vec(&diff)?,
-                        };
-                        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
-                        http::send_response(http::StatusCode::OK, None, b"Game locked".to_vec());
-                    }
-                    "/api/loadWorld" => load_world(state),
-                    "/api/deleteWorld" => {
-                        state.lobby.world_config.clear();
-                        state.cube_to_owner.clear();
-                        state.save();
-                        println!("World deleted from request");
-                        http::send_response(http::StatusCode::OK, None, b"World Deleted".to_vec());
-                    }
-                    "/api/disperseFunds" => {
-                        let bytes = get_blob()
-                            .ok_or_else(|| anyhow::anyhow!("Failed to get blob"))?
-                            .bytes;
-                        // Deserialize the JSON into the DisperseFundsRequest struct
-                        let request: DisperseFundsRequest = serde_json::from_slice(&bytes)?;
-                        let winning_team = request.winning_team;
-                        println!("Dispersing funds to winning team: {:?}", winning_team);
-                        if let Some(caller) = gamelord_caller {
-                            let result = caller.release_funds(winning_team);
-                            println!("Funds dispersed result: {:?}", result);
-                            http::send_response(http::StatusCode::OK, None, b"Funds Dispersed".to_vec());
-                        } else {
-                            println!("No contract caller found");
-                            http::send_response(http::StatusCode::INTERNAL_SERVER_ERROR, None, b"No contract caller found".to_vec());
-                        }
-                        let _ = state.update_clients(&GameLobbyDiff::Init(
-                            state.lobby.clone().clear_teams(), // clears the WHOLE lobby, including the teams (for dispering diffs to clients)
-                        ));
-                        send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, LazyLoadBlob {
-                            mime: Some("application/json".to_string()),
-                            bytes: serde_json::to_vec(&GameLobbyDiff::Init(state.lobby.clone().clear_teams()))?,
-                        });
-                        state.clear_teams(); // clears the state on gamelord
-                        state.save();
-                    }
-                    "/api/clearTeams" => {
-                        // need to update clients with lobby with empty teams before actually clearing teams,
-                        // because it sends update to team members
-                        let _ = state.update_clients(&GameLobbyDiff::Init(
-                            state.lobby.clone().clear_teams(), // clears the WHOLE lobby, including the teams (for dispering diffs to clients)
-                        ));
-                        state.clear_teams(); // clears the state on gamelord
-                        state.save();
-                        http::send_response(http::StatusCode::OK, None, b"Teams Cleared".to_vec());
-                    }
-                    "/api/editLobby" => edit_lobby(state, ws_channel_id).unwrap_or(()),
-                    _ => http::send_response(
-                        http::StatusCode::NOT_FOUND,
-                        None,
-                        b"Not Found".to_vec(),
-                    ),
-                }
-            } else {
-                http::send_response(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    None,
-                    b"Internal Server Error".to_vec(),
-                );
-            };
-        }
-        _ => http::send_response(
-            http::StatusCode::METHOD_NOT_ALLOWED,
-            None,
-            b"Method Not Allowed".to_vec(),
-        ),
-    }
-    Ok(())
-}
 
 // used for eth contract testing
 fn handle_terminal_message(
@@ -790,18 +209,40 @@ fn handle_terminal_message(
     return Ok(());
 }
 
+fn handle_worker_message(
+    message: Message,
+) -> anyhow::Result<()> {
+    match serde_json::from_slice::<WorkerStatus>(message.body())? {
+        WorkerStatus::Done => {
+            clear_worker_address(&WORKER_ADDRESS);
+            println!("Received status: done from worker");
+            return Ok(());
+        }
+        _ => {
+            println!("Received unknown message from worker: {:?}", message);
+        }
+    }
+    Ok(())
+}
+
 fn handle_message(
     state: &mut State,
     gamelord_caller: &mut Option<GamelordCaller>,
     ws_channel_id: &mut Option<u32>,
+    our: &Address,
 ) -> anyhow::Result<()> {
     let message = await_message()?;
-
+    // Check if the source of the message is the worker address
+    if let Some(worker_address) = get_worker_address(&WORKER_ADDRESS) {
+        if message.source() == &worker_address {
+            return handle_worker_message(message);
+        }
+    }
     if let "http_server:distro:sys" | "http_client:distro:sys" =
         message.source().process.to_string().as_str()
     {
         println!("HTTP request received.");
-        return handle_http_request(state, gamelord_caller, ws_channel_id, &message);
+        return handle_http_request(state, gamelord_caller, ws_channel_id, &message, our);
     }
     if message.is_local(&message.source()) {
         println!("Local message received from: {:?}", message.source());
@@ -809,7 +250,11 @@ fn handle_message(
         if message.source().process.package_name == "terminal" {
             return handle_terminal_message(state, gamelord_caller, ws_channel_id, &message);
         }
-        handle_kinode_message(state, gamelord_caller, ws_channel_id, &message)?;
+        if message.source().process.package_name == "mcclient" {
+            return handle_mcclient_request(state, gamelord_caller, ws_channel_id, &message, our);
+        }
+
+        handle_driver_message(state, gamelord_caller, ws_channel_id, &message, our)?;
     } else {
         println!("Message from invalid source: {:?}", message.source());
     }
@@ -832,11 +277,11 @@ fn init(our: Address) {
         "/api/clearTeams",
         "/api/lockGame",
         "/api/disperseFunds",
+        "/api/loadFolder",
     ] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
-    http::bind_http_path("/active_players", false, false).expect("failed to bind http path");
-    http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
+    //http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap();
 
     let _ = Request::to(("our", "eth", "distro", "sys"))
         .body(serde_json::to_vec(&EthConfigAction::AddProvider(ProviderConfig {
@@ -856,7 +301,7 @@ fn init(our: Address) {
     }
 
     loop {
-        match handle_message(&mut state, &mut gamelord_caller, &mut ws_channel_id) {
+        match handle_message(&mut state, &mut gamelord_caller, &mut ws_channel_id, &our) {
             Ok(()) => {}
             Err(e) => {
                 println!("error from somewhere: {:?}", e);

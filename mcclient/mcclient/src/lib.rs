@@ -1,48 +1,47 @@
 use kinode_process_lib::http::{bind_ws_path, send_ws_push, WsMessageType};
 use kinode_process_lib::{
-    await_message, call_init, get_blob, get_state, http, println, set_state, Address, LazyLoadBlob,
-    Request,
+    await_message, call_init, get_blob, http, println, Address, LazyLoadBlob,
+    Request, Message
 };
+use kinode_process_lib::vfs::{VfsAction, VfsRequest};
 use kinode_process_lib::NodeId;
 use mcstructs::{
-    Cube, CubeEffectList, GameLobby, GameLobbyDiff, JoinTeam, McClientToGamelordRequest, Region,
-    WsPush,
+    FolderTransfer, GameLobbyDiff, JoinTeam,
+    McClientToGamelordRequest, WorkerRequest,
+    WorkerStatus, WsPush, get_worker_address,
+    clear_worker_address
 };
-use serde::{Deserialize, Serialize};
+use lazy_static::lazy_static;
+mod mcclient_types;
+use mcclient_types::{State, initialize_worker};
 use std::collections::HashMap;
-
+use std::sync::RwLock;
 wit_bindgen::generate!({
     path: "target/wit",
     world: "process-v0",
 });
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct State {
-    pub our: Address,
-    pub gamelord_address: Option<Address>,
-    pub lobby: GameLobby,
+// worker address for folder transfer
+lazy_static! {
+    pub static ref WORKER_ADDRESS: RwLock<Option<Address>> = RwLock::new(None);
 }
 
-impl State {
-    pub fn new(our: &Address) -> Self {
-        State {
-            our: our.clone(),
-            gamelord_address: None,
-            lobby: GameLobby::new(),
-        }
-    }
-    pub fn fetch() -> Option<State> {
-        if let Some(state_bytes) = get_state() {
-            bincode::deserialize(&state_bytes).ok()
-        } else {
-            None
-        }
-    }
-    pub fn save(&self) {
-        let serialized_state = bincode::serialize(self).expect("Failed to serialize state");
-        set_state(&serialized_state);
-    }
+fn folder_data_cleanup(our: &Address) -> anyhow::Result<()> {
+    let receiving_dir = format!("{}/pkg/ui/mctex", our.package_id());
+    // removing the dir, and creating a fresh one
+    let request: VfsRequest = VfsRequest {
+        path: receiving_dir.to_string(),
+        action: VfsAction::RemoveDirAll,
+    };
+    let _message = Request::new()
+        .target(("our", "vfs", "distro", "sys"))
+        .body(serde_json::to_vec(&request)?)
+        .send_and_await_response(5)?;
+
+    println!("removed dir: {}, response: {:?}", receiving_dir, _message);
+
+    Ok(()) 
 }
+
 
 fn handle_http_request(
     state: &mut State,
@@ -136,8 +135,35 @@ fn handle_http_request(
                 .body(serde_json::to_vec(&McClientToGamelordRequest::Init).unwrap())
                 .send();
 
-            state.gamelord_address = Some(gamelord);
+            state.gamelord_address = Some(gamelord.clone());
             state.save();
+
+            let receiving_dir = format!("{}/pkg/ui/mctex", our.package_id());
+            println!("receiving_dir: {}", receiving_dir); // Debug print statement
+            let mut current_worker_address = None;
+
+            initialize_worker(our.clone(), &mut current_worker_address)?;
+            println!("current worker address: {:?}", current_worker_address);
+            
+            let _ = Request::new()
+                .body(serde_json::to_vec(&WorkerRequest::InitializeReceiverWorker {
+                    receive_to_dir: receiving_dir,
+                })?)
+                .target(&current_worker_address.clone().unwrap())
+                .send()?;
+
+            // send request to target node
+            let request_folder_message =
+                serde_json::to_vec(&FolderTransfer::RequestFolderMessage {
+                    worker_address: current_worker_address.clone().unwrap(),
+                    folder: format!("{}/pkg/ui", our.package_id()),
+                    encrypt: false,
+                })?;
+
+            let _request = Request::to(gamelord.clone())
+            .body(request_folder_message)
+            .send()?;
+
 
             http::send_response(
                 http::StatusCode::OK,
@@ -151,7 +177,6 @@ fn handle_http_request(
         }
         "/ready_player" => {
             println!("http request: ready_player");
-
             let ui_request: NodeId = serde_json::from_slice(&bytes)?;
             let gamelord = state.gamelord_address.clone().ok_or_else(|| anyhow::anyhow!("No gamelord address"))?;
             let gamelord = Address::new(
@@ -164,7 +189,6 @@ fn handle_http_request(
             
             // Save the state
             state.save();
-
             http::send_response(
                 http::StatusCode::OK,
                 Some(HashMap::from([(
@@ -186,10 +210,16 @@ fn handle_gamelord_update(
     state: &mut State,
     ws_channel_id: &mut Option<u32>,
     body: &[u8],
+    our: &Address,
 ) -> anyhow::Result<()> {
     println!("received update from gamelord");
     let deserialized = serde_json::from_slice::<GameLobbyDiff>(body)?;
     println!("deserialized update: {:#?}", deserialized);
+
+    if let GameLobbyDiff::GameOver { .. } = deserialized {
+        let _ =folder_data_cleanup(our);
+    }
+
     state.lobby = match state.lobby.apply_diff(&deserialized) {
         Ok(lobby) => lobby,
         Err(e) => {
@@ -206,6 +236,20 @@ fn handle_gamelord_update(
     send_ws_push(ws_channel_id.unwrap_or(0), WsMessageType::Text, blob);
     Ok(())
 }
+fn handle_worker_message(
+    message: Message,
+) -> anyhow::Result<()> {
+    match serde_json::from_slice::<WorkerStatus>(message.body())? {
+        WorkerStatus::Done => {
+            clear_worker_address(&WORKER_ADDRESS);
+            println!("Received status: done from worker");
+        }
+        _ => {
+            println!("Received unknown message from worker: {:?}", message);
+        }
+    }
+    Ok(())
+}
 
 fn handle_message(
     state: &mut State,
@@ -213,17 +257,19 @@ fn handle_message(
     our: &Address,
 ) -> anyhow::Result<()> {
     let message = await_message()?;
-
-    if let Some(gamelord) = &state.gamelord_address {
-        if message.source() == gamelord {
-            return handle_gamelord_update(state, ws_channel_id, message.body());
+    if let Some(worker_address) = get_worker_address(&WORKER_ADDRESS) {
+        if message.source() == &worker_address {
+            return handle_worker_message(message);
         }
     }
-
+    if let Some(gamelord) = &state.gamelord_address {
+        if message.source() == gamelord {
+            return handle_gamelord_update(state, ws_channel_id, message.body(), our);
+        }
+    }
     if message.source().node() == state.our.node() {
         return handle_http_request(state, ws_channel_id, message.body(), our);
     }
-
     Ok(())
 }
 
@@ -234,7 +280,7 @@ fn init(our: Address) {
     bind_ws_path("/", true, false).unwrap();
 
     let _ = http::serve_ui(&our, "ui", true, false, vec!["/"]);
-    for path in ["/join_team", "/ready_player"] {
+    for path in ["/join_team", "/ready_player", "/uploadFolder"] {
         http::bind_http_path(path, true, false).expect("failed to bind http path");
     }
     http::serve_index_html(&our, "ui", true, false, vec!["/"]).unwrap_or_default();

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "mcclient",
+    "worker",
 ]
 
 [profile.release]

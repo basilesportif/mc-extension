@@ -1,5 +1,5 @@
 use alloy_sol_types::{sol, SolCall, SolValue};
-use crate::eth_utils::Caller;
+use crate::contract_utils::eth_utils::Caller;
 use alloy_primitives::{FixedBytes, U256};
 use kinode_process_lib::{
     eth::{Address as EthAddress},

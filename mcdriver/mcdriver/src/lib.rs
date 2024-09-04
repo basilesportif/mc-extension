@@ -2,8 +2,7 @@ use std::str::FromStr;
 use kinode_process_lib::{http, ProcessId};
 use kinode_process_lib::{
     await_message, call_init, get_blob, http::send_ws_push, println, Address, LazyLoadBlob,
-    Message, Request,
-};
+    Message, Request,};
 use serde_json::Value;
 
 wit_bindgen::generate!({
@@ -30,29 +29,35 @@ fn is_expected_channel_id(
     Ok(channel_id == current_channel_id)
 }
 
-// forward messages to gamelord
+// The body of the request is deserialized by Gamelord, this function just relays the request to the gamelord
+// and returns the response from Gamelord
 fn process_gamelord_request(request: &[u8]) -> anyhow::Result<Vec<u8>> {
     let response = Request::new()
-        .target(Address::new("gohlubwnst.os", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
+        .target(Address::new("uncentered-gamelord.os", ProcessId::from_str("gamelord:gamelord:basilesex.os").unwrap()))
         .body(request.to_vec())
         .send_and_await_response(2)?;
-
         match response {
             Ok(msg) => Ok(msg.body().to_vec()),
             Err(e) => Err(anyhow::anyhow!("Failed to receive response: {}", e)),
         }
-
 }
 
+//
 fn handle_ws_message(
     connection: &mut Option<Connection>,
      message: Message,
     ) -> anyhow::Result<()> {
     match serde_json::from_slice::<http::HttpServerRequest>(message.body())? {
+        // 
         http::HttpServerRequest::Http(_) => {
-            // TODO: response?
+            http::send_response(
+                http::StatusCode::BAD_REQUEST,
+                None,
+                b"Should not be receiving HTTP requests".to_vec(),
+            );
             return Err(anyhow::anyhow!("b"));
         }
+        // Send message to the MC plugin that a connection has been established
         http::HttpServerRequest::WebSocketOpen { channel_id, .. } => {
             println!("WSOPEN channel open: {}", channel_id);
             *connection = Some(Connection { channel_id });
@@ -65,6 +70,7 @@ fn handle_ws_message(
                 },
             );
         }
+        // Should probably handle cases where the WS connection is closed, but not a priority right now
         http::HttpServerRequest::WebSocketClose(ref channel_id) => {
             if !is_expected_channel_id(connection, channel_id)? {
                 // TODO: response?
@@ -72,7 +78,7 @@ fn handle_ws_message(
             }
             *connection = None;
         }
-        /* if we get a push message, process Binary and Text versions of it */
+        // Relays messages from the MC plugin to the gamelord (both ways <-/->)
         http::HttpServerRequest::WebSocketPush {
             ref channel_id,
             ref message_type,
@@ -86,13 +92,13 @@ fn handle_ws_message(
                     let Some(blob) = get_blob() else {
                         return Ok(());
                     };
-                    
+                    // probably not the best way to do this, should come back to it
                     // Parse the JSON and extract only the body (which removes the WS metadata and converts it to gamelord)
                     let parsed: Value = serde_json::from_slice(&blob.bytes)?;
                     // parse the `body` of the WS message (which should contain gamelord stuff)
                     if let Some(body) = parsed.get("body") {
                         let body_json = serde_json::to_vec(body)?;
-                        println!("Extracted body: {}", String::from_utf8_lossy(&body_json));
+                        // println!("Extracted body: {}", String::from_utf8_lossy(&body_json));
 
                         // forward only the body to gamelord
                         match process_gamelord_request(&body_json) {
@@ -105,7 +111,7 @@ fn handle_ws_message(
                                         bytes: response,
                                     },
                                 );
-                                println!("Request processed and relayed.");
+                                println!("Message relayed to gamelord.");
                             },
                             Err(e) => {
                                 println!("Error processing request: {:?}", e);
@@ -116,6 +122,7 @@ fn handle_ws_message(
                     }
                     return Ok(());
                 }
+                // Respond with a pong to the MC server
                 http::WsMessageType::Ping => {
                     send_ws_push(
                         *channel_id,
@@ -140,18 +147,11 @@ fn handle_ws_message(
 
 fn handle_message(connection: &mut Option<Connection>) -> anyhow::Result<()> {
     let message = await_message()?;
-
-    println!(
-        "handle_message: {:?}, {:?}",
-        String::from_utf8_lossy(message.body()),
-        message.source()
-    );
-    // just for now, we'll probably have a different method for authentication
+    // Assumption here is that mcdriver and gamelord are on the same node
     if message.is_local(&message.source()) {
-        println!("Local message received.");
         handle_ws_message(connection, message)?;
     } else {
-        println!("Invalid message"); 
+        println!("Message source is not from the same node"); 
     }
     Ok(())
 }

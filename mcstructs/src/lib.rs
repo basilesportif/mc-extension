@@ -4,6 +4,9 @@ use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use kinode_process_lib::eth::Address as EthAddress;
+use std::sync::RwLock;
+
+use kinode_process_lib::Address;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Player {
@@ -55,6 +58,7 @@ pub enum McClientToGamelordRequest {
     WorldConfigFull(TeamNameToRegion), // overwriting everytime before we implement diffs
     WorldConfigRegion(TeamName, Region),
     ReadyPlayer(NodeId),
+    RequestFolderMessage { worker_address: Address, folder: String, encrypt: bool },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -345,4 +349,57 @@ impl Hash for Cube {
         self.center.hash(state);
         self.side_length.hash(state);
     }
+}
+
+// folder transfer structs
+#[derive(Serialize, Deserialize, Debug)]
+pub enum FolderTransfer {
+    // action that triggers request to the target node
+    RequestFolderAction {
+        node_id: String,
+        folder: String,
+        encrypt: bool,
+    },
+    // message that is sent to the target node, requesting them to send the folder
+    RequestFolderMessage {
+        worker_address: Address,
+        folder: String,
+        encrypt: bool,
+    },
+    DecryptFolder,
+}
+
+// worker message structs
+#[derive(Serialize, Deserialize, Debug)]
+pub enum WorkerRequest {
+    InitializeSenderWorker {
+        target_worker: Option<Address>,
+        sending_dir: String,
+        password: Option<String>,
+    },
+    InitializeReceiverWorker {
+        receive_to_dir: String,
+    },
+    Chunk {
+        done: bool,
+        file_path: String,
+        encrypted: bool,
+    },
+}
+
+// worker -> main:command_center
+#[derive(Serialize, Deserialize, Debug)]
+pub enum WorkerStatus {
+    Done,
+}
+
+// To read the worker address
+pub fn get_worker_address(worker_address: &RwLock<Option<Address>>) -> Option<Address> {
+    worker_address.read().unwrap().clone()
+}
+
+// To clear the worker address
+pub fn clear_worker_address(worker_address: &RwLock<Option<Address>>) {
+    let mut address = worker_address.write().unwrap();
+    *address = None;
 }

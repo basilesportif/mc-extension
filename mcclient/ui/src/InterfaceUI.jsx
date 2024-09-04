@@ -10,7 +10,9 @@ let ws;
 const InterfaceUI = () => {
   const [ourNode, setOurNode] = useState(null);
   const [ourInTeam, setOurInTeam] = useState(null);
-  const [isReady, setIsReady] = useState(false); // Moved isReady state here
+  const [isReady, setIsReady] = useState(false);
+  const [isTransferComplete, setIsTransferComplete] = useState(false);
+
   const [lobby, setLobby] = useState({
     name: "",
     minecraft_server_address: "",
@@ -93,6 +95,9 @@ const InterfaceUI = () => {
       if (data.OurNode) {
         setOurNode(data.OurNode);
       }
+      if (data.type === 'transfer_complete') {
+        setIsTransferComplete(true);
+      }
     };
   };
   // Create a new component for the overlay
@@ -148,6 +153,7 @@ return (
                     ws={ws}
                     ourInTeam={ourInTeam}
                     lobby={lobby}
+                    isTransferComplete={isTransferComplete}
                   />
                   {isReady && (
                     <div className="overlay">

@@ -1,10 +1,9 @@
-use kinode_process_lib::{get_state, println, set_state, Address, Request, NodeId, eth::{Provider, Address as EthAddress}};
+use kinode_process_lib::{get_state, println, set_state, Address, Request, NodeId, eth::Address as EthAddress};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use mcstructs::{ChatMessage, GameLobby, GameLobbyDiff, Player, Cube, CubeEffectList, TeamName, TeamNameToRegion};
-use crate::eth_utils::{Caller};
 use alloy_primitives::U256;
-use alloy_signer::{k256::ecdsa::SigningKey, Wallet, LocalWallet, Signer};
+use alloy_signer::{LocalWallet, Signer};
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -14,15 +13,6 @@ pub struct ActivePlayer {
     pub current_cube: Cube,
     pub team: TeamName,
 }
-impl ActivePlayer {
-    pub fn to_player(&self) -> Player {
-        Player {
-            kinode_id: self.kinode_id.clone(),
-            minecraft_player_name: self.minecraft_player_name.clone(),
-        }
-    }
-}
-
 pub type CubeToOwner = HashMap<Cube, Vec<TeamName>>;
 pub trait CubeToOwnerTrait {
     fn sync_with_world_config(&mut self, world_config: &TeamNameToRegion) -> Result<(), anyhow::Error>;

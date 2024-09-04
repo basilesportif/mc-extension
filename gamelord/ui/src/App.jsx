@@ -57,6 +57,21 @@ function App() {
     document.getElementById(activeTab).classList.add("active");
   }, [activeTab]);
 
+  useEffect(() => {
+    // Ensure the event listener is set up correctly after the component mounts
+    const uploadButton = document.getElementById("uploadFolderButton");
+    if (uploadButton) {
+      uploadButton.addEventListener("click", uploadFolder);
+    }
+
+    // Cleanup event listener on component unmount
+    return () => {
+      if (uploadButton) {
+        uploadButton.removeEventListener("click", uploadFolder);
+      }
+    };
+  }, []);
+
   function uploadFile() {
     const fileInput = document.getElementById("fileInput");
     const file = fileInput.files[0];
@@ -95,6 +110,71 @@ function App() {
       document.getElementById("response-output-tab1").innerText =
         "No file selected.";
     }
+  }
+
+  async function uploadFolder() {
+    const fileInput = document.getElementById("folderInput");
+    const files = fileInput.files;
+    console.log("Files:", files);
+
+    if (files.length > 0) {
+      const filesObject = {};
+      const totalFiles = files.length;
+      let uploadedFiles = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const content = await readFileAsBase64(file);
+        filesObject[file.webkitRelativePath] = content;
+        console.log("File:", file.webkitRelativePath);
+
+        // Update progress
+        uploadedFiles++;
+        const progress = Math.round((uploadedFiles / totalFiles) * 100);
+        document.getElementById("upload-progress").innerText = `Progress: ${progress}%`;
+      }
+      
+      const url = "/gamelord:gamelord:basilesex.os/api/loadFolder";
+      console.log("Sending request to:", url);
+      console.log("Files object:", filesObject);
+
+      console.log("body:", JSON.stringify(filesObject));
+      
+      fetch(url, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filesObject),
+      })
+        .then((response) => {
+          if (response.ok) {
+            return response.text();
+          } else {
+            throw new Error("Failed to upload folder");
+          }
+        })
+        .then((result) => {
+          console.log("Folder uploaded successfully.");
+          document.getElementById("response-output-tab2").innerText = "Folder uploaded successfully.";
+        })
+        .catch((error) => {
+          console.error("Error uploading folder:", error);
+          document.getElementById("response-output-tab2").innerText = `Error: ${error.message}`;
+        });
+    } else {
+      console.log("No folder selected.");
+      document.getElementById("response-output-tab2").innerText = "No folder selected.";
+    }
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
   }
 
   function deleteWorld() {
@@ -395,6 +475,17 @@ function App() {
       </div>
       <div id="tab2" className="tab-content active">
         <div className="container">
+          <div className="option">
+            <h2>Upload Folder</h2>
+            <p>Upload a folder containing world configuration files.</p>
+            <div className="form-group">
+              <input type="file" id="folderInput" webkitdirectory="true" directory="true" multiple />
+            </div>
+            <button type="button" id="uploadFolderButton">
+              Upload Folder
+            </button>
+            <div id="upload-progress"></div>
+          </div>
           <div className="option">
             <h2>Edit Lobby</h2>
             <form id="editLobbyForm">

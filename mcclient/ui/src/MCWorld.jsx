@@ -9,7 +9,7 @@ import { Crosshair, Instructions, TeamAlert } from "./components/MCWorldElements
 import  EffectMenu  from "./components/EffectMenu";
 import InfoPanel from './components/InfoPanel';
 
-const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
+const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData, isTransferComplete }) => {
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
@@ -53,25 +53,33 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
   const [team1CubesCount, setTeam1CubesCount] = useState(0);
   const [team2CubesCount, setTeam2CubesCount] = useState(0);
 
-  const init = async () => {
-    if (sceneRef.current) {
-      console.log("Scene already initialized.");
-      return;
-    }
+  useEffect(() => {
+    const initializeScene = async () => {
+      if (sceneRef.current) {
+        console.log("Scene already initialized.");
+        return;
+      }
 
-    try {
-      console.log("Initializing Three.js scene...");
-      threeJsSetup.setupThreeJsScene(sceneRef, cameraRef, rendererRef, containerRef, skyRef);
-  
-      console.log("Loading Minecraft world...");
-      await loadMinecraftWorld();
-  
-      console.log("Three.js scene initialized.");
-      setInitialized(true);
-    } catch (error) {
-      console.error("Error initializing scene:", error);
+      try {
+        console.log("Initializing Three.js scene...");
+        threeJsSetup.setupThreeJsScene(sceneRef, cameraRef, rendererRef, containerRef, skyRef);
+
+        if (isTransferComplete) {
+          console.log("Loading Minecraft world...");
+          await loadMinecraftWorld();
+        }
+
+        console.log("Three.js scene initialized.");
+        setInitialized(true);
+      } catch (error) {
+        console.error("Error initializing scene:", error);
+      }
+    };
+
+    if (isTransferComplete) {
+      initializeScene();
     }
-  };
+  }, [isTransferComplete]);
 
   const loadMinecraftWorld = () => {
     return new Promise((resolve, reject) => {
@@ -453,12 +461,6 @@ const ThreeJsScene = ({ ws, ourInTeam, lobby, setPaintCubesWithData }) => {
     if (textureName.includes("models")) return "models";
     return "block";
   };
-
-  useEffect(() => {
-    if (!initialized) {
-      init();
-    }
-  }, [initialized]);
 
   useEffect(() => {
     if (initialized) {
