@@ -1,0 +1,113 @@
+/* Center-align and style the headings */
+h2, h3 {
+  text-align: center;
+  color: white;
+}
+
+/* Style h4 headings */
+h4 {
+  text-align: center;
+  color: rgb(0, 0, 0);
+  margin-bottom: 10px;
+}
+
+/* Add styles for the form container */
+.form-container {
+  margin: 20px 0;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Style the input fields */
+.form-container input {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-sizing: border-box; /* Ensure padding and border are included in the width */
+}
+
+/* Style the buttons */
+.form-container .button-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.form-container button {
+  padding: 10px 20px;
+  margin: 10px 5px;
+  border: none;
+  border-radius: 5px;
+  background-color: #28a745; /* Green color */
+  color: white;
+  cursor: pointer;
+}
+
+.form-container button:hover {
+  background-color: #218838; /* Darker green on hover */
+}
+
+/* Style the game and server address text */
+p {
+  margin: 5px 0;
+  color: #ffffff; /* White color for high contrast */
+  padding: 5px; /* Add padding for better visibility */
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Add text-shadow for better visibility */
+}
+
+/* Style the team and player lists */
+ul {
+  list-style-type: none;
+  border-radius: 5px;
+  background-color: #f1f1f1;
+  padding: 0;
+}
+
+ul p {
+  margin: 5px 0;
+  color: rgb(0, 0, 0);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+ul p:hover {
+  background-color: #e1e1e1;
+  border-radius: 5px;
+}
+
+/* Style the container for team lists */
+.team-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.team-container div {
+  width: 45%;
+}
+
+/* Style the status container */
+.status {
+  background-color: rgba(160, 82, 82, 0.1); /* Slight black background */
+  padding: 20px;
+  border-radius: 5px;
+  margin: 0 auto; /* Center horizontally */
+  width: 100%; /* Full width of the parent container */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+/* Add styles for the App background */
+.AppBackground {
+  width: 80%;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}

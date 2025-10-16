@@ -5,9 +5,14 @@
         "on_exit": "Restart",
         "request_networking": true,
         "request_capabilities": [
-            "http_server:distro:sys"
+            "http_server:distro:sys",
+            "vfs:distro:sys",
+            "eth:distro:sys"
         ],
-        "grant_capabilities": [],
+        "grant_capabilities": [
+            "gamelord:gamelord:basilesex.os",
+            "mcdriver:mcdriver:basilesex.os"
+        ],
         "public": true
     }
 ]

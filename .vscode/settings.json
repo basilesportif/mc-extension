@@ -1,3 +1,13 @@
 {
-  "java.compile.nullAnalysis.mode": "automatic"
+  "java.compile.nullAnalysis.mode": "automatic",
+  "rust-analyzer.linkedProjects": [
+    "gamelord/gamelord/Cargo.toml",
+    "mcdriver/mcdriver/Cargo.toml",
+    "mcclient/mcclient/Cargo.toml",
+    "mcstructs/Cargo.toml",
+    "mcclient/worker/Cargo.toml",
+    "gamelord/worker/Cargo.toml"
+  ],
+  "search.useGlobalIgnoreFiles": true,
+  "search.useParentIgnoreFiles": true
 }
